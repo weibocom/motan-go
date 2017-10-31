@@ -1,0 +1,88 @@
+#only for unit test!!
+motan-agent:
+  port: 9981
+  mport: 8002
+  #log_dir: "/data1/logs/agentlog/"
+  log_dir: "./logs"
+  registry: "vintage"
+  application: "pc-yf-test"
+
+motan-server:
+  testkey:testv
+
+motan-client:
+  testkey:testv
+
+#config of registries
+motan-registry:
+  vintage:
+    protocol: vintage
+    host: 10.**.**.**
+    port: 8090
+    registryRetryPeriod: 30000
+    registrySessionTimeout: 10000
+    requestTimeout: 5000
+  consul:
+    protocol: consul
+    host: 10.**.**.**
+    port: 8090
+  direct:
+    protocol: direct
+    host: 10.**.**.**
+    port: 8013
+
+#conf of basic refers
+motan-basicRefer:
+  mybasicRefer:
+    group: basic-group
+    protocol: grpc
+    registry: "vintage"
+    requestTimeout: 1000
+    haStrategy: failover
+    loadbalance: random
+    filter: "accessLog,metrics"
+    maxClientConnection: 10
+    minClientConnection: 1
+    retries: 0
+    application: pc
+
+#conf of refers
+motan-refer:
+  status-rpc-json:
+    path: com.weibo.api.test.service.TestRpc
+    group: test-group
+    registry: vintage
+    serialization: simple
+    protocol: motan2
+    version: 0.1
+    basicRefer: mybasicRefer
+
+
+#conf of basicservice
+motan-basicService:
+  mybasicService: # basic refer id
+    group: motan-demo-rpc # group name
+    protocol: motan2 # rpc protocol
+    registry: direct
+    filter: "accessLog" # filter registed in extFactory
+
+#conf of services
+motan-service:
+  mytest-motan2:
+    path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
+    registry: direct
+    serialization: simple
+    basicRefer: mybasicService
+    nodeType: server
+    ref : "main.Motan2TestService"
+    export: "motan2:8100"
+
+#conf of extentions
+
+metrics:
+  period: 5
+  graphite:
+    - name: xx
+      host: test.com
+      port: 8333
+  testbool: true

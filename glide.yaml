@@ -1,0 +1,30 @@
+package: github.com/weibocom/motan-go
+import:
+- package: github.com/afex/hystrix-go
+  subpackages:
+  - hystrix
+- package: github.com/gogo/protobuf
+  version: v0.4
+  subpackages:
+  - gogoproto
+  - proto
+- package: github.com/golang/protobuf
+  subpackages:
+  - proto
+- package: github.com/mitchellh/mapstructure
+- package: github.com/montanaflynn/stats
+  version: 0.2.0
+- package: github.com/pkg/errors
+  version: v0.8.0
+- package: github.com/rcrowley/go-metrics
+- package: github.com/smallnest/rpcx
+  version: "2.0"
+  subpackages:
+  - log
+- package: golang.org/x/net/context
+- package: github.com/samuel/go-zookeeper/zk
+- package: github.com/beberlei/fastcgi-serve/fcgiclient
+- package: google.golang.org/grpc
+  subpackages:
+  - metadata
+- package: gopkg.in/yaml.v2
