@@ -45,7 +45,7 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 
 	var header, trailer metadata.MD
 	md := metadata.New(request.GetAttachments())
-	ctx := metadata.NewContext(context.Background(), md)
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
 	err := grpc.Invoke(ctx, "/"+request.GetServiceName()+"/"+request.GetMethod(), in, out, g.grpcConn, grpc.Header(&header), grpc.Trailer(&trailer))
 	// type MD map[string][]string
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
