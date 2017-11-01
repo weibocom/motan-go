@@ -25,6 +25,7 @@ import:
 - package: github.com/samuel/go-zookeeper/zk
 - package: github.com/beberlei/fastcgi-serve/fcgiclient
 - package: google.golang.org/grpc
+  version: 1.5.2
   subpackages:
   - metadata
 - package: gopkg.in/yaml.v2
