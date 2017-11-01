@@ -2,7 +2,6 @@ package endpoint
 
 import (
 	"fmt"
-	"goSocket/server/utils"
 	"net"
 	"strconv"
 	"testing"
@@ -67,7 +66,6 @@ func handle(netListen net.Listener) {
 			continue
 		}
 
-		utils.Log(conn.RemoteAddr().String(), " tcp connect success")
 		go handleConnection(conn, 5000)
 	}
 }

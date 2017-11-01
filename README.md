@@ -201,9 +201,9 @@ TBD
 
 * Ray([@rayzhang0603](https://github.com/rayzhang0603))
 * 周晶([@idevz](https://github.com/idevz))
-* 张振佳
-* 郭万韬
-* 胡忠想
+* xiaohutuer([@xiaohutuer](https://github.com/xiaohutuer))
+* Arthur Guo([@jealone](https://github.com/jealone))
+* huzhongx([@huzhongx](https://github.com/huzhongx))
 
 # License
 

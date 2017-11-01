@@ -20,6 +20,7 @@ zj*
 .idea/*
 # gdb
 *.gdb_history
+__*
 
 # motan-go
 *.pid
@@ -31,3 +32,4 @@ main/clientlogs
 main/agentlogs
 main/magent*
 log/log.test*
+
