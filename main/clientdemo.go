@@ -12,7 +12,7 @@ func main() {
 }
 
 func runClientDemo() {
-	mccontext := motan.GetMotanClientContext("clientdemo.yaml")
+	mccontext := motan.GetMotanClientContext("main/clientdemo.yaml")
 	mccontext.Start(nil)
 	mclient := mccontext.GetClient("mytest-motan2")
 

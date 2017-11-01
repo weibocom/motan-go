@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	defaultPort        = 9981
-	defaultMport       = 8002
-	defaultPidFileName = "./agent.pid"
-	defaultAgentGroup  = "default_agent_group"
+	defaultPort       = 9981
+	defaultMport      = 8002
+	defaultPidFile    = "./agent.pid"
+	defaultAgentGroup = "default_agent_group"
 )
 
 type Agent struct {
@@ -35,6 +35,10 @@ type Agent struct {
 	clustermap map[string]*cluster.MotanCluster
 	status     int
 	agentUrl   *motan.Url
+	logdir     string
+	port       int
+	mport      int
+	pidfile    string
 
 	agentPortService map[int]motan.Exporter
 	agentPortServer  map[int]motan.Server
@@ -60,12 +64,31 @@ func (a *Agent) StartMotanAgent() {
 		flag.Parse()
 	}
 	a.initContext()
-	//get from context config
+	a.initParam()
+	a.initAgentUrl()
+	a.initClusters()
+	a.startServerAgent()
+	vlog.Infof("Agent Url inited %s\n", a.agentUrl.GetIdentity())
+
+	go a.startMServer()
+	f, err := os.Create(a.pidfile)
+	if err != nil {
+		vlog.Errorf("create file %s fail.\n", a.pidfile)
+	} else {
+		defer f.Close()
+		f.WriteString(strconv.Itoa(os.Getpid()))
+	}
+	go a.registerAgent()
+	vlog.Infoln("Motan agent is starting...")
+	a.startAgent()
+
+}
+
+func (a *Agent) initParam() {
 	section, err := a.Context.Config.GetSection("motan-agent")
 	if err != nil {
 		fmt.Println("get config of \"motan-agent\" fail! err " + err.Error())
 	}
-
 	logdir := ""
 	if section != nil && section["log_dir"] != nil {
 		logdir = section["log_dir"].(string)
@@ -91,32 +114,19 @@ func (a *Agent) StartMotanAgent() {
 		mport = defaultMport
 	}
 
-	pidfileName := *motan.Pidfile
-	if pidfileName == "" && section != nil && section["pidfile"] != nil {
-		pidfileName = section["pidfile"].(string)
+	pidfile := *motan.Pidfile
+	if pidfile == "" && section != nil && section["pidfile"] != nil {
+		pidfile = section["pidfile"].(string)
 	}
-	if pidfileName == "" {
-		pidfileName = defaultPidFileName
+	if pidfile == "" {
+		pidfile = defaultPidFile
 	}
-	vlog.Infoln("Motan agent is starting...")
-	vlog.Infof("agent port:%s, manage port:%s, pidfile:%s, logdir:%s\n", port, mport, pidfileName, logdir)
 
-	a.initAgentUrl()
-	a.initClusters()
-	a.startServerAgent()
-	vlog.Infof("Agent Url inited %s\n", a.agentUrl.GetIdentity())
-
-	go a.startMServer(mport)
-	f, err := os.Create(pidfileName)
-	if err != nil {
-		vlog.Errorf("create file %s fail.\n", pidfileName)
-	} else {
-		defer f.Close()
-		f.WriteString(strconv.Itoa(os.Getpid()))
-	}
-	go a.registerAgent()
-	a.startAgent(port)
-
+	vlog.Infof("agent port:%s, manage port:%s, pidfile:%s, logdir:%s\n", port, mport, pidfile, logdir)
+	a.logdir = logdir
+	a.port = port
+	a.mport = mport
+	a.pidfile = pidfile
 }
 
 func (a *Agent) initContext() {
@@ -185,16 +195,16 @@ func (a *Agent) initAgentUrl() {
 	a.agentUrl = agentUrl
 }
 
-func (a *Agent) startAgent(port int) {
-	url := &motan.Url{Port: port}
+func (a *Agent) startAgent() {
+	url := &motan.Url{Port: a.port}
 	handler := &agentMessageHandler{agent: a}
 	server := &mserver.MotanServer{Url: url}
 	server.SetMessageHandler(handler)
-	vlog.Infof("Motan agent is started. port:%d\n", port)
+	vlog.Infof("Motan agent is started. port:%d\n", a.port)
 	fmt.Println("Motan agent start.")
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
-		vlog.Fatalf("start agent fail. port :%d, err: %v\n", port, err)
+		vlog.Fatalf("start agent fail. port :%d, err: %v\n", a.port, err)
 	}
 	a.agentServer = server
 	fmt.Println("Motan agent start fail!")
@@ -361,14 +371,14 @@ func (a *AgentListener) GetIdentity() string {
 	return a.agent.agentUrl.GetIdentity()
 }
 
-func (a *Agent) startMServer(mport int) {
+func (a *Agent) startMServer() {
 	http.HandleFunc("/", a.rootHandler)
 	http.HandleFunc("/503", a.statusSetHandler)
 	http.HandleFunc("/200", a.statusSetHandler)
 	http.HandleFunc("/getConfig", a.getConfigHandler)
 	http.HandleFunc("/getReferService", a.getReferServiceHandler)
-	vlog.Infof("start listen manage port %s ...", mport)
-	http.ListenAndServe(":"+strconv.Itoa(mport), nil)
+	vlog.Infof("start listen manage port %s ...", a.mport)
+	http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 }
 
 type rpcService struct {

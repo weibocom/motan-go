@@ -147,25 +147,7 @@ func TestProcessCommand(t *testing.T) {
 	cmds = append(cmds, buildCmd(1, CMD_Degrade, "com.weibo.test.TestService", "", ""))
 	cl := buildCmdList(cmds)
 	// process service cmd
-	notify := crw.processCommand(SERVICE_CMD, cl)
-	if crw.serviceCommandInfo != cl {
-		t.Errorf("serviceCommandInfo not correct! real:%s, expect:%s\n", crw.serviceCommandInfo, cl)
-	}
-	if crw.tcCommand == nil {
-		t.Errorf("tc command is nil! crw:%+v\n", crw)
-	}
-	if crw.degradeCommand != nil {
-		t.Errorf("degrade command should be nil! crw:%+v\n", crw)
-	}
-	if notify != true {
-		t.Errorf("process command notify not true! crw:%+v\n", crw)
-	}
-	if len(crw.tcCommand.MergeGroups) != 2 {
-		t.Errorf("tc command is not correct! tc command:%+v\n", crw.tcCommand)
-	}
-	if len(crw.otherGroupListener) != 2 || crw.otherGroupListener["group0"] == nil || crw.otherGroupListener["group1"] == nil {
-		t.Errorf("serviceCommandInfo not correct! real:%s, expect:%s\n", crw.serviceCommandInfo, cl)
-	}
+	processServiceCmd(crw, cl, t)
 
 	//process agent cmd, agent cmd will over service cmd
 	// & process with router
@@ -173,7 +155,7 @@ func TestProcessCommand(t *testing.T) {
 	cmds = append(cmds, buildCmd(1, CMD_Traffic_Control, "*", "\"group0:3\",\"group1:5\"", "\" * to 10.75.*\", \"10.108.* to 10.75.1.* \""))
 	cmds = append(cmds, buildCmd(1, CMD_Degrade, "com.weibo.test.TestService", "", ""))
 	cl = buildCmdList(cmds)
-	notify = crw.processCommand(AGENT_CMD, cl)
+	notify := crw.processCommand(AGENT_CMD, cl)
 	if crw.agentCommandInfo != cl {
 		t.Errorf("agentCommandInfo not correct! real:%s, expect:%s\n", crw.agentCommandInfo, cl)
 	}
@@ -202,6 +184,28 @@ func TestProcessCommand(t *testing.T) {
 		t.Errorf("abnormal command process not correct! notify: %t, crw:%+v\n", notify, crw)
 	}
 	fmt.Printf("notify:%t, crw:%+v\n", notify, crw)
+}
+
+func processServiceCmd(crw *CommandRegistryWarper, cl string, t *testing.T) {
+	notify := crw.processCommand(SERVICE_CMD, cl)
+	if crw.serviceCommandInfo != cl {
+		t.Errorf("serviceCommandInfo not correct! real:%s, expect:%s\n", crw.serviceCommandInfo, cl)
+	}
+	if crw.tcCommand == nil {
+		t.Errorf("tc command is nil! crw:%+v\n", crw)
+	}
+	if crw.degradeCommand != nil {
+		t.Errorf("degrade command should be nil! crw:%+v\n", crw)
+	}
+	if notify != true {
+		t.Errorf("process command notify not true! crw:%+v\n", crw)
+	}
+	if len(crw.tcCommand.MergeGroups) != 2 {
+		t.Errorf("tc command is not correct! tc command:%+v\n", crw.tcCommand)
+	}
+	if len(crw.otherGroupListener) != 2 || crw.otherGroupListener["group0"] == nil || crw.otherGroupListener["group1"] == nil {
+		t.Errorf("serviceCommandInfo not correct! real:%s, expect:%s\n", crw.serviceCommandInfo, cl)
+	}
 }
 
 func TestMatchPattern(t *testing.T) {

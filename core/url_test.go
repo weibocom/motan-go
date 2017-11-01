@@ -108,12 +108,12 @@ func TestCanServer(t *testing.T) {
 	url1 := &Url{Protocol: "motan", Path: "test/path", Parameters: params1}
 	url2 := &Url{Protocol: "motan", Path: "test/path", Parameters: params2}
 	if !url1.CanServe(url2) {
-		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n")
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	params1["version"] = "0.2"
 	params2["version"] = "0.3"
 	if url1.CanServe(url2) {
-		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n")
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	fmt.Printf("url1:%+v, url2:%+v\n", url1, url2)
 	params1 = make(map[string]string)
@@ -124,7 +124,7 @@ func TestCanServer(t *testing.T) {
 	params2["serialization"] = "json"
 
 	if url1.CanServe(url2) {
-		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n")
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	fmt.Printf("url1:%+v, url2:%+v\n", url1, url2)
 	params1 = make(map[string]string)
@@ -134,7 +134,7 @@ func TestCanServer(t *testing.T) {
 	url1.Protocol = "motan"
 	url2.Protocol = "grpc"
 	if url1.CanServe(url2) {
-		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n")
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	fmt.Printf("url1:%+v, url2:%+v\n", url1, url2)
 	url1.Protocol = ""
@@ -142,7 +142,7 @@ func TestCanServer(t *testing.T) {
 	url1.Path = "test/path"
 	url2.Path = "xxxx"
 	if url1.CanServe(url2) {
-		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n")
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	fmt.Printf("url1:%+v, url2:%+v\n", url1, url2)
 }

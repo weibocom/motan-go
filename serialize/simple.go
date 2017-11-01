@@ -48,10 +48,7 @@ func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 		return nil, nil
 	}
 	buf := bytes.NewBuffer(b)
-	tp, err := buf.ReadByte()
-	if err != nil {
-		return nil, err
-	}
+	tp, _ := buf.ReadByte()
 	switch tp {
 	case 0:
 		v = nil

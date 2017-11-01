@@ -30,6 +30,9 @@ main/logs
 main/serverlogs
 main/clientlogs
 main/agentlogs
+serverlogs
+clientlogs
+agentlogs
 main/magent*
 log/log.test*
 

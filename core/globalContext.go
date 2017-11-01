@@ -9,16 +9,17 @@ import (
 )
 
 const (
-	RegistrysSection     = "motan-registry"
-	BasicRefersSection   = "motan-basicRefer"
-	RefersSection        = "motan-refer"
-	BasicServicesSection = "motan-basicService"
-	ServicesSection      = "motan-service"
-	AgentSection         = "motan-agent"
-	ClientSection        = "motan-client"
-	ServerSection        = "motan-server"
+	registrysSection     = "motan-registry"
+	basicRefersSection   = "motan-basicRefer"
+	refersSection        = "motan-refer"
+	basicServicesSection = "motan-basicService"
+	servicesSection      = "motan-service"
+	agentSection         = "motan-agent"
+	clientSection        = "motan-client"
+	serverSection        = "motan-server"
 )
 
+// Context for agent, client, server. context is created depends on  config file
 type Context struct {
 	ConfigFile       string
 	Config           *cfg.Config
@@ -109,25 +110,25 @@ func (c *Context) Initialize() {
 
 // parse host url including agenturl, clienturl, serverurl
 func (c *Context) parseHostUrl() {
-	agentInfo, _ := c.Config.GetSection(AgentSection)
+	agentInfo, _ := c.Config.GetSection(agentSection)
 	c.AgentUrl = confToUrl(agentInfo)
-	clientInfo, _ := c.Config.GetSection(ClientSection)
+	clientInfo, _ := c.Config.GetSection(clientSection)
 	c.ClientUrl = confToUrl(clientInfo)
-	serverInfo, _ := c.Config.GetSection(ServerSection)
+	serverInfo, _ := c.Config.GetSection(serverSection)
 	c.ServerUrl = confToUrl(serverInfo)
 }
 
 func (c *Context) parseRegistrys() {
-	c.RegistryUrls = c.confToUrls(RegistrysSection)
+	c.RegistryUrls = c.confToUrls(registrysSection)
 }
 
 func (c *Context) basicConfToUrls(basicsection, section string) map[string]*Url {
 	urls := map[string]*Url{}
 	Refs := c.confToUrls(section)
 	var BasicInfo map[string]*Url
-	if section == ServicesSection {
+	if section == servicesSection {
 		BasicInfo = c.BasicServiceUrls
-	} else if section == RefersSection {
+	} else if section == refersSection {
 		BasicInfo = c.BasicRefers
 	}
 	for key, ref := range Refs {
@@ -165,17 +166,17 @@ func (c *Context) basicConfToUrls(basicsection, section string) map[string]*Url 
 }
 
 func (c *Context) parseRefers() {
-	c.RefersUrls = c.basicConfToUrls(BasicRefersSection, RefersSection)
+	c.RefersUrls = c.basicConfToUrls(basicRefersSection, refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
-	c.BasicRefers = c.confToUrls(BasicRefersSection)
+	c.BasicRefers = c.confToUrls(basicRefersSection)
 }
 
 func (c *Context) parseServices() {
-	c.ServiceUrls = c.basicConfToUrls(BasicServicesSection, ServicesSection)
+	c.ServiceUrls = c.basicConfToUrls(basicServicesSection, servicesSection)
 }
 
 func (c *Context) parserBasicServices() {
-	c.BasicServiceUrls = c.confToUrls(BasicServicesSection)
+	c.BasicServiceUrls = c.confToUrls(basicServicesSection)
 }
