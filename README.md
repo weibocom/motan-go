@@ -204,6 +204,7 @@ TBD
 * xiaohutuer([@xiaohutuer](https://github.com/xiaohutuer))
 * Arthur Guo([@jealone](https://github.com/jealone))
 * huzhongx([@huzhongx](https://github.com/huzhongx))
+* dingzk([@dingzk](https://github.com/dingzk))
 
 # License
 
