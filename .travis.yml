@@ -1,0 +1,20 @@
+
+language: go
+
+sudo: false
+
+go:
+    - 1.6
+    - 1.7
+    - tip
+
+before_install:
+
+
+install:
+    - go get -d -v $(go list ./... | grep -v main)
+
+script:
+    - go test -v $(go list ./... | grep -v main)
+
+after_success:
