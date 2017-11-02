@@ -23,11 +23,11 @@ func TestExtFactory(t *testing.T) {
 	ext.RegistryExtSerialization("test", 0, newSerial)
 }
 
-func newHa(url *Url) HaStrategy {
+func newHa(url *URL) HaStrategy {
 	return nil
 }
 
-func newlb(url *Url) LoadBalance {
+func newlb(url *URL) LoadBalance {
 	return nil
 }
 
@@ -35,19 +35,19 @@ func newFilter() Filter {
 	return nil
 }
 
-func newRegistry(url *Url) Registry {
+func newRegistry(url *URL) Registry {
 	return nil
 }
 
-func newEp(url *Url) EndPoint {
+func newEp(url *URL) EndPoint {
 	return nil
 }
 
-func newProvider(url *Url) Provider {
+func newProvider(url *URL) Provider {
 	return nil
 }
 
-func newServer(url *Url) Server {
+func newServer(url *URL) Server {
 	return nil
 }
 

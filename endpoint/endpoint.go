@@ -13,21 +13,21 @@ const (
 )
 
 func RegistDefaultEndpoint(extFactory motan.ExtentionFactory) {
-	extFactory.RegistExtEndpoint(Motan2, func(url *motan.Url) motan.EndPoint {
+	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
 		return &MotanEndpoint{url: url}
 	})
 
-	extFactory.RegistExtEndpoint(Grpc, func(url *motan.Url) motan.EndPoint {
+	extFactory.RegistExtEndpoint(Grpc, func(url *motan.URL) motan.EndPoint {
 		return &GrpcEndPoint{url: url}
 	})
 
-	extFactory.RegistExtEndpoint(Mock, func(url *motan.Url) motan.EndPoint {
-		return &MockEndpoint{Url: url}
+	extFactory.RegistExtEndpoint(Mock, func(url *motan.URL) motan.EndPoint {
+		return &MockEndpoint{URL: url}
 	})
 }
 
 func GetRequestGroup(r motan.Request) string {
-	group := r.GetAttachment(mpro.M_group)
+	group := r.GetAttachment(mpro.MGroup)
 	if group == "" {
 		group = r.GetAttachment(motan.GroupKey)
 	}
@@ -35,7 +35,7 @@ func GetRequestGroup(r motan.Request) string {
 }
 
 type MockEndpoint struct {
-	Url          *motan.Url
+	URL          *motan.URL
 	MockResponse motan.Response
 }
 
@@ -43,12 +43,12 @@ func (m *MockEndpoint) GetName() string {
 	return "mockEndpoint"
 }
 
-func (m *MockEndpoint) GetUrl() *motan.Url {
-	return m.Url
+func (m *MockEndpoint) GetURL() *motan.URL {
+	return m.URL
 }
 
-func (m *MockEndpoint) SetUrl(url *motan.Url) {
-	m.Url = url
+func (m *MockEndpoint) SetURL(url *motan.URL) {
+	m.URL = url
 }
 
 func (m *MockEndpoint) IsAvailable() bool {
@@ -62,9 +62,8 @@ func (m *MockEndpoint) SetSerialization(s motan.Serialization) {}
 func (m *MockEndpoint) Call(request motan.Request) motan.Response {
 	if m.MockResponse != nil {
 		return m.MockResponse
-	} else {
-		return &motan.MotanResponse{ProcessTime: 1, Value: "ok"}
 	}
+	return &motan.MotanResponse{ProcessTime: 1, Value: "ok"}
 }
 
 func (m *MockEndpoint) Destroy() {}

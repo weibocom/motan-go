@@ -36,7 +36,7 @@ var (
 	serverContextMutex sync.Mutex
 )
 
-// start a motan server context by config
+// GetMotanServerContext start a motan server context by config
 // a motan server context can listen multi ports and provide many services. so a single motan server context is suggested
 // default context will be used if confFile is empty
 func GetMotanServerContext(confFile string) *MSContext {
@@ -76,12 +76,12 @@ func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
 		m.extFactory = GetDefaultExtFactory()
 	}
 
-	for _, url := range m.context.ServiceUrls {
+	for _, url := range m.context.ServiceURLs {
 		m.export(url)
 	}
 }
 
-func (m *MSContext) export(url *motan.Url) {
+func (m *MSContext) export(url *motan.URL) {
 	defer func() {
 		if err := recover(); err != nil {
 			vlog.Errorf("MSContext export fail! url: %v, err:%v\n", url, err)
@@ -112,7 +112,7 @@ func (m *MSContext) export(url *motan.Url) {
 		}
 		url.Port = porti
 		if url.Host == "" {
-			url.Host = motan.GetLocalIp()
+			url.Host = motan.GetLocalIP()
 		}
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
@@ -131,10 +131,10 @@ func (m *MSContext) export(url *motan.Url) {
 			handler.AddProvider(provider)
 			server.Open(false, false, handler, m.extFactory)
 			m.portServer[url.Port] = server
-		} else if canShareChannel(*url, *server.GetUrl()) {
+		} else if canShareChannel(*url, *server.GetURL()) {
 			server.GetMessageHandler().AddProvider(provider)
 		} else {
-			vlog.Errorf("service export fail! can not share channel.url:%v, port url:%v\n", url, server.GetUrl())
+			vlog.Errorf("service export fail! can not share channel.url:%v, port url:%v\n", url, server.GetURL())
 			return
 		}
 		err = exporter.Export(server, m.extFactory, m.context)
@@ -160,17 +160,17 @@ func (m *MSContext) Initialize() {
 	}
 }
 
-// register service with serviceId for config ref.
+// RegisterService register service with serviceId for config ref.
 // the type.string will used as serviceId if sid is not set. e.g. 'packageName.structName'
 func (m *MSContext) RegisterService(s interface{}, sid string) error {
 	if s == nil {
 		vlog.Errorln("MSContext register service is nil!")
-		return errors.New("register service is nil!")
+		return errors.New("register service is nil")
 	}
 	v := reflect.ValueOf(s)
 	if v.Kind() != reflect.Ptr {
 		vlog.Errorf("register service must be a pointer of struct. service:%+v\n", s)
-		return errors.New("register service must be a pointer of struct!")
+		return errors.New("register service must be a pointer of struct")
 	}
 	t := v.Elem().Type()
 	hasConfig := false
@@ -179,7 +179,7 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 		ref = t.String()
 	}
 	// check export config
-	for _, url := range m.context.ServiceUrls {
+	for _, url := range m.context.ServiceURLs {
 		if url.Parameters != nil && ref == url.Parameters[motan.RefKey] {
 			hasConfig = true
 			break
@@ -187,13 +187,13 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 	}
 	if !hasConfig {
 		vlog.Errorf("can not find export config for register service. service:%+v\n", s)
-		return errors.New("can not find export config for register service!")
+		return errors.New("can not find export config for register service")
 	}
 	m.serviceImpls[ref] = s
 	return nil
 }
 
-func canShareChannel(u1 motan.Url, u2 motan.Url) bool {
+func canShareChannel(u1 motan.URL, u2 motan.URL) bool {
 	if u1.Protocol != u2.Protocol {
 		return false
 	}

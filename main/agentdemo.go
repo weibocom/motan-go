@@ -13,9 +13,9 @@ func main() {
 
 func runAgentDemo() {
 	agent := motan.NewAgent(nil)
-	agent.ConfigFile = ".main/agentdemo.yaml"
+	agent.ConfigFile = "./agentdemo.yaml"
 	// you can registry custom extension implements to defaultExtFactory. extensions includes ha, lb, endpoint, regisry,filter
-	// the default implements of extension is already registed in defaultExtFactory.
+	// the default implements of extension is already registered in defaultExtFactory.
 	weiboExtFactory := motan.GetDefaultExtFactory()
 	weiboExtFactory.RegistExtFilter("myfilter", func() motancore.Filter {
 		return &MyEndPointFilter{}
@@ -23,9 +23,9 @@ func runAgentDemo() {
 	agent.StartMotanAgent()
 }
 
-// custom filter demo
+// MyEndPointFilter is a custom filter demo
 type MyEndPointFilter struct {
-	url  *motancore.Url
+	url  *motancore.URL
 	next motancore.EndPointFilter
 }
 
@@ -37,8 +37,8 @@ func (m *MyEndPointFilter) GetName() string {
 	return "myfilter"
 }
 
-// create a new filter
-func (m *MyEndPointFilter) NewFilter(url *motancore.Url) motancore.Filter {
+// NewFilter create a new filter instance
+func (m *MyEndPointFilter) NewFilter(url *motancore.URL) motancore.Filter {
 	return &MyEndPointFilter{url: url}
 }
 

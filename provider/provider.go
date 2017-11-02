@@ -17,15 +17,15 @@ const (
 
 func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 
-	extFactory.RegistExtProvider(CGI, func(url *motan.Url) motan.Provider {
+	extFactory.RegistExtProvider(CGI, func(url *motan.URL) motan.Provider {
 		return &CgiProvider{url: url}
 	})
 
-	extFactory.RegistExtProvider(Mock, func(url *motan.Url) motan.Provider {
-		return &MockProvider{Url: url}
+	extFactory.RegistExtProvider(Mock, func(url *motan.URL) motan.Provider {
+		return &MockProvider{URL: url}
 	})
 
-	extFactory.RegistExtProvider(Default, func(url *motan.Url) motan.Provider {
+	extFactory.RegistExtProvider(Default, func(url *motan.URL) motan.Provider {
 		return &DefaultProvider{url: url}
 	})
 }
@@ -33,7 +33,7 @@ func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 type DefaultProvider struct {
 	service interface{}
 	methods map[string]reflect.Value
-	url     *motan.Url
+	url     *motan.URL
 }
 
 func (d *DefaultProvider) Initialize() {
@@ -59,11 +59,11 @@ func (d *DefaultProvider) SetService(s interface{}) {
 	d.service = s
 }
 
-func (d *DefaultProvider) GetUrl() *motan.Url {
+func (d *DefaultProvider) GetURL() *motan.URL {
 	return d.url
 }
 
-func (d *DefaultProvider) SetUrl(url *motan.Url) {
+func (d *DefaultProvider) SetURL(url *motan.URL) {
 	d.url = url
 }
 
@@ -81,12 +81,12 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	m, exit := d.methods[motan.FirstUpper(request.GetMethod())]
 	if !exit {
 		vlog.Errorf("mehtod not found in provider. %s\n", motan.GetReqInfo(request))
-		return motan.BuildExceptionResponse(request.GetRequestId(), &motan.Exception{ErrCode: 500, ErrMsg: "mehtod " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "mehtod " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
 	}
 	defer func() {
 		if err := recover(); err != nil {
 			vlog.Errorf("provider call fail! e: %v, %s\n", err, motan.GetReqInfo(request))
-			res = motan.BuildExceptionResponse(request.GetRequestId(), &motan.Exception{ErrCode: 500, ErrMsg: fmt.Sprintf("request process fail in provider. e:%v", err), ErrType: motan.ServiceException})
+			res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: fmt.Sprintf("request process fail in provider. e:%v", err), ErrType: motan.ServiceException})
 		}
 	}()
 
@@ -99,7 +99,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 		}
 		err := request.ProcessDeserializable(values)
 		if err != nil {
-			return motan.BuildExceptionResponse(request.GetRequestId(), &motan.Exception{ErrCode: 500, ErrMsg: "deserialize arguments fail." + err.Error(), ErrType: motan.ServiceException})
+			return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "deserialize arguments fail." + err.Error(), ErrType: motan.ServiceException})
 		}
 	}
 
@@ -108,7 +108,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 		vs = append(vs, reflect.ValueOf(arg))
 	}
 	ret := m.Call(vs)
-	mres := &motan.MotanResponse{RequestId: request.GetRequestId()}
+	mres := &motan.MotanResponse{RequestID: request.GetRequestID()}
 	if len(ret) > 0 { // only use first return value.
 		mres.Value = ret[0]
 		res = mres
@@ -117,7 +117,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 }
 
 type MockProvider struct {
-	Url          *motan.Url
+	URL          *motan.URL
 	MockResponse motan.Response
 	service      interface{}
 }
@@ -126,12 +126,12 @@ func (m *MockProvider) GetName() string {
 	return "mockProvider"
 }
 
-func (m *MockProvider) GetUrl() *motan.Url {
-	return m.Url
+func (m *MockProvider) GetURL() *motan.URL {
+	return m.URL
 }
 
-func (m *MockProvider) SetUrl(url *motan.Url) {
-	m.Url = url
+func (m *MockProvider) SetURL(url *motan.URL) {
+	m.URL = url
 }
 
 func (m *MockProvider) IsAvailable() bool {
@@ -145,9 +145,8 @@ func (m *MockProvider) SetSerialization(s motan.Serialization) {}
 func (m *MockProvider) Call(request motan.Request) motan.Response {
 	if m.MockResponse != nil {
 		return m.MockResponse
-	} else {
-		return &motan.MotanResponse{ProcessTime: 1, Value: "ok"}
 	}
+	return &motan.MotanResponse{ProcessTime: 1, Value: "ok"}
 }
 
 func (m *MockProvider) Destroy() {}
@@ -160,5 +159,5 @@ func (m *MockProvider) SetService(s interface{}) {
 }
 
 func (m *MockProvider) GetPath() string {
-	return m.Url.Path
+	return m.URL.Path
 }

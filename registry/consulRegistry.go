@@ -6,17 +6,17 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 )
 
-//TODO
+// ConsulRegistry TODO implement
 type ConsulRegistry struct {
-	url           *motan.Url
+	url           *motan.URL
 	timeout       time.Duration
 	heartInterval time.Duration
 }
 
-func (v *ConsulRegistry) GetUrl() *motan.Url {
+func (v *ConsulRegistry) GetURL() *motan.URL {
 	return v.url
 }
-func (v *ConsulRegistry) SetUrl(url *motan.Url) {
+func (v *ConsulRegistry) SetURL(url *motan.URL) {
 	v.url = url
 }
 func (v *ConsulRegistry) GetName() string {
@@ -26,29 +26,29 @@ func (v *ConsulRegistry) GetName() string {
 func (v *ConsulRegistry) Initialize() {
 
 }
-func (v *ConsulRegistry) Subscribe(url *motan.Url, listener motan.NotifyListener) {
+func (v *ConsulRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 
 }
 
-func (v *ConsulRegistry) Unsubscribe(url *motan.Url, listener motan.NotifyListener) {
+func (v *ConsulRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 
 }
-func (v *ConsulRegistry) Discover(url *motan.Url) []*motan.Url {
+func (v *ConsulRegistry) Discover(url *motan.URL) []*motan.URL {
 	return nil
 }
-func (v *ConsulRegistry) Register(serverUrl *motan.Url) {
+func (v *ConsulRegistry) Register(serverURL *motan.URL) {
 
 }
-func (v *ConsulRegistry) UnRegister(serverUrl *motan.Url) {
+func (v *ConsulRegistry) UnRegister(serverURL *motan.URL) {
 
 }
-func (v *ConsulRegistry) Available(serverUrl *motan.Url) {
+func (v *ConsulRegistry) Available(serverURL *motan.URL) {
 
 }
-func (v *ConsulRegistry) Unavailable(serverUrl *motan.Url) {
+func (v *ConsulRegistry) Unavailable(serverURL *motan.URL) {
 
 }
-func (v *ConsulRegistry) GetRegisteredServices() []*motan.Url {
+func (v *ConsulRegistry) GetRegisteredServices() []*motan.URL {
 	return nil
 }
 func (v *ConsulRegistry) StartSnapshot(conf *motan.SnapshotConf) {}

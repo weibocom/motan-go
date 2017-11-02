@@ -11,7 +11,7 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-type Url struct {
+type URL struct {
 	Protocol   string
 	Host       string
 	Port       int
@@ -20,12 +20,11 @@ type Url struct {
 	Parameters map[string]string
 }
 
+// common parameter key
 const (
-	// common parameter key
-	NODE_TYPE         = "nodeType"
+	NodeTypeKey       = "nodeType"
 	Hakey             = "haStrategy"
 	Lbkey             = "loadbalance"
-	HeartIntervalKey  = "heartInterval"
 	TimeOutKey        = "requestTimeout"
 	SessionTimeOutKey = "registrySessionTimeout"
 	ApplicationKey    = "application"
@@ -35,7 +34,6 @@ const (
 	WeightKey         = "weight"
 	SerializationKey  = "serialization"
 	RefKey            = "ref"
-	ServerKey         = "serverImpl"
 	ExportKey         = "export"
 	ModuleKey         = "module"
 	GroupKey          = "group"
@@ -46,29 +44,27 @@ var (
 	defaultSerialize = "simple"
 )
 
-func (u *Url) GetIdentity() string {
+func (u *URL) GetIdentity() string {
 	return u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
 }
 
-func (u *Url) GetPositiveIntValue(key string, defaultvalue int64) int64 {
+func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
 	intvalue := u.GetIntValue(key, defaultvalue)
 	if intvalue < 1 {
 		return defaultvalue
-	} else {
-		return intvalue
 	}
+	return intvalue
 }
 
-func (u *Url) GetIntValue(key string, defaultValue int64) int64 {
+func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
 	result, err := u.GetInt(key)
 	if err == nil {
 		return result
-	} else {
-		return defaultValue
 	}
+	return defaultValue
 }
 
-func (u *Url) GetInt(key string) (i int64, err error) {
+func (u *URL) GetInt(key string) (i int64, err error) {
 
 	if v, ok := u.Parameters[key]; ok {
 		intvalue, err := strconv.ParseInt(v, 10, 64)
@@ -76,13 +72,13 @@ func (u *Url) GetInt(key string) (i int64, err error) {
 			return intvalue, nil
 		}
 	} else {
-		err = errors.New("map key not exist.")
+		err = errors.New("map key not exist")
 	}
 
 	return 0, err
 }
 
-func (u *Url) GetStringParamsWithDefault(key string, defaultvalue string) string {
+func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {
 	var ret string
 	if u.Parameters != nil {
 		ret = u.Parameters[key]
@@ -93,44 +89,40 @@ func (u *Url) GetStringParamsWithDefault(key string, defaultvalue string) string
 	return ret
 }
 
-func (u *Url) GetMethodIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
+func (u *URL) GetMethodIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
 	mkey := method + "(" + methodDesc + ")." + key
 	result, err := u.GetInt(mkey)
 	if err == nil {
 		return result
-	} else {
-		result, err = u.GetInt(key)
-		if err == nil {
-			return result
-		} else {
-			return defaultValue
-		}
 	}
+	result, err = u.GetInt(key)
+	if err == nil {
+		return result
+	}
+	return defaultValue
 }
 
-func (u *Url) GetMethodPositiveIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
+func (u *URL) GetMethodPositiveIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
 	result := u.GetMethodIntValue(method, methodDesc, key, defaultValue)
 	if result > 0 {
 		return result
-	} else {
-		return defaultValue
 	}
+	return defaultValue
 }
 
-func (u *Url) GetParam(key string, defaultValue string) string {
+func (u *URL) GetParam(key string, defaultValue string) string {
 	if u.Parameters == nil || len(u.Parameters) == 0 {
 		return defaultValue
 	}
 	ret := u.Parameters[key]
 	if ret == "" {
 		return defaultValue
-	} else {
-		return ret
 	}
+	return ret
 }
 
-// get time duration from params.
-func (u *Url) GetTimeDuration(key string, unit time.Duration, defaultDuration time.Duration) time.Duration {
+// GetTimeDuration get time duration from params.
+func (u *URL) GetTimeDuration(key string, unit time.Duration, defaultDuration time.Duration) time.Duration {
 	if t, ok := u.Parameters[key]; ok {
 		if ti, err := strconv.ParseInt(t, 10, 32); err == nil {
 			return time.Duration(ti) * unit
@@ -139,7 +131,7 @@ func (u *Url) GetTimeDuration(key string, unit time.Duration, defaultDuration ti
 	return defaultDuration
 }
 
-func (u *Url) ToExtInfo() string {
+func (u *URL) ToExtInfo() string {
 	var buf bytes.Buffer
 	buf.WriteString(u.Protocol)
 	buf.WriteString("://")
@@ -162,7 +154,7 @@ func (u *Url) ToExtInfo() string {
 
 }
 
-func FromExtInfo(extinfo string) *Url {
+func FromExtInfo(extinfo string) *URL {
 	defer func() {
 		if err := recover(); err != nil {
 			vlog.Errorf("parse url from extinfo fail! err: %v, extinfo: %s", err, extinfo)
@@ -188,35 +180,35 @@ func FromExtInfo(extinfo string) *Url {
 	}
 	group := paramsMap["group"]
 	delete(paramsMap, "group")
-	url := &Url{Protocol: protocol, Host: host, Port: int(port), Path: path, Group: group, Parameters: paramsMap}
+	url := &URL{Protocol: protocol, Host: host, Port: int(port), Path: path, Group: group, Parameters: paramsMap}
 	return url
 }
 
-func (u *Url) GetPortStr() string {
+func (u *URL) GetPortStr() string {
 	return strconv.FormatInt(int64(u.Port), 10)
 }
 
-func (u *Url) GetAddressStr() string {
+func (u *URL) GetAddressStr() string {
 	return u.Host + ":" + u.GetPortStr()
 }
 
-func (u *Url) Copy() *Url {
-	newUrl := &Url{Protocol: u.Protocol, Host: u.Host, Port: u.Port, Group: u.Group, Path: u.Path}
+func (u *URL) Copy() *URL {
+	newURL := &URL{Protocol: u.Protocol, Host: u.Host, Port: u.Port, Group: u.Group, Path: u.Path}
 	newParams := make(map[string]string)
 	for k, v := range u.Parameters {
 		newParams[k] = v
 	}
-	newUrl.Parameters = newParams
-	return newUrl
+	newURL.Parameters = newParams
+	return newURL
 }
 
-func (u *Url) MergeParams(params map[string]string) {
+func (u *URL) MergeParams(params map[string]string) {
 	for k, v := range params {
 		u.Parameters[k] = v
 	}
 }
 
-func (u *Url) CanServe(other *Url) bool {
+func (u *URL) CanServe(other *URL) bool {
 	if u.Protocol != other.Protocol {
 		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s\n", u.Protocol, other.Protocol)
 		return false
@@ -255,7 +247,7 @@ func IsSame(m1 map[string]string, m2 map[string]string, key string, defaultValue
 	return v1 == v2
 }
 
-func GetUrlFilters(url *Url, extFactory ExtentionFactory) (clusterFilter ClusterFilter, endpointFilters []Filter) {
+func GetURLFilters(url *URL, extFactory ExtentionFactory) (clusterFilter ClusterFilter, endpointFilters []Filter) {
 	if filters, ok := url.Parameters[FilterKey]; ok {
 		clusterFilters := make([]Filter, 0, 10)
 		endpointFilters = make([]Filter, 0, 10)
@@ -306,7 +298,7 @@ func (f filterSlice) Less(i, j int) bool {
 	return f[i].GetIndex() > f[j].GetIndex()
 }
 
-func GetSerialization(url *Url, extFactory ExtentionFactory) Serialization {
+func GetSerialization(url *URL, extFactory ExtentionFactory) Serialization {
 	s := url.Parameters[SerializationKey]
 	if s == "" {
 		s = defaultSerialize

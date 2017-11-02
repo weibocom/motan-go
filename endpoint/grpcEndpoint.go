@@ -12,7 +12,7 @@ import (
 )
 
 type GrpcEndPoint struct {
-	url      *motan.Url
+	url      *motan.URL
 	grpcConn *grpc.ClientConn
 	proxy    bool
 }
@@ -49,7 +49,7 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	err := grpc.Invoke(ctx, "/"+request.GetServiceName()+"/"+request.GetMethod(), in, out, g.grpcConn, grpc.Header(&header), grpc.Trailer(&trailer))
 	// type MD map[string][]string
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
-	resp.RequestId = request.GetRequestId()
+	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
 	// @TODO add receiving header and trailers into attachment
 	if err != nil {
@@ -66,11 +66,11 @@ func (g *GrpcEndPoint) GetName() string {
 	return "grpcEndpoint"
 }
 
-func (g *GrpcEndPoint) GetUrl() *motan.Url {
+func (g *GrpcEndPoint) GetURL() *motan.URL {
 	return g.url
 }
 
-func (g *GrpcEndPoint) SetUrl(url *motan.Url) {
+func (g *GrpcEndPoint) SetURL(url *motan.URL) {
 	g.url = url
 }
 

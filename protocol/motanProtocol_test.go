@@ -127,7 +127,7 @@ func TestEncode(t *testing.T) {
 	h.SetProxy(true)
 	h.SetRequest(true)
 	h.Magic = MotanMagic
-	h.RequestId = 2349789
+	h.RequestID = 2349789
 	meta := make(map[string]string)
 	meta["k1"] = "v1"
 	body := []byte("testbody")

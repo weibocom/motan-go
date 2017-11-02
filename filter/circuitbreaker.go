@@ -23,7 +23,7 @@ var (
 )
 
 type CircuitBreakerEndPointFilter struct {
-	Url                  *motan.Url
+	URL                  *motan.URL
 	next                 motan.EndPointFilter
 	circuitBreakerEnable bool
 	circuitBreaker       *hystrix.CircuitBreaker
@@ -37,7 +37,7 @@ func (t *CircuitBreakerEndPointFilter) GetName() string {
 	return "circuitbreaker"
 }
 
-func (t *CircuitBreakerEndPointFilter) NewFilter(url *motan.Url) motan.Filter {
+func (t *CircuitBreakerEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
 	circuitBreakerEnable, commandConfig := buildComandConfig(url)
 	var circuitBreaker *hystrix.CircuitBreaker
 	if circuitBreakerEnable {
@@ -51,13 +51,13 @@ func (t *CircuitBreakerEndPointFilter) NewFilter(url *motan.Url) motan.Filter {
 			vlog.Infof("CircuitBreaker: %v = %+v \n", url.GetIdentity(), commandConfig)
 		}
 	}
-	return &CircuitBreakerEndPointFilter{Url: url, circuitBreakerEnable: circuitBreakerEnable, circuitBreaker: circuitBreaker}
+	return &CircuitBreakerEndPointFilter{URL: url, circuitBreakerEnable: circuitBreakerEnable, circuitBreaker: circuitBreaker}
 }
 
 func (t *CircuitBreakerEndPointFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	var response motan.Response
 	if t.circuitBreakerEnable {
-		hystrix.Do(t.Url.GetIdentity(), func() error {
+		hystrix.Do(t.URL.GetIdentity(), func() error {
 			response = t.GetNext().Filter(caller, request)
 			if response.GetException() != nil {
 				return errExecuteFailure
@@ -65,7 +65,7 @@ func (t *CircuitBreakerEndPointFilter) Filter(caller motan.Caller, request motan
 			return nil
 		}, func(err error) error {
 			response = &motan.MotanResponse{
-				RequestId:   request.GetRequestId(),
+				RequestID:   request.GetRequestID(),
 				Attachment:  make(map[string]string),
 				ProcessTime: 0,
 				// todo exception 后续统一规划
@@ -95,7 +95,7 @@ func (t *CircuitBreakerEndPointFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func buildComandConfig(url *motan.Url) (bool, *hystrix.CommandConfig) {
+func buildComandConfig(url *motan.URL) (bool, *hystrix.CommandConfig) {
 	var circuitBreakerEnable bool
 	var commandConfig *hystrix.CommandConfig = &hystrix.CommandConfig{}
 	if v, ok := url.Parameters[CircuitBreakerEnable]; ok {

@@ -39,7 +39,7 @@ func TestFromExtinfo(t *testing.T) {
 }
 
 func TestGetInt(t *testing.T) {
-	url := &Url{}
+	url := &URL{}
 	params := make(map[string]string)
 	url.Parameters = params
 	key := "keyt"
@@ -75,22 +75,22 @@ func intequals(expect int64, realvalue int64, t *testing.T) {
 }
 
 func TestCopyAndMerge(t *testing.T) {
-	url := &Url{}
+	url := &URL{}
 	params := make(map[string]string)
 	for i := 0; i < 5; i++ {
 		params["key"+strconv.FormatInt(int64(i), 10)] = "value" + strconv.FormatInt(int64(i), 10)
 	}
 	url.Parameters = params
 
-	newUrl := url.Copy()
+	newURL := url.Copy()
 	for k, v := range url.Parameters {
-		v2 := newUrl.Parameters[k]
+		v2 := newURL.Parameters[k]
 		if v != v2 {
 			t.Fatalf("url copy not correct. k: %s, expect v :%s, real v: %s", k, v, v2)
 		}
 	}
 	url.Parameters["key1"] = "test"
-	if newUrl.Parameters["key1"] == "test" {
+	if newURL.Parameters["key1"] == "test" {
 		t.Fatal("url copy not correct. ")
 	}
 	newParams := make(map[string]string)
@@ -105,8 +105,8 @@ func TestCopyAndMerge(t *testing.T) {
 func TestCanServer(t *testing.T) {
 	params1 := make(map[string]string)
 	params2 := make(map[string]string)
-	url1 := &Url{Protocol: "motan", Path: "test/path", Parameters: params1}
-	url2 := &Url{Protocol: "motan", Path: "test/path", Parameters: params2}
+	url1 := &URL{Protocol: "motan", Path: "test/path", Parameters: params1}
+	url2 := &URL{Protocol: "motan", Path: "test/path", Parameters: params2}
 	if !url1.CanServe(url2) {
 		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
@@ -150,7 +150,7 @@ func TestCanServer(t *testing.T) {
 func TestGetPositiveIntValue(t *testing.T) {
 	params := make(map[string]string, 0)
 	params[SessionTimeOutKey] = "20000000"
-	url := &Url{Parameters: params}
+	url := &URL{Parameters: params}
 	v := url.GetPositiveIntValue(SessionTimeOutKey, 20)
 	if v != 20000000 {
 		t.Errorf("get positive int fail. v:%d", v)

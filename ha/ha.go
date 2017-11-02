@@ -10,7 +10,7 @@ const (
 )
 
 func RegistDefaultHa(extFactory motan.ExtentionFactory) {
-	extFactory.RegistExtHa(FailOver, func(url *motan.Url) motan.HaStrategy {
+	extFactory.RegistExtHa(FailOver, func(url *motan.URL) motan.HaStrategy {
 		return &FailOverHA{url: url}
 	})
 }

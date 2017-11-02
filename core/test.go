@@ -3,18 +3,19 @@ package core
 import "fmt"
 
 //structs for test
+
 type TestFilter struct {
 	Index int
-	Url   *Url
+	URL   *URL
 	next  ClusterFilter
 }
 
 func (t *TestFilter) GetName() string {
 	return "TestFilter"
 }
-func (t *TestFilter) NewFilter(url *Url) Filter {
+func (t *TestFilter) NewFilter(url *URL) Filter {
 	//init with url in here
-	return &TestFilter{Url: url}
+	return &TestFilter{URL: url}
 }
 
 func (t *TestFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
@@ -41,16 +42,16 @@ func (t *TestFilter) GetType() int32 {
 
 type TestEndPointFilter struct {
 	Index int
-	Url   *Url
+	URL   *URL
 	next  EndPointFilter
 }
 
 func (t *TestEndPointFilter) GetName() string {
 	return "TestEndPointFilter"
 }
-func (t *TestEndPointFilter) NewFilter(url *Url) Filter {
+func (t *TestEndPointFilter) NewFilter(url *URL) Filter {
 	//init with url in here
-	return &TestEndPointFilter{Url: url}
+	return &TestEndPointFilter{URL: url}
 }
 
 func (t *TestEndPointFilter) Filter(caller Caller, request Request) Response {
@@ -79,21 +80,21 @@ func (t *TestEndPointFilter) GetType() int32 {
 }
 
 type TestEndPoint struct {
-	Url *Url
+	URL *URL
 }
 
-func (t *TestEndPoint) GetUrl() *Url {
-	return t.Url
+func (t *TestEndPoint) GetURL() *URL {
+	return t.URL
 }
-func (t *TestEndPoint) SetUrl(url *Url) {
-	t.Url = url
+func (t *TestEndPoint) SetURL(url *URL) {
+	t.URL = url
 }
 func (t *TestEndPoint) GetName() string {
 	return "testEndPoint"
 }
 func (t *TestEndPoint) Call(request Request) Response {
 	fmt.Println("mock rpc request..")
-	response := &MotanResponse{RequestId: request.GetRequestId(), Value: &TestObject{}, ProcessTime: 12}
+	response := &MotanResponse{RequestID: request.GetRequestID(), Value: &TestObject{}, ProcessTime: 12}
 	return response
 }
 
@@ -112,14 +113,14 @@ type TestObject struct {
 }
 
 type TestHaStrategy struct {
-	Url *Url
+	URL *URL
 }
 
-func (t *TestHaStrategy) GetUrl() *Url {
-	return t.Url
+func (t *TestHaStrategy) GetURL() *URL {
+	return t.URL
 }
-func (t *TestHaStrategy) SetUrl(url *Url) {
-	t.Url = url
+func (t *TestHaStrategy) SetURL(url *URL) {
+	t.URL = url
 }
 func (t *TestHaStrategy) Call(request Request, loadBalance LoadBalance) Response {
 	fmt.Println("in testHastrategy call")
@@ -154,44 +155,44 @@ func (t *TestLoadBalance) SetWeight(weight string) {
 }
 
 type TestRegistry struct {
-	Url *Url
+	URL *URL
 }
 
 func (t *TestRegistry) GetName() string {
 	return "testRegistry"
 }
-func (t *TestRegistry) Subscribe(url *Url, listener NotifyListener) {
+func (t *TestRegistry) Subscribe(url *URL, listener NotifyListener) {
 
 }
-func (t *TestRegistry) Unsubscribe(url *Url, listener NotifyListener) {
+func (t *TestRegistry) Unsubscribe(url *URL, listener NotifyListener) {
 
 }
-func (t *TestRegistry) Discover(url *Url) []*Url {
-	return make([]*Url, 0)
+func (t *TestRegistry) Discover(url *URL) []*URL {
+	return make([]*URL, 0)
 }
-func (t *TestRegistry) Register(serverUrl *Url) {
+func (t *TestRegistry) Register(serverURL *URL) {
 
 }
-func (t *TestRegistry) UnRegister(serverUrl *Url) {
+func (t *TestRegistry) UnRegister(serverURL *URL) {
 
 }
-func (t *TestRegistry) Available(serverUrl *Url) {
+func (t *TestRegistry) Available(serverURL *URL) {
 
 }
-func (t *TestRegistry) Unavailable(serverUrl *Url) {
+func (t *TestRegistry) Unavailable(serverURL *URL) {
 
 }
-func (t *TestRegistry) GetRegisteredServices() []*Url {
-	return make([]*Url, 0)
+func (t *TestRegistry) GetRegisteredServices() []*URL {
+	return make([]*URL, 0)
 }
-func (t *TestRegistry) GetUrl() *Url {
-	if t.Url == nil {
-		t.Url = &Url{}
+func (t *TestRegistry) GetURL() *URL {
+	if t.URL == nil {
+		t.URL = &URL{}
 	}
-	return t.Url
+	return t.URL
 }
-func (t *TestRegistry) SetUrl(url *Url) {
-	t.Url = url
+func (t *TestRegistry) SetURL(url *URL) {
+	t.URL = url
 }
 func (t *TestRegistry) InitRegistry() {
 

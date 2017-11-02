@@ -8,7 +8,7 @@ import (
 )
 
 type RoundrobinLB struct {
-	url       *motan.Url
+	url       *motan.URL
 	endpoints []motan.EndPoint
 	index     uint32
 	weight    string

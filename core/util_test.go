@@ -14,15 +14,15 @@ func TestParseExportString(t *testing.T) {
 	}
 }
 
-func TestGetLocalIp(t *testing.T) {
-	ip := GetLocalIp()
+func TestGetLocalIP(t *testing.T) {
+	ip := GetLocalIP()
 	fmt.Printf("get localip:%s\n", ip)
 	if ip == "" {
 		t.Errorf("get local ip fail. ip:%s", ip)
 	}
 	hostname := "testhostname"
-	*LocalIp = hostname
-	ip = GetLocalIp()
+	*LocalIP = hostname
+	ip = GetLocalIP()
 	if ip != hostname {
 		t.Errorf("get local ip fail. ip:%s", ip)
 	}
@@ -36,14 +36,14 @@ func TestSliceShuffle(t *testing.T) {
 		s = append(s, strconv.Itoa(i))
 		ns = append(ns, strconv.Itoa(i))
 	}
-	Slice_shuffle(s)
+	SliceShuffle(s)
 	if len(ns) != len(s) || len(ns) != 32 {
 		t.Errorf("slice shuffle fail. size not correct. size:%d", len(ns))
 	}
 	diffcount := 0
 	for i := 0; i < size; i++ {
 		if ns[i] != s[i] {
-			diffcount += 1
+			diffcount++
 		}
 	}
 	fmt.Printf("shuffle diff count:%d\n", diffcount)

@@ -20,7 +20,7 @@ const (
 )
 
 type BackupRequestHA struct {
-	url *motan.Url
+	url *motan.URL
 	// metric
 	registry   metric.Registry
 	samples    map[string]metric.Sample
@@ -42,11 +42,11 @@ func (br *BackupRequestHA) GetName() string {
 	return "backupRequestHA"
 }
 
-func (br *BackupRequestHA) GetUrl() *motan.Url {
+func (br *BackupRequestHA) GetURL() *motan.URL {
 	return br.url
 }
 
-func (br *BackupRequestHA) SetUrl(url *motan.Url) {
+func (br *BackupRequestHA) SetURL(url *motan.URL) {
 	br.url = url
 }
 
@@ -54,7 +54,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 
 	epList := loadBalance.SelectArray(request)
 	if len(epList) == 0 {
-		return getErrorResponse(request.GetRequestId(), fmt.Sprintf("call backup request fail: %s", "no endpoints"))
+		return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "no endpoints"))
 	}
 
 	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", 0)
@@ -82,12 +82,12 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			br.updateCallRecord(counterRoundCount)
 		}
 		if i > 0 && !br.tryAcquirePermit(int(backupRequestMaxRetryRatio)) {
-			vlog.Warningf("The permit is used up, request id: %d\n", request.GetRequestId())
+			vlog.Warningf("The permit is used up, request id: %d\n", request.GetRequestID())
 			break
 		}
 		// log backup request
 		if i > 0 {
-			vlog.Infof("[backup request ha] delay %s request id: %d, service: %s, method: %s\n", strconv.Itoa(delay), request.GetRequestId(), request.GetServiceName(), methodKey)
+			vlog.Infof("[backup request ha] delay %s request id: %d, service: %s, method: %s\n", strconv.Itoa(delay), request.GetRequestID(), request.GetServiceName(), methodKey)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
 		go func(endpoint motan.EndPoint, errorCh chan motan.Response) {
@@ -135,7 +135,7 @@ func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint
 		return respnose
 	}
 	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", br.url.GetIdentity(), respnose.GetException())
-	return motan.BuildExceptionResponse(request.GetRequestId(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
 		"call backup request fail.Exception:%s", respnose.GetException().ErrMsg), ErrType: motan.ServiceException})
 }
 
@@ -147,7 +147,7 @@ func (br *BackupRequestHA) updateCallRecord(thresholdLimit int) {
 		br.curRoundRetryCount = 0
 		br.lastResetTime = time.Now().UnixNano()
 	} else {
-		br.curRoundTotalCount += 1
+		br.curRoundTotalCount++
 	}
 }
 
@@ -156,10 +156,9 @@ func (br *BackupRequestHA) tryAcquirePermit(thresholdLimit int) bool {
 	defer br.counterLock.Unlock()
 	if br.curRoundRetryCount >= thresholdLimit {
 		return false
-	} else {
-		br.curRoundRetryCount += 1
-		return true
 	}
+	br.curRoundRetryCount++
+	return true
 }
 
 func (br *BackupRequestHA) getMethodKey(request motan.Request) string {
@@ -171,12 +170,11 @@ func (br *BackupRequestHA) getSample(key string) metric.Sample {
 	if sample, ok := br.samples[key]; ok {
 		br.sampleLock.RUnlock()
 		return sample
-	} else {
-		br.sampleLock.RUnlock()
-		br.sampleLock.Lock()
-		newSample := metric.NewExpDecaySample(1028, 0)
-		br.samples[key] = newSample
-		br.sampleLock.Unlock()
-		return newSample
 	}
+	br.sampleLock.RUnlock()
+	br.sampleLock.Lock()
+	newSample := metric.NewExpDecaySample(1028, 0)
+	br.samples[key] = newSample
+	br.sampleLock.Unlock()
+	return newSample
 }

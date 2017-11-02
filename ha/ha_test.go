@@ -6,7 +6,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 )
 
-func NewFailOver(url *motan.Url) motan.HaStrategy {
+func NewFailOver(url *motan.URL) motan.HaStrategy {
 	return &FailOverHA{url: url}
 }
 
@@ -16,13 +16,13 @@ func TestGetHa(t *testing.T) {
 	RegistDefaultHa(defaultExtFactory)
 	p := make(map[string]string)
 	p[motan.Hakey] = FailOver
-	url := &motan.Url{Parameters: p}
+	url := &motan.URL{Parameters: p}
 	ha := defaultExtFactory.GetHa(url)
 	if ha.GetName() != "failover" {
 		t.Error("GetHa name Error")
 	}
-	getUrl := ha.GetUrl()
-	if url.GetIdentity() != getUrl.GetIdentity() {
-		t.Error("GetUrl Error")
+	getURL := ha.GetURL()
+	if url.GetIdentity() != getURL.GetIdentity() {
+		t.Error("GetURL Error")
 	}
 }

@@ -18,7 +18,7 @@ func TestFilter(t *testing.T) {
 	if f == nil {
 		t.Fatal("can not find accesslog filter!")
 	}
-	url := &motan.Url{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint"}
+	url := &motan.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint"}
 	f = f.NewFilter(url)
 	ef := f.(motan.EndPointFilter)
 	ef.SetNext(motan.GetLastEndPointFilter())
@@ -27,7 +27,7 @@ func TestFilter(t *testing.T) {
 	attachments := make(map[string]string)
 	attachments["key1"] = "value1"
 	attachments["key2"] = "value2"
-	request := &motan.MotanRequest{RequestId: 11234, ServiceName: "com.weibo.TestService", Method: "testMethod", Arguments: arguments, Attachment: attachments}
+	request := &motan.MotanRequest{RequestID: 11234, ServiceName: "com.weibo.TestService", Method: "testMethod", Arguments: arguments, Attachment: attachments}
 	res := ef.Filter(caller, request)
 	fmt.Printf("res:%+v", res)
 }

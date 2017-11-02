@@ -10,74 +10,90 @@ import (
 )
 
 //--------------const--------------
+// exception type
 const (
 	FrameworkException = iota
+	// ServiceException : exception by service call
 	ServiceException
+	// BizException : exception by service implements
 	BizException
 )
 
 const (
+	// EndPointFilterType filter for endpoint
 	EndPointFilterType = iota
+	// ClusterFilterType filter for cluster
 	ClusterFilterType
 )
 
 //-----------interface-------------
+
+// Name is a interface can get and set name. especially for extension implements
 type Name interface {
 	GetName() string
 }
 
+// Identity : get id
 type Identity interface {
 	GetIdentity() string
 }
 
-type Withurl interface {
-	GetUrl() *Url
-	SetUrl(url *Url)
+// WithURL : can set and get URL
+type WithURL interface {
+	GetURL() *URL
+	SetURL(url *URL)
 }
 
+// Attachment : can get, set attachments.
 type Attachment interface {
 	GetAttachments() map[string]string
 	GetAttachment(key string) string
 	SetAttachment(key string, value string)
 }
 
+// Destroyable : can destroy ....
 type Destroyable interface {
 	Destroy()
 }
 
+// Caller : can process a motan request. the call maybe process from remote by endpoint, maybe process by some kinds of provider
 type Caller interface {
-	Withurl
+	WithURL
 	Status
 	Call(request Request) Response
 	Destroyable
 }
 
+// Request : motan request
 type Request interface {
 	Attachment
 	GetServiceName() string // service name  e.g. request path.or interface name
 	GetMethod() string
 	GetMethodDesc() string
 	GetArguments() []interface{}
-	GetRequestId() uint64
-	GetRpcContext(canCreate bool) *RpcContext
+	GetRequestID() uint64
+	GetRPCContext(canCreate bool) *RPCContext
 	ProcessDeserializable(toTypes []interface{}) error
 }
 
+// Response : motan response
 type Response interface {
 	Attachment
 	GetValue() interface{}
 	GetException() *Exception
-	GetRequestId() uint64
+	GetRequestID() uint64
 	GetProcessTime() int64
 	SetProcessTime(time int64)
-	GetRpcContext(canCreate bool) *RpcContext
+	GetRPCContext(canCreate bool) *RPCContext
 	ProcessDeserializable(toType interface{}) error
 }
 
+// Status : for cluster or endpoint to check is available
 type Status interface {
 	IsAvailable() bool
 }
 
+// EndPoint : can process a remote rpc call
 type EndPoint interface {
 	Name
 	Caller
@@ -85,12 +101,14 @@ type EndPoint interface {
 	SetProxy(proxy bool)
 }
 
+// HaStrategy : high availability strategy
 type HaStrategy interface {
 	Name
-	Withurl
+	WithURL
 	Call(request Request, loadBalance LoadBalance) Response
 }
 
+// LoadBalance : loadBalance for cluster
 type LoadBalance interface {
 	OnRefresh(endpoints []EndPoint)
 
@@ -101,59 +119,68 @@ type LoadBalance interface {
 	SetWeight(weight string)
 }
 
+// DiscoverService : discover service for cluster
 type DiscoverService interface {
-	Subscribe(url *Url, listener NotifyListener)
+	Subscribe(url *URL, listener NotifyListener)
 
-	Unsubscribe(url *Url, listener NotifyListener)
+	Unsubscribe(url *URL, listener NotifyListener)
 
-	Discover(url *Url) []*Url
+	Discover(url *URL) []*URL
 }
 
+// DiscoverCommand : discover command for client or agent
 type DiscoverCommand interface {
-	SubscribeCommand(url *Url, listener CommandNotifyListener)
-	UnSubscribeCommand(url *Url, listener CommandNotifyListener)
-	DiscoverCommand(url *Url) string
+	SubscribeCommand(url *URL, listener CommandNotifyListener)
+	UnSubscribeCommand(url *URL, listener CommandNotifyListener)
+	DiscoverCommand(url *URL) string
 }
 
+// RegisterService : register service for rpc server
 type RegisterService interface {
-	Register(serverUrl *Url)
-	UnRegister(serverUrl *Url)
-	Available(serverUrl *Url)
-	Unavailable(serverUrl *Url)
-	GetRegisteredServices() []*Url
+	Register(serverURL *URL)
+	UnRegister(serverURL *URL)
+	Available(serverURL *URL)
+	Unavailable(serverURL *URL)
+	GetRegisteredServices() []*URL
 }
 
+// SnapshotService : start registry snapshot
 type SnapshotService interface {
 	StartSnapshot(conf *SnapshotConf)
 }
 
+// Registry : can subscribe or register service
 type Registry interface {
 	Name
-	Withurl
+	WithURL
 	DiscoverService
 	RegisterService
 	SnapshotService
 }
 
+// NotifyListener : NotifyListener
 type NotifyListener interface {
 	Identity
-	Notify(registryUrl *Url, urls []*Url)
+	Notify(registryURL *URL, urls []*URL)
 }
 
+// CommandNotifyListener : support command notify
 type CommandNotifyListener interface {
 	Identity
-	NotifyCommand(registryUrl *Url, commandType int, commandInfo string)
+	NotifyCommand(registryURL *URL, commandType int, commandInfo string)
 }
 
+// Filter : filter request or response in a call processing
 type Filter interface {
 	Name
 	// filter must be prototype
-	NewFilter(url *Url) Filter
+	NewFilter(url *URL) Filter
 	HasNext() bool
 	GetIndex() int
 	GetType() int32
 }
 
+// EndPointFilter : filter for endpoint
 type EndPointFilter interface {
 	Filter
 	SetNext(nextFilter EndPointFilter)
@@ -162,6 +189,7 @@ type EndPointFilter interface {
 	Filter(caller Caller, request Request) Response
 }
 
+// ClusterFilter : filter for cluster
 type ClusterFilter interface {
 	Filter
 	SetNext(nextFilter ClusterFilter)
@@ -170,8 +198,9 @@ type ClusterFilter interface {
 	Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response
 }
 
+// Server : rpc server which listen port and process request
 type Server interface {
-	Withurl
+	WithURL
 	Name
 	Destroyable
 	SetMessageHandler(mh MessageHandler)
@@ -179,20 +208,23 @@ type Server interface {
 	Open(block bool, proxy bool, handler MessageHandler, extFactory ExtentionFactory) error
 }
 
+// Exporter : export and manage a service. one exporter bind with a service
 type Exporter interface {
 	Export(server Server) error
 	Unexport() error
 	SetProvider(provider Provider)
 	GetProvider() Provider
-	Withurl
+	WithURL
 }
 
+// Provider : service provider
 type Provider interface {
 	SetService(s interface{})
 	Caller
 	GetPath() string
 }
 
+// MessageHandler : handler message(request) for Server
 type MessageHandler interface {
 	Call(request Request) (res Response)
 	AddProvider(p Provider) error
@@ -200,6 +232,7 @@ type MessageHandler interface {
 	GetProvider(serviceName string) Provider
 }
 
+// Serialization : Serialization
 type Serialization interface {
 	GetSerialNum() int
 	Serialize(v interface{}) ([]byte, error)
@@ -208,14 +241,15 @@ type Serialization interface {
 	DeSerializeMulti(b []byte, v []interface{}) ([]interface{}, error)
 }
 
+// ExtentionFactory : can regiser and get all kinds of extension implements.
 type ExtentionFactory interface {
-	GetHa(url *Url) HaStrategy
-	GetLB(url *Url) LoadBalance
+	GetHa(url *URL) HaStrategy
+	GetLB(url *URL) LoadBalance
 	GetFilter(name string) Filter
-	GetRegistry(url *Url) Registry
-	GetEndPoint(url *Url) EndPoint
-	GetProvider(url *Url) Provider
-	GetServer(url *Url) Server
+	GetRegistry(url *URL) Registry
+	GetEndPoint(url *URL) EndPoint
+	GetProvider(url *URL) Provider
+	GetServer(url *URL) Server
 	GetMessageHandler(name string) MessageHandler
 	GetSerialization(name string, id int) Serialization
 	RegistExtFilter(name string, newFilter DefaultFilterFunc)
@@ -229,20 +263,24 @@ type ExtentionFactory interface {
 	RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc)
 }
 
+// Initializable :Initializable
 type Initializable interface {
 	Initialize()
 }
 
+// SetContext :SetContext
 type SetContext interface {
 	SetContext(context *Context)
 }
 
+// Initialize : Initialize if implement Initializable
 func Initialize(s interface{}) {
 	if init, ok := s.(Initializable); ok {
 		init.Initialize()
 	}
 }
 
+// CanSetContext :CanSetContext
 func CanSetContext(s interface{}, context *Context) {
 	if sc, ok := s.(SetContext); ok {
 		sc.SetContext(context)
@@ -250,31 +288,36 @@ func CanSetContext(s interface{}, context *Context) {
 }
 
 //-------------models--------------
+
+// SnapshotConf is model for registry snapshot config.
 type SnapshotConf struct {
-	// the interval of creating snapshot
+	// SnapshotInterval is the interval of creating snapshot
 	SnapshotInterval time.Duration
 	SnapshotDir      string
 }
 
+// Exception :Exception
 type Exception struct {
 	ErrCode int    `json:"errcode"`
 	ErrMsg  string `json:"errmsg"`
 	ErrType int    `json:"errtype"`
 }
 
-type RpcContext struct {
+// RPCContext : Context for RPC call
+type RPCContext struct {
 	ExtFactory      ExtentionFactory
 	OriginalMessage interface{}
 	Oneway          bool
 	Proxy           bool
 	GzipSize        int
 
-	//for call
+	// for call
 	AsyncCall bool
 	Result    *AsyncResult
 	Reply     interface{}
 }
 
+// AsyncResult : async call result
 type AsyncResult struct {
 	StartTime int64
 	Done      chan *AsyncResult
@@ -282,55 +325,69 @@ type AsyncResult struct {
 	Error     error
 }
 
+// DeserializableValue : for lazy deserialize
 type DeserializableValue struct {
 	Serialization Serialization
 	Body          []byte
 }
 
+// Deserialize : Deserialize
 func (d *DeserializableValue) Deserialize(v interface{}) (interface{}, error) {
 	return d.Serialization.DeSerialize(d.Body, v)
 }
 
+// DeserializeMulti : DeserializeMulti
 func (d *DeserializableValue) DeserializeMulti(v []interface{}) ([]interface{}, error) {
 	return d.Serialization.DeSerializeMulti(d.Body, v)
 }
 
+// MotanRequest : Request default implement
 type MotanRequest struct {
-	RequestId   uint64
+	RequestID   uint64
 	ServiceName string
 	Method      string
 	MethodDesc  string
 	Arguments   []interface{}
 	Attachment  map[string]string
-	RpcContext  *RpcContext
+	RPCContext  *RPCContext
 }
 
+// GetAttachment GetAttachment
 func (m *MotanRequest) GetAttachment(key string) string {
 	if m.Attachment == nil {
 		return ""
 	}
 	return m.Attachment[key]
 }
+
+// SetAttachment : SetAttachment
 func (m *MotanRequest) SetAttachment(key string, value string) {
 	if m.Attachment == nil {
 		m.Attachment = make(map[string]string)
 	}
 	m.Attachment[key] = value
 }
+
+// GetServiceName GetServiceName
 func (m *MotanRequest) GetServiceName() string {
 	return m.ServiceName
 }
+
+// GetMethod GetMethod
 func (m *MotanRequest) GetMethod() string {
 	return m.Method
 }
+
+// GetMethodDesc GetMethodDesc
 func (m *MotanRequest) GetMethodDesc() string {
 	return m.MethodDesc
 }
+
 func (m *MotanRequest) GetArguments() []interface{} {
 	return m.Arguments
 }
-func (m *MotanRequest) GetRequestId() uint64 {
-	return m.RequestId
+func (m *MotanRequest) GetRequestID() uint64 {
+	return m.RequestID
 }
 
 func (m *MotanRequest) SetArguments(arguments []interface{}) {
@@ -341,14 +398,14 @@ func (m *MotanRequest) GetAttachments() map[string]string {
 	return m.Attachment
 }
 
-func (m *MotanRequest) GetRpcContext(canCreate bool) *RpcContext {
-	if m.RpcContext == nil && canCreate {
-		m.RpcContext = &RpcContext{}
+func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
+	if m.RPCContext == nil && canCreate {
+		m.RPCContext = &RPCContext{}
 	}
-	return m.RpcContext
+	return m.RPCContext
 }
 
-// process DeserializableValue to real params according toType
+// ProcessDeserializable : DeserializableValue to real params according toType
 // some serialization can deserialize without toType, so nil toType can be accepted in these serializations
 func (m *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
 	if m.GetArguments() != nil && len(m.GetArguments()) == 1 {
@@ -364,12 +421,12 @@ func (m *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
 }
 
 type MotanResponse struct {
-	RequestId   uint64
+	RequestID   uint64
 	Value       interface{}
 	Exception   *Exception
 	ProcessTime int64
 	Attachment  map[string]string
-	RpcContext  *RpcContext
+	RPCContext  *RPCContext
 }
 
 func (m *MotanResponse) GetAttachment(key string) string {
@@ -394,8 +451,8 @@ func (m *MotanResponse) GetException() *Exception {
 	return m.Exception
 }
 
-func (m *MotanResponse) GetRequestId() uint64 {
-	return m.RequestId
+func (m *MotanResponse) GetRequestID() uint64 {
+	return m.RequestID
 }
 
 func (m *MotanResponse) GetProcessTime() int64 {
@@ -406,18 +463,18 @@ func (m *MotanResponse) GetAttachments() map[string]string {
 	return m.Attachment
 }
 
-func (m *MotanResponse) GetRpcContext(canCreate bool) *RpcContext {
-	if m.RpcContext == nil && canCreate {
-		m.RpcContext = &RpcContext{}
+func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
+	if m.RPCContext == nil && canCreate {
+		m.RPCContext = &RPCContext{}
 	}
-	return m.RpcContext
+	return m.RPCContext
 }
 
 func (m *MotanResponse) SetProcessTime(time int64) {
 	m.ProcessTime = time
 }
 
-// process DeserializableValue to real value according toType
+// ProcessDeserializable : same with MotanRequest
 func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
 	if m.GetValue() != nil {
 		if d, ok := m.GetValue().(*DeserializableValue); ok {
@@ -432,17 +489,18 @@ func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
 }
 
 func BuildExceptionResponse(requestid uint64, e *Exception) *MotanResponse {
-	return &MotanResponse{RequestId: requestid, Exception: e}
+	return &MotanResponse{RequestID: requestid, Exception: e}
 }
 
 // extensions factory-func
+
 type DefaultFilterFunc func() Filter
-type NewHaFunc func(url *Url) HaStrategy
-type NewLbFunc func(url *Url) LoadBalance
-type NewEndpointFunc func(url *Url) EndPoint
-type NewProviderFunc func(url *Url) Provider
-type NewRegistryFunc func(url *Url) Registry
-type NewServerFunc func(url *Url) Server
+type NewHaFunc func(url *URL) HaStrategy
+type NewLbFunc func(url *URL) LoadBalance
+type NewEndpointFunc func(url *URL) EndPoint
+type NewProviderFunc func(url *URL) Provider
+type NewRegistryFunc func(url *URL) Registry
+type NewServerFunc func(url *URL) Server
 type NewMessageHandlerFunc func() MessageHandler
 type NewSerializationFunc func() Serialization
 
@@ -463,7 +521,7 @@ type DefaultExtentionFactory struct {
 	newRegistryLock sync.Mutex
 }
 
-func (d *DefaultExtentionFactory) GetHa(url *Url) HaStrategy {
+func (d *DefaultExtentionFactory) GetHa(url *URL) HaStrategy {
 	haName := url.GetParam(Hakey, "failover")
 	if newHa, ok := d.haFactories[haName]; ok {
 		return newHa(url)
@@ -472,7 +530,7 @@ func (d *DefaultExtentionFactory) GetHa(url *Url) HaStrategy {
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetLB(url *Url) LoadBalance {
+func (d *DefaultExtentionFactory) GetLB(url *URL) LoadBalance {
 	lbName := url.GetParam(Lbkey, "random")
 	if newLb, ok := d.lbFactories[lbName]; ok {
 		return newLb(url)
@@ -489,28 +547,26 @@ func (d *DefaultExtentionFactory) GetFilter(name string) Filter {
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetRegistry(url *Url) Registry {
+func (d *DefaultExtentionFactory) GetRegistry(url *URL) Registry {
 	key := url.GetIdentity()
 	if registry, exist := d.registries[key]; exist {
 		return registry
-	} else {
-		d.newRegistryLock.Lock()
-		defer d.newRegistryLock.Unlock()
-		if registry, exist := d.registries[key]; exist {
-			return registry
-		} else if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
-			registry := newRegistry(url)
-			Initialize(registry)
-			d.registries[key] = registry
-			return registry
-		}
-		vlog.Errorf("Registry name %s is not found in DefaultExtentionFactory!\n", url.Protocol)
-		return nil
 	}
-
+	d.newRegistryLock.Lock()
+	defer d.newRegistryLock.Unlock()
+	if registry, exist := d.registries[key]; exist {
+		return registry
+	} else if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
+		registry := newRegistry(url)
+		Initialize(registry)
+		d.registries[key] = registry
+		return registry
+	}
+	vlog.Errorf("Registry name %s is not found in DefaultExtentionFactory!\n", url.Protocol)
+	return nil
 }
 
-func (d *DefaultExtentionFactory) GetEndPoint(url *Url) EndPoint {
+func (d *DefaultExtentionFactory) GetEndPoint(url *URL) EndPoint {
 	if newEp, ok := d.endpointFactories[url.Protocol]; ok {
 		endpoint := newEp(url)
 		return endpoint
@@ -519,7 +575,7 @@ func (d *DefaultExtentionFactory) GetEndPoint(url *Url) EndPoint {
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetProvider(url *Url) Provider {
+func (d *DefaultExtentionFactory) GetProvider(url *URL) Provider {
 	if newProviderFunc, ok := d.providerFactories[url.GetParam(ProviderKey, "default")]; ok {
 		provider := newProviderFunc(url)
 		return provider
@@ -528,7 +584,7 @@ func (d *DefaultExtentionFactory) GetProvider(url *Url) Provider {
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetServer(url *Url) Server {
+func (d *DefaultExtentionFactory) GetServer(url *URL) Server {
 	sname := url.Protocol
 	if sname == "" {
 		sname = "motan2"
@@ -624,14 +680,14 @@ var (
 	lcf *lastClusterFilter
 )
 
-func GetLastEndPointFilter() *lastEndPointFilter {
+func GetLastEndPointFilter() EndPointFilter {
 	if lef == nil {
 		lef = new(lastEndPointFilter)
 	}
 	return lef
 }
 
-func GetLastClusterFilter() *lastClusterFilter {
+func GetLastClusterFilter() ClusterFilter {
 	if lcf == nil {
 		lcf = new(lastClusterFilter)
 	}
@@ -644,7 +700,7 @@ func (l *lastEndPointFilter) GetName() string {
 	return "lastEndPointFilter"
 }
 
-func (l *lastEndPointFilter) NewFilter(url *Url) Filter {
+func (l *lastEndPointFilter) NewFilter(url *URL) Filter {
 	return GetLastEndPointFilter()
 }
 
@@ -674,7 +730,7 @@ type lastClusterFilter struct{}
 func (l *lastClusterFilter) GetName() string {
 	return "lastClusterFilter"
 }
-func (l *lastClusterFilter) NewFilter(url *Url) Filter {
+func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 	return GetLastClusterFilter()
 }
 
@@ -699,7 +755,7 @@ func (l *lastClusterFilter) GetType() int32 {
 }
 
 type FilterEndPoint struct {
-	Url           *Url
+	URL           *URL
 	Filter        EndPointFilter
 	StatusFilters []Status
 	Caller        Caller
@@ -708,11 +764,11 @@ type FilterEndPoint struct {
 func (f *FilterEndPoint) Call(request Request) Response {
 	return f.Filter.Filter(f.Caller, request)
 }
-func (f *FilterEndPoint) GetUrl() *Url {
-	return f.Url
+func (f *FilterEndPoint) GetURL() *URL {
+	return f.URL
 }
-func (f *FilterEndPoint) SetUrl(url *Url) {
-	f.Url = url
+func (f *FilterEndPoint) SetURL(url *URL) {
+	f.URL = url
 }
 func (f *FilterEndPoint) GetName() string {
 	return "FilterEndPoint"

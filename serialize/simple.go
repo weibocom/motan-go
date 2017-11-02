@@ -87,7 +87,7 @@ func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 		}
 		return by, err
 	}
-	return nil, errors.New(fmt.Sprintf("can not deserialize. unknown type:%v", tp))
+	return nil, fmt.Errorf("can not deserialize. unknown type:%v", tp)
 }
 
 func (s *SimpleSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
@@ -134,7 +134,7 @@ func decodeString(buf *bytes.Buffer) (string, int, error) {
 	}
 	b := buf.Next(size)
 	if len(b) != size {
-		return "", 0, errors.New("read byte not enough!")
+		return "", 0, errors.New("read byte not enough")
 	}
 
 	return string(b), size + 4, nil
@@ -159,7 +159,7 @@ func decodeMap(buf *bytes.Buffer) (map[string]string, error) {
 		}
 		size += l
 		if size > total {
-			return nil, errors.New("read byte size not correct!")
+			return nil, errors.New("read byte size not correct")
 		}
 		v, l, err = decodeString(buf)
 		if err != nil {
@@ -167,7 +167,7 @@ func decodeMap(buf *bytes.Buffer) (map[string]string, error) {
 		}
 		size += l
 		if size > total {
-			return nil, errors.New("read byte size not correct!")
+			return nil, errors.New("read byte size not correct")
 		}
 		m[k] = v
 	}
@@ -181,7 +181,7 @@ func decodeBytes(buf *bytes.Buffer) ([]byte, error) {
 	}
 	b := buf.Next(size)
 	if len(b) != size {
-		return nil, errors.New("read byte not enough!")
+		return nil, errors.New("read byte not enough")
 	}
 
 	return b, nil

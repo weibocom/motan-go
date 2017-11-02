@@ -23,14 +23,14 @@ const (
 type Context struct {
 	ConfigFile       string
 	Config           *cfg.Config
-	RegistryUrls     map[string]*Url
-	RefersUrls       map[string]*Url
-	BasicRefers      map[string]*Url
-	ServiceUrls      map[string]*Url
-	BasicServiceUrls map[string]*Url
-	AgentUrl         *Url
-	ClientUrl        *Url
-	ServerUrl        *Url
+	RegistryURLs     map[string]*URL
+	RefersURLs       map[string]*URL
+	BasicRefers      map[string]*URL
+	ServiceURLs      map[string]*URL
+	BasicServiceURLs map[string]*URL
+	AgentURL         *URL
+	ClientURL        *URL
+	ServerURL        *URL
 }
 
 var (
@@ -43,22 +43,22 @@ var (
 	Mport   = flag.Int("mport", 0, "agent manage port")
 	Pidfile = flag.String("pidfile", "", "agent manage port")
 	CfgFile = flag.String("c", "./motan.yaml", "motan run conf")
-	LocalIp = flag.String("localIp", "", "local ip for motan register")
+	LocalIP = flag.String("localIP", "", "local ip for motan register")
 )
 
-func (c *Context) confToUrls(section string) map[string]*Url {
-	urls := map[string]*Url{}
+func (c *Context) confToURLs(section string) map[string]*URL {
+	urls := map[string]*URL{}
 	sectionConf, _ := c.Config.GetSection(section)
 	for key, info := range sectionConf {
-		url := confToUrl(info.(map[interface{}]interface{}))
+		url := confToURL(info.(map[interface{}]interface{}))
 		urls[key.(string)] = url
 	}
 	return urls
 }
 
-func confToUrl(urlInfo map[interface{}]interface{}) *Url {
+func confToURL(urlInfo map[interface{}]interface{}) *URL {
 	urlParams := make(map[string]string)
-	url := &Url{Parameters: urlParams}
+	url := &URL{Parameters: urlParams}
 	for sk, sinfo := range urlInfo {
 		if _, ok := urlFields[sk.(string)]; ok {
 			if reflect.TypeOf(sinfo) == nil {
@@ -89,11 +89,11 @@ func confToUrl(urlInfo map[interface{}]interface{}) *Url {
 }
 
 func (c *Context) Initialize() {
-	c.RegistryUrls = make(map[string]*Url)
-	c.RefersUrls = make(map[string]*Url)
-	c.BasicRefers = make(map[string]*Url)
-	c.ServiceUrls = make(map[string]*Url)
-	c.BasicServiceUrls = make(map[string]*Url)
+	c.RegistryURLs = make(map[string]*URL)
+	c.RefersURLs = make(map[string]*URL)
+	c.BasicRefers = make(map[string]*URL)
+	c.ServiceURLs = make(map[string]*URL)
+	c.BasicServiceURLs = make(map[string]*URL)
 	if c.ConfigFile == "" { // use flag as default config file name
 		c.ConfigFile = *CfgFile
 	}
@@ -105,78 +105,78 @@ func (c *Context) Initialize() {
 	c.parseRefers()
 	c.parserBasicServices()
 	c.parseServices()
-	c.parseHostUrl()
+	c.parseHostURL()
 }
 
 // parse host url including agenturl, clienturl, serverurl
-func (c *Context) parseHostUrl() {
+func (c *Context) parseHostURL() {
 	agentInfo, _ := c.Config.GetSection(agentSection)
-	c.AgentUrl = confToUrl(agentInfo)
+	c.AgentURL = confToURL(agentInfo)
 	clientInfo, _ := c.Config.GetSection(clientSection)
-	c.ClientUrl = confToUrl(clientInfo)
+	c.ClientURL = confToURL(clientInfo)
 	serverInfo, _ := c.Config.GetSection(serverSection)
-	c.ServerUrl = confToUrl(serverInfo)
+	c.ServerURL = confToURL(serverInfo)
 }
 
 func (c *Context) parseRegistrys() {
-	c.RegistryUrls = c.confToUrls(registrysSection)
+	c.RegistryURLs = c.confToURLs(registrysSection)
 }
 
-func (c *Context) basicConfToUrls(basicsection, section string) map[string]*Url {
-	urls := map[string]*Url{}
-	Refs := c.confToUrls(section)
-	var BasicInfo map[string]*Url
+func (c *Context) basicConfToURLs(basicsection, section string) map[string]*URL {
+	urls := map[string]*URL{}
+	Refs := c.confToURLs(section)
+	var BasicInfo map[string]*URL
 	if section == servicesSection {
-		BasicInfo = c.BasicServiceUrls
+		BasicInfo = c.BasicServiceURLs
 	} else if section == refersSection {
 		BasicInfo = c.BasicRefers
 	}
 	for key, ref := range Refs {
-		var newUrl *Url
+		var newURL *URL
 		if basicConfKey, ok := ref.Parameters["basicRefer"]; ok {
 			if basicRef, ok := BasicInfo[basicConfKey]; ok {
-				newUrl = basicRef.Copy()
+				newURL = basicRef.Copy()
 				if ref.Protocol != "" {
-					newUrl.Protocol = ref.Protocol
+					newURL.Protocol = ref.Protocol
 				}
 				if ref.Host != "" {
-					newUrl.Host = ref.Host
+					newURL.Host = ref.Host
 				}
 				if ref.Port != 0 {
-					newUrl.Port = ref.Port
+					newURL.Port = ref.Port
 				}
 				if ref.Group != "" {
-					newUrl.Group = ref.Group
+					newURL.Group = ref.Group
 				}
 				if ref.Path != "" {
-					newUrl.Path = ref.Path
+					newURL.Path = ref.Path
 				}
-				newUrl.MergeParams(ref.Parameters)
+				newURL.MergeParams(ref.Parameters)
 			} else {
-				newUrl = ref
+				newURL = ref
 				vlog.Warningf("can not found basicRefer: %s. ref %s\n", basicConfKey, ref.GetIdentity())
 			}
 
 		} else {
-			newUrl = ref
+			newURL = ref
 		}
-		urls[key] = newUrl
+		urls[key] = newURL
 	}
 	return urls
 }
 
 func (c *Context) parseRefers() {
-	c.RefersUrls = c.basicConfToUrls(basicRefersSection, refersSection)
+	c.RefersURLs = c.basicConfToURLs(basicRefersSection, refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
-	c.BasicRefers = c.confToUrls(basicRefersSection)
+	c.BasicRefers = c.confToURLs(basicRefersSection)
 }
 
 func (c *Context) parseServices() {
-	c.ServiceUrls = c.basicConfToUrls(basicServicesSection, servicesSection)
+	c.ServiceURLs = c.basicConfToURLs(basicServicesSection, servicesSection)
 }
 
 func (c *Context) parserBasicServices() {
-	c.BasicServiceUrls = c.confToUrls(basicServicesSection)
+	c.BasicServiceURLs = c.confToURLs(basicServicesSection)
 }
