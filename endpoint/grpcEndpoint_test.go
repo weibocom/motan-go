@@ -6,11 +6,11 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 )
 
-func TestGetUrl(t *testing.T) {
+func TestGetURL(t *testing.T) {
 
-	url := &motan.Url{}
+	url := &motan.URL{}
 	grpcEndpoint := &GrpcEndPoint{url: url}
-	if grpcEndpoint.GetUrl() != url {
+	if grpcEndpoint.GetURL() != url {
 		t.Error("GetName Error")
 	}
 }

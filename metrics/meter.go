@@ -58,10 +58,10 @@ func getOrRegisterMeter(name string, r metrics.Registry) metrics.Meter {
 	if nil == r {
 		r = metrics.DefaultRegistry
 	}
-	return r.GetOrRegister(name, newQpsMeter).(metrics.Meter)
+	return r.GetOrRegister(name, newQPSMeter).(metrics.Meter)
 }
 
-func newQpsMeter() *qpsMeter {
+func newQPSMeter() *qpsMeter {
 	m := &qpsMeter{
 		snapshot:  &meterSnapshot{},
 		startTime: time.Now(),
@@ -86,7 +86,7 @@ func (m *qpsMeter) Count() int64 {
 	return count
 }
 
-// Mark records the occurance of n events.
+// Mark records the occurrence of n events.
 func (m *qpsMeter) Mark(n int64) {
 	m.lock.Lock()
 	m.snapshot.count += n

@@ -18,7 +18,7 @@ func (c *ClusterMetricsFilter) GetIndex() int {
 	return 5
 }
 
-func (c *ClusterMetricsFilter) NewFilter(url *motan.Url) motan.Filter {
+func (c *ClusterMetricsFilter) NewFilter(url *motan.URL) motan.Filter {
 	return &ClusterMetricsFilter{}
 }
 
@@ -54,8 +54,8 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 
 	response := c.GetNext().Filter(haStrategy, loadBalance, request)
 
-	m_p := strings.Replace(request.GetAttachments()["M_p"], ".", "_", -1)
-	key := fmt.Sprintf("%s:%s.cluster:%s:%s", request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], m_p, request.GetMethod())
+	mP := strings.Replace(request.GetAttachments()["M_p"], ".", "_", -1)
+	key := fmt.Sprintf("%s:%s.cluster:%s:%s", request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], mP, request.GetMethod())
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count
 

@@ -20,39 +20,38 @@ type MCContext struct {
 	confFile   string
 	context    *motan.Context
 	extFactory motan.ExtentionFactory
-	clients    map[string]*MotanClient
+	clients    map[string]*Client
 
 	csync  sync.Mutex
 	inited bool
 }
 
-type MotanClient struct {
-	url        *motan.Url
+type Client struct {
+	url        *motan.URL
 	cluster    *cluster.MotanCluster
 	extFactory motan.ExtentionFactory
 }
 
-func (m *MotanClient) Call(method string, args interface{}, reply interface{}) error {
+func (m *Client) Call(method string, args interface{}, reply interface{}) error {
 	req := m.buildRequest(method, args)
-	rc := req.GetRpcContext(true)
+	rc := req.GetRPCContext(true)
 	rc.ExtFactory = m.extFactory
 	rc.Reply = reply
 	res := m.cluster.Call(req)
 	if res.GetException() != nil {
 		return errors.New(res.GetException().ErrMsg)
-	} else {
-		return nil
 	}
+	return nil
 }
 
-func (m *MotanClient) Go(method string, args interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
+func (m *Client) Go(method string, args interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
 	req := m.buildRequest(method, args)
 	result := &motan.AsyncResult{}
 	if done == nil || cap(done) == 0 {
 		done = make(chan *motan.AsyncResult, 5)
 	}
 	result.Done = done
-	rc := req.GetRpcContext(true)
+	rc := req.GetRPCContext(true)
 	rc.ExtFactory = m.extFactory
 	rc.Result = result
 	rc.AsyncCall = true
@@ -65,26 +64,26 @@ func (m *MotanClient) Go(method string, args interface{}, reply interface{}, don
 	return result
 }
 
-func (m *MotanClient) buildRequest(method string, args interface{}) motan.Request {
+func (m *Client) buildRequest(method string, args interface{}) motan.Request {
 	req := &motan.MotanRequest{Method: method, ServiceName: m.url.Path, Arguments: []interface{}{args}, Attachment: make(map[string]string, 16)}
 	version := m.url.GetParam(motan.VersionKey, "")
 	if version != "" {
-		req.Attachment[mpro.M_version] = version
+		req.Attachment[mpro.MVersion] = version
 	}
 	module := m.url.GetParam(motan.ModuleKey, "")
 	if module != "" {
-		req.Attachment[mpro.M_module] = module
+		req.Attachment[mpro.MModule] = module
 	}
 	application := m.url.GetParam(motan.ApplicationKey, "")
 	if application != "" {
-		req.Attachment[mpro.M_source] = application
+		req.Attachment[mpro.MSource] = application
 	}
-	req.Attachment[mpro.M_group] = m.url.Group
+	req.Attachment[mpro.MGroup] = m.url.Group
 
 	return req
 }
 
-func GetMotanClientContext(confFile string) *MCContext {
+func GetClientContext(confFile string) *MCContext {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
@@ -119,7 +118,7 @@ func (m *MCContext) Initialize() {
 		m.context = &motan.Context{ConfigFile: m.confFile}
 		m.context.Initialize()
 
-		m.clients = make(map[string]*MotanClient, 32)
+		m.clients = make(map[string]*Client, 32)
 		m.inited = true
 	}
 }
@@ -132,16 +131,16 @@ func (m *MCContext) Start(extfactory motan.ExtentionFactory) {
 		m.extFactory = GetDefaultExtFactory()
 	}
 
-	for key, url := range m.context.RefersUrls {
+	for key, url := range m.context.RefersURLs {
 		c := cluster.NewCluster(url, false)
 		c.SetExtFactory(m.extFactory)
 		c.Context = m.context
 		c.InitCluster()
-		m.clients[key] = &MotanClient{url: url, cluster: c, extFactory: m.extFactory}
+		m.clients[key] = &Client{url: url, cluster: c, extFactory: m.extFactory}
 	}
 }
 
-func (m *MCContext) GetClient(clientid string) *MotanClient {
+func (m *MCContext) GetClient(clientid string) *Client {
 	return m.clients[clientid]
 }
 

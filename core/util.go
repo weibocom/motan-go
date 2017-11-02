@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
@@ -12,16 +11,12 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-var localIps []string = make([]string, 0)
+var localIPs = make([]string, 0)
 
 const (
 	defaultServerPort = "9982"
 	defaultProtocal   = "motan2"
 )
-
-func GetCtxKey(group, version, protocol, path string) string {
-	return fmt.Sprintf("%s_%s_%s_%s_", group, version, protocol, path)
-}
 
 func ParseExportInfo(export string) (string, int, error) {
 	port := defaultServerPort
@@ -58,9 +53,9 @@ func InterfaceToString(in interface{}) string {
 	return rs
 }
 
-// ip from ipnet
-func GetLocalIps() []string {
-	if len(localIps) == 0 {
+// GetLocalIPs ip from ipnet
+func GetLocalIPs() []string {
+	if len(localIPs) == 0 {
 		addrs, err := net.InterfaceAddrs()
 		if err != nil {
 			vlog.Warningf("get local ip fail. %s", err.Error())
@@ -68,26 +63,26 @@ func GetLocalIps() []string {
 			for _, address := range addrs {
 				if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 					if ipnet.IP.To4() != nil {
-						localIps = append(localIps, ipnet.IP.String())
+						localIPs = append(localIPs, ipnet.IP.String())
 					}
 				}
 			}
 		}
 	}
-	return localIps
+	return localIPs
 }
 
-// falg of localIp > ipnet
-func GetLocalIp() string {
-	if *LocalIp != "" {
-		return *LocalIp
-	} else if len(GetLocalIps()) > 0 {
-		return GetLocalIps()[0]
+// GetLocalIP falg of localIP > ipnet
+func GetLocalIP() string {
+	if *LocalIP != "" {
+		return *LocalIP
+	} else if len(GetLocalIPs()) > 0 {
+		return GetLocalIPs()[0]
 	}
 	return "unknown"
 }
 
-func Slice_shuffle(slice []string) []string {
+func SliceShuffle(slice []string) []string {
 	for i := 0; i < len(slice); i++ {
 		a := rand.Intn(len(slice))
 		b := rand.Intn(len(slice))
@@ -101,16 +96,15 @@ func FirstUpper(s string) string {
 
 	if unicode.IsUpper(r[0]) {
 		return s
-	} else {
-		r[0] = unicode.ToUpper(r[0])
-		return string(r)
 	}
+	r[0] = unicode.ToUpper(r[0])
+	return string(r)
 }
 
 func GetReqInfo(request Request) string {
 	var buffer bytes.Buffer
 	buffer.WriteString("req{")
-	buffer.WriteString(strconv.FormatUint(request.GetRequestId(), 10))
+	buffer.WriteString(strconv.FormatUint(request.GetRequestID(), 10))
 	buffer.WriteString(",")
 	buffer.WriteString(request.GetServiceName())
 	buffer.WriteString(",")

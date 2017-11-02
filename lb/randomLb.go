@@ -7,7 +7,7 @@ import (
 )
 
 type RandomLB struct {
-	url       *motan.Url
+	url       *motan.URL
 	endpoints []motan.EndPoint
 	weight    string
 }

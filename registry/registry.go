@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	DefaultSnapshotInterval    = 10 * time.Second
-	DEFAULT_HEARTBEAT_INTERVAL = 10 * 1000 //ms
-	DEFAULT_TIMEOUT            = 3 * 1000  //ms
-	DefaultSnapshotDir         = "./snapshot"
+	DefaultSnapshotInterval  = 10 * time.Second
+	DefaultHeartbeatInterval = 10 * 1000 //ms
+	DefaultTimeout           = 3 * 1000  //ms
+	DefaultSnapshotDir       = "./snapshot"
 )
 
 //ext name
@@ -52,20 +52,20 @@ func GetSanpshotConf() *motan.SnapshotConf {
 }
 
 func RegistDefaultRegistry(extFactory motan.ExtentionFactory) {
-	extFactory.RegistExtRegistry(Direct, func(url *motan.Url) motan.Registry {
+	extFactory.RegistExtRegistry(Direct, func(url *motan.URL) motan.Registry {
 		return &DirectRegistry{url: url}
 	})
 
-	extFactory.RegistExtRegistry(ZK, func(url *motan.Url) motan.Registry {
+	extFactory.RegistExtRegistry(ZK, func(url *motan.URL) motan.Registry {
 		return &ZkRegistry{url: url}
 	})
 
-	extFactory.RegistExtRegistry(Consul, func(url *motan.Url) motan.Registry {
+	extFactory.RegistExtRegistry(Consul, func(url *motan.URL) motan.Registry {
 		return &ConsulRegistry{url: url}
 	})
 }
 
-func IsAgent(url *motan.Url) bool {
+func IsAgent(url *motan.URL) bool {
 	isAgent := false
 	if t, ok := url.Parameters["nodeType"]; ok {
 		if t == "agent" {
@@ -75,11 +75,11 @@ func IsAgent(url *motan.Url) bool {
 	return isAgent
 }
 
-func GetSubKey(url *motan.Url) string {
+func GetSubKey(url *motan.URL) string {
 	return url.Group + "/" + url.Path + "/service"
 }
 
-func getNodeKey(url *motan.Url) string {
+func getNodeKey(url *motan.URL) string {
 	return url.Group + "_" + url.Path
 }
 

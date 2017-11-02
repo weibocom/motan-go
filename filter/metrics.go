@@ -17,48 +17,48 @@ type MetricsFilter struct {
 	next motan.EndPointFilter
 }
 
-func (g *MetricsFilter) GetIndex() int {
+func (m *MetricsFilter) GetIndex() int {
 	return 2
 }
 
-func (g *MetricsFilter) NewFilter(url *motan.Url) motan.Filter {
+func (m *MetricsFilter) NewFilter(url *motan.URL) motan.Filter {
 	return &MetricsFilter{}
 }
 
-func (g *MetricsFilter) GetName() string {
+func (m *MetricsFilter) GetName() string {
 	return "metrics"
 }
 
-func (g *MetricsFilter) HasNext() bool {
-	if g.next != nil {
+func (m *MetricsFilter) HasNext() bool {
+	if m.next != nil {
 		return true
 	}
 	return false
 }
 
-func (g *MetricsFilter) GetType() int32 {
+func (m *MetricsFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func (g *MetricsFilter) SetNext(e motan.EndPointFilter) {
-	g.next = e
+func (m *MetricsFilter) SetNext(e motan.EndPointFilter) {
+	m.next = e
 	return
 }
 
-func (g *MetricsFilter) GetNext() motan.EndPointFilter {
-	if g.next != nil {
-		return g.next
+func (m *MetricsFilter) GetNext() motan.EndPointFilter {
+	if m.next != nil {
+		return m.next
 	}
 	return nil
 }
 
-func (g *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
+func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	start := time.Now()
 
-	response := g.GetNext().Filter(caller, request)
+	response := m.GetNext().Filter(caller, request)
 
-	m_p := strings.Replace(request.GetAttachments()["M_p"], ".", "_", -1)
-	key := fmt.Sprintf("%s:%s:%s:%s", request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], m_p, request.GetMethod())
+	mP := strings.Replace(request.GetAttachments()["M_p"], ".", "_", -1)
+	key := fmt.Sprintf("%s:%s:%s:%s", request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], mP, request.GetMethod())
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count
 

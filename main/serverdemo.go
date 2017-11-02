@@ -13,7 +13,7 @@ func main() {
 }
 
 func runServerDemo() {
-	mscontext := motan.GetMotanServerContext("serverdemo.yaml")
+	mscontext := motan.GetMotanServerContext("./serverdemo.yaml")
 	mscontext.RegisterService(&Motan2TestService{}, "")
 	mscontext.RegisterService(&MotanDemoService{}, "")
 	mscontext.Start(nil)

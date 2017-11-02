@@ -10,7 +10,7 @@ func TestGetRegistry(t *testing.T) {
 	defaultExtFactory := &motan.DefaultExtentionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultRegistry(defaultExtFactory)
-	url := &motan.Url{
+	url := &motan.URL{
 		Protocol:   "direct",
 		Host:       "127.0.0.1",
 		Port:       4072,

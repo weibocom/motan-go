@@ -8,7 +8,7 @@ import (
 
 func TestGetName(t *testing.T) {
 	params := make(map[string]string)
-	url := &motan.Url{Protocol: "motan", Path: "test/path", Parameters: params}
+	url := &motan.URL{Protocol: "motan", Path: "test/path", Parameters: params}
 	ha := &FailOverHA{url: url}
 	haName := ha.GetName()
 	if haName != "failover" {

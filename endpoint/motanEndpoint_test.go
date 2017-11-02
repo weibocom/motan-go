@@ -17,9 +17,9 @@ func TestGetName(t *testing.T) {
 	m := StartTestServer(8989)
 	defer m.Close()
 
-	url := &motan.Url{Port: 8989, Protocol: "motan2"}
+	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	ep := &MotanEndpoint{}
-	ep.SetUrl(url)
+	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()

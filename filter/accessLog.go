@@ -19,11 +19,11 @@ func (t *AccessLogEndPointFilter) GetName() string {
 	return "accessLog"
 }
 
-func (t *AccessLogEndPointFilter) NewFilter(url *motan.Url) motan.Filter {
+func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
 	return &AccessLogEndPointFilter{}
 }
 
-// TODO log to separated file
+// Filter : Filter
 func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
@@ -31,8 +31,8 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	if response.GetException() != nil {
 		success = false
 	}
-	vlog.Infof("access log--server:%s:%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", caller.GetUrl().Host, caller.GetUrl().Port, time.Since(start)/1000000, request.GetServiceName(),
-		request.GetMethod(), request.GetMethodDesc(), request.GetRequestId(), response.GetProcessTime(), success, response.GetException())
+	vlog.Infof("access log--server:%s:%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", caller.GetURL().Host, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
+		request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), response.GetProcessTime(), success, response.GetException())
 	return response
 }
 

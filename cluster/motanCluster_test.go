@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	RegistryUrl = &motan.Url{Protocol: "test", Host: "127.0.0.1", Port: 8001}
+	RegistryURL = &motan.URL{Protocol: "test", Host: "127.0.0.1", Port: 8001}
 )
 
 func TestInitFilter(t *testing.T) {
@@ -56,18 +56,18 @@ func checkEndpointFilter(filters []motan.Filter, expectSize int, t *testing.T) {
 func TestNotify(t *testing.T) {
 	cluster := initCluster()
 	cluster.InitCluster()
-	urls := make([]*motan.Url, 0, 2)
-	urls = append(urls, &motan.Url{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
-	urls = append(urls, &motan.Url{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
-	cluster.Notify(RegistryUrl, urls)
+	urls := make([]*motan.URL, 0, 2)
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
+	cluster.Notify(RegistryURL, urls)
 	if len(cluster.Refers) != 2 {
 		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
 	}
 	//duplicate notify
-	cluster.Notify(RegistryUrl, urls)
+	cluster.Notify(RegistryURL, urls)
 	//ignore empty urls
-	urls = make([]*motan.Url, 0, 2)
-	cluster.Notify(RegistryUrl, urls)
+	urls = make([]*motan.URL, 0, 2)
+	cluster.Notify(RegistryURL, urls)
 	if len(cluster.Refers) == 0 {
 		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
 	}
@@ -86,13 +86,13 @@ func TestCall(t *testing.T) {
 
 func initCluster() *MotanCluster {
 	cluster := &MotanCluster{}
-	url := &motan.Url{Parameters: make(map[string]string)}
+	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Protocol = "test"
 	url.Parameters[motan.Hakey] = "failover"
 	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
 	url.Parameters[motan.Lbkey] = "random"
 	cluster.Context = &motan.Context{}
-	cluster.SetUrl(url)
+	cluster.SetURL(url)
 	cluster.SetExtFactory(getCustomExt())
 	return cluster
 }
@@ -100,10 +100,10 @@ func initCluster() *MotanCluster {
 func TestDestroy(t *testing.T) {
 	cluster := initCluster()
 	cluster.InitCluster()
-	urls := make([]*motan.Url, 0, 2)
-	urls = append(urls, &motan.Url{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
-	urls = append(urls, &motan.Url{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
-	cluster.Notify(RegistryUrl, urls)
+	urls := make([]*motan.URL, 0, 2)
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
+	cluster.Notify(RegistryURL, urls)
 	cluster.Destroy()
 	if cluster.closed != true {
 		t.Fatalf("cluster destroy fail, closed not false")
@@ -135,15 +135,15 @@ func getCustomExt() motan.ExtentionFactory {
 		return &motan.TestEndPointFilter{Index: 6}
 	})
 
-	ext.RegistExtLb("test", func(url *motan.Url) motan.LoadBalance {
+	ext.RegistExtLb("test", func(url *motan.URL) motan.LoadBalance {
 		return &motan.TestLoadBalance{}
 	})
-	ext.RegistExtRegistry("test", func(url *motan.Url) motan.Registry {
-		return &motan.TestRegistry{Url: url}
+	ext.RegistExtRegistry("test", func(url *motan.URL) motan.Registry {
+		return &motan.TestRegistry{URL: url}
 	})
 
-	ext.RegistExtEndpoint("test", func(url *motan.Url) motan.EndPoint {
-		return &motan.TestEndPoint{Url: url}
+	ext.RegistExtEndpoint("test", func(url *motan.URL) motan.EndPoint {
+		return &motan.TestEndPoint{URL: url}
 	})
 	return ext
 }

@@ -14,25 +14,21 @@ import (
 )
 
 const (
-	DEFAULT_SESSION_TIMEOUT_INTERVAL = 10 * 1000000 //ms
+	ZkRegistryNamespace = "/motan"
+	ZkRegistryCommand   = "/command"
+	ZkRegistryNode      = "/node"
+	PathSeparator       = "/"
 )
 
 const (
-	ZOOKEEPER_REGISTRY_NAMESPACE = "/motan"
-	ZOOKEEPER_REGISTRY_COMMAND   = "/command"
-	ZOOKEEPER_REGISTRY_NODE      = "/node"
-	PATH_SEPARATOR               = "/"
-)
-
-const (
-	ZOOKEEPER_NODETYPE_SERVER             = "server"
-	ZOOKEEPER_NODETYPE_UNAVAILABLE_SERVER = "unavailableServer"
-	ZOOKEEPER_NODETYPE_CLIENT             = "client"
-	ZOOKEEPER_NODETYPE_AGENT              = "agent"
+	ZkNodetypeServer            = "server"
+	ZkNodetypeUnavailableServer = "unavailableServer"
+	ZkNodetypeClient            = "client"
+	ZkNodetypeAgent             = "agent"
 )
 
 type ZkRegistry struct {
-	url            *motan.Url
+	url            *motan.URL
 	timeout        time.Duration
 	sessionTimeout time.Duration
 	zkConn         *zk.Conn
@@ -48,8 +44,8 @@ type ZkRegistry struct {
 
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
-		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DEFAULT_SESSION_TIMEOUT_INTERVAL)) * time.Millisecond
-	z.timeout = time.Duration(z.url.GetPositiveIntValue(motan.TimeOutKey, DEFAULT_TIMEOUT)) * time.Millisecond
+		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
+	z.timeout = time.Duration(z.url.GetPositiveIntValue(motan.TimeOutKey, DefaultTimeout)) * time.Millisecond
 	if c, _, err := zk.Connect([]string{z.url.GetAddressStr()}, z.sessionTimeout); err == nil {
 		z.zkConn = c
 	} else {
@@ -60,47 +56,46 @@ func (z *ZkRegistry) Initialize() {
 	z.StartSnapshot(GetSanpshotConf())
 }
 
-func ToGroupPath(url *motan.Url) string {
-	return ZOOKEEPER_REGISTRY_NAMESPACE + PATH_SEPARATOR + url.Group
+func ToGroupPath(url *motan.URL) string {
+	return ZkRegistryNamespace + PathSeparator + url.Group
 }
 
-func ToServicePath(url *motan.Url) string {
-	return ToGroupPath(url) + PATH_SEPARATOR + url.Path
+func ToServicePath(url *motan.URL) string {
+	return ToGroupPath(url) + PathSeparator + url.Path
 }
 
-func ToCommandPath(url *motan.Url) string {
-	return ToGroupPath(url) + ZOOKEEPER_REGISTRY_COMMAND
+func ToCommandPath(url *motan.URL) string {
+	return ToGroupPath(url) + ZkRegistryCommand
 }
 
-func ToNodeTypePath(url *motan.Url, nodeType string) string {
-	return ToServicePath(url) + PATH_SEPARATOR + nodeType
+func ToNodeTypePath(url *motan.URL, nodeType string) string {
+	return ToServicePath(url) + PathSeparator + nodeType
 }
 
-func ToNodePath(url *motan.Url, nodeType string) string {
-	if nodeType == ZOOKEEPER_NODETYPE_SERVER {
-		return ToNodeTypePath(url, nodeType) + PATH_SEPARATOR + url.GetAddressStr()
-	} else {
-		return ToNodeTypePath(url, nodeType) + PATH_SEPARATOR + url.Host
+func ToNodePath(url *motan.URL, nodeType string) string {
+	if nodeType == ZkNodetypeServer {
+		return ToNodeTypePath(url, nodeType) + PathSeparator + url.GetAddressStr()
 	}
+	return ToNodeTypePath(url, nodeType) + PathSeparator + url.Host
 }
 
-func ToAgentPath(url *motan.Url) string {
-	return ZOOKEEPER_REGISTRY_NAMESPACE + PATH_SEPARATOR + ZOOKEEPER_NODETYPE_AGENT + PATH_SEPARATOR + url.Parameters["application"]
+func ToAgentPath(url *motan.URL) string {
+	return ZkRegistryNamespace + PathSeparator + ZkNodetypeAgent + PathSeparator + url.Parameters["application"]
 }
 
-func ToAgentNodeTypePath(url *motan.Url) string {
-	return ToAgentPath(url) + ZOOKEEPER_REGISTRY_NODE
+func ToAgentNodeTypePath(url *motan.URL) string {
+	return ToAgentPath(url) + ZkRegistryNode
 }
 
-func ToAgentNodePath(url *motan.Url) string {
-	return ToAgentNodeTypePath(url) + PATH_SEPARATOR + url.GetAddressStr()
+func ToAgentNodePath(url *motan.URL) string {
+	return ToAgentNodeTypePath(url) + PathSeparator + url.GetAddressStr()
 }
 
-func ToAgentCommandPath(url *motan.Url) string {
-	return ToAgentPath(url) + ZOOKEEPER_REGISTRY_COMMAND
+func ToAgentCommandPath(url *motan.URL) string {
+	return ToAgentPath(url) + ZkRegistryCommand
 }
 
-func (z *ZkRegistry) RemoveNode(url *motan.Url, nodeType string) error {
+func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 	var (
 		path string
 		err  error
@@ -123,7 +118,7 @@ func (z *ZkRegistry) RemoveNode(url *motan.Url, nodeType string) error {
 	return err
 }
 
-func (z *ZkRegistry) CreateNode(url *motan.Url, nodeType string) error {
+func (z *ZkRegistry) CreateNode(url *motan.URL, nodeType string) error {
 	var (
 		path     string
 		nodePath string
@@ -168,14 +163,14 @@ func (z *ZkRegistry) CreatePersistent(path string, createParents bool) {
 	}
 }
 
-func (z *ZkRegistry) Register(url *motan.Url) {
+func (z *ZkRegistry) Register(url *motan.URL) {
 	vlog.Infof("start zk register %s\n", url.GetIdentity())
 	if url.Group == "" || url.Path == "" || url.Host == "" {
 		vlog.Errorf("register fail.invalid url : %s\n", url.GetIdentity())
 	}
 	var nodeType string
 	if nt, ok := url.Parameters["nodeType"]; !ok {
-		nodeType = "unkonwn"
+		nodeType = "unknown"
 	} else {
 		nodeType = nt
 	}
@@ -188,10 +183,10 @@ func (z *ZkRegistry) Register(url *motan.Url) {
 	}
 }
 
-func (z *ZkRegistry) UnRegister(url *motan.Url) {
+func (z *ZkRegistry) UnRegister(url *motan.URL) {
 	var nodeType string
 	if nt, ok := url.Parameters["nodeType"]; !ok {
-		nodeType = "unkonwn"
+		nodeType = "unknown"
 	} else {
 		nodeType = nt
 	}
@@ -199,20 +194,20 @@ func (z *ZkRegistry) UnRegister(url *motan.Url) {
 }
 
 // @TODO extInfo from java Obj Pase
-func buildUrl4Nodes(nodes []string, url *motan.Url) []*motan.Url {
-	result := make([]*motan.Url, 0, len(nodes))
+func buildURL4Nodes(nodes []string, url *motan.URL) []*motan.URL {
+	result := make([]*motan.URL, 0, len(nodes))
 	for _, node := range nodes {
 		nodeinfo := strings.Split(node, ":")
 		port, _ := strconv.Atoi(nodeinfo[1])
-		refUrl := url.Copy()
-		refUrl.Host = nodeinfo[0]
-		refUrl.Port = port
-		result = append(result, refUrl)
+		refURL := url.Copy()
+		refURL.Host = nodeinfo[0]
+		refURL.Port = port
+		result = append(result, refURL)
 	}
 	return result
 }
 
-func (z *ZkRegistry) Subscribe(url *motan.Url, listener motan.NotifyListener) {
+func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
 	vlog.Infof("start subscribe service. url:%s\n", url.GetIdentity())
@@ -226,14 +221,14 @@ func (z *ZkRegistry) Subscribe(url *motan.Url, listener motan.NotifyListener) {
 		lmap := make(map[string]motan.NotifyListener)
 		lmap[idt] = listener
 		z.subscribeMap[subkey] = lmap
-		serverPath := ToNodeTypePath(url, ZOOKEEPER_NODETYPE_SERVER)
+		serverPath := ToNodeTypePath(url, ZkNodetypeServer)
 		if _, _, ch, err := z.zkConn.ChildrenW(serverPath); err == nil {
 			vlog.Infof("start watch %s\n", subkey)
 			ip := ""
-			if len(motan.GetLocalIps()) > 0 {
-				ip = motan.GetLocalIps()[0]
+			if len(motan.GetLocalIPs()) > 0 {
+				ip = motan.GetLocalIPs()[0]
 			}
-			url.Parameters["nodeType"] = ZOOKEEPER_NODETYPE_CLIENT
+			url.Parameters["nodeType"] = ZkNodetypeClient
 			url.Host = ip
 			z.Register(url)
 			go func() {
@@ -246,7 +241,7 @@ func (z *ZkRegistry) Subscribe(url *motan.Url, listener motan.NotifyListener) {
 								ch = chx
 								if listeners, ok := z.subscribeMap[subkey]; ok {
 									for _, l := range listeners {
-										l.Notify(z.url, buildUrl4Nodes(nodes, url))
+										l.Notify(z.url, buildURL4Nodes(nodes, url))
 										vlog.Infof("EventNodeChildrenChanged %+v\n", nodes)
 									}
 								}
@@ -261,7 +256,7 @@ func (z *ZkRegistry) Subscribe(url *motan.Url, listener motan.NotifyListener) {
 	}
 }
 
-func (z *ZkRegistry) buildNodes(nodes []string, url *motan.Url) {
+func (z *ZkRegistry) buildNodes(nodes []string, url *motan.URL) {
 	servicenode := &ServiceNode{
 		Group: url.Group,
 		Path:  url.Path,
@@ -275,7 +270,7 @@ func (z *ZkRegistry) buildNodes(nodes []string, url *motan.Url) {
 	z.nodeRs[getNodeKey(url)] = *servicenode
 }
 
-func (z *ZkRegistry) Unsubscribe(url *motan.Url, listener motan.NotifyListener) {
+func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
 	subkey := GetSubKey(url)
@@ -285,18 +280,18 @@ func (z *ZkRegistry) Unsubscribe(url *motan.Url, listener motan.NotifyListener) 
 	}
 }
 
-func (z *ZkRegistry) Discover(url *motan.Url) []*motan.Url {
-	nodePath := ToNodeTypePath(url, ZOOKEEPER_NODETYPE_SERVER)
-	if nodes, _, err := z.zkConn.Children(nodePath); err == nil {
+func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
+	nodePath := ToNodeTypePath(url, ZkNodetypeServer)
+	nodes, _, err := z.zkConn.Children(nodePath)
+	if err == nil {
 		z.buildNodes(nodes, url)
-		return buildUrl4Nodes(nodes, url)
-	} else {
-		vlog.Errorf("zookeeper registry discover fail! discover url:%s, err:%s\n", url.GetIdentity(), err.Error())
-		return nil
+		return buildURL4Nodes(nodes, url)
 	}
+	vlog.Errorf("zookeeper registry discover fail! discover url:%s, err:%s\n", url.GetIdentity(), err.Error())
+	return nil
 }
 
-func (z *ZkRegistry) SubscribeCommand(url *motan.Url, listener motan.CommandNotifyListener) {
+func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
 	vlog.Infof("zookeeper subscribe command of %s\n", url.GetIdentity())
 	var commandPath string
 	if IsAgent(url) {
@@ -330,7 +325,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.Url, listener motan.CommandNoti
 								break
 							}
 							cmdInfo := string(data)
-							listener.NotifyCommand(z.url, cluster.SERVICE_CMD, cmdInfo)
+							listener.NotifyCommand(z.url, cluster.ServiceCmd, cmdInfo)
 							vlog.Infof("command changed, path:%s, data:%s\n", commandPath, cmdInfo)
 						} else {
 							vlog.Infof("command changed, get cmdInfo error, err: %+v\n", err)
@@ -346,7 +341,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.Url, listener motan.CommandNoti
 	}
 }
 
-func (z *ZkRegistry) UnSubscribeCommand(url *motan.Url, listener motan.CommandNotifyListener) {
+func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
 	var commandPath string
 	if IsAgent(url) {
 		commandPath = ToAgentCommandPath(url)
@@ -356,7 +351,7 @@ func (z *ZkRegistry) UnSubscribeCommand(url *motan.Url, listener motan.CommandNo
 	z.watchSwitcherMap[commandPath] <- false
 }
 
-func (z *ZkRegistry) DiscoverCommand(url *motan.Url) string {
+func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	vlog.Infof("zookeeper Discover command of %s\n", url.GetIdentity())
 	var (
 		res         string
@@ -385,23 +380,23 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.Url) string {
 	return res
 }
 
-func (z *ZkRegistry) Available(url *motan.Url) {
+func (z *ZkRegistry) Available(url *motan.URL) {
 
 }
 
-func (z *ZkRegistry) Unavailable(url *motan.Url) {
+func (z *ZkRegistry) Unavailable(url *motan.URL) {
 
 }
 
-func (z *ZkRegistry) GetRegisteredServices() []*motan.Url {
+func (z *ZkRegistry) GetRegisteredServices() []*motan.URL {
 	return nil
 }
 
-func (z *ZkRegistry) GetUrl() *motan.Url {
+func (z *ZkRegistry) GetURL() *motan.URL {
 	return z.url
 }
 
-func (z *ZkRegistry) SetUrl(url *motan.Url) {
+func (z *ZkRegistry) SetURL(url *motan.URL) {
 
 }
 

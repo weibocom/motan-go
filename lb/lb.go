@@ -25,25 +25,25 @@ var (
 )
 
 func RegistDefaultLb(extFactory motan.ExtentionFactory) {
-	extFactory.RegistExtLb(Random, NewWeightLbFunc(func(url *motan.Url) motan.LoadBalance {
+	extFactory.RegistExtLb(Random, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
 		return &RandomLB{url: url}
 	}))
 
-	extFactory.RegistExtLb(Roundrobin, NewWeightLbFunc(func(url *motan.Url) motan.LoadBalance {
+	extFactory.RegistExtLb(Roundrobin, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
 		return &RoundrobinLB{url: url}
 	}))
 }
 
-// support multi group weighted LB
+// WeightedLbWraper support multi group weighted LB
 type WeightedLbWraper struct {
-	url          *motan.Url
+	url          *motan.URL
 	weightstring string
 	refers       innerRefers
 	newLb        motan.NewLbFunc
 }
 
 func NewWeightLbFunc(newLb motan.NewLbFunc) motan.NewLbFunc {
-	return func(url *motan.Url) motan.LoadBalance {
+	return func(url *motan.URL) motan.LoadBalance {
 		return &WeightedLbWraper{url: url, newLb: newLb, refers: &singleGroupRefers{lb: newLb(url)}}
 	}
 }
@@ -65,11 +65,11 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 	defer lbmutex.Unlock()
 	groupEp := make(map[string][]motan.EndPoint)
 	for _, ep := range endpoints {
-		ges := groupEp[ep.GetUrl().Group]
+		ges := groupEp[ep.GetURL().Group]
 		if ges == nil {
 			ges = make([]motan.EndPoint, 0, 32)
 		}
-		groupEp[ep.GetUrl().Group] = append(ges, ep)
+		groupEp[ep.GetURL().Group] = append(ges, ep)
 	}
 
 	weights := strings.Split(w.weightstring, ",")
@@ -114,7 +114,7 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 			ring = append(ring, k)
 		}
 	}
-	wr.weightRing = motan.Slice_shuffle(ring)
+	wr.weightRing = motan.SliceShuffle(ring)
 	wr.ringSize = len(wr.weightRing)
 	w.refers = wr
 }
@@ -188,7 +188,6 @@ func findGcd(v []int) int {
 func basegcd(n int, m int) int {
 	if n == 0 || m == 0 {
 		return m + n
-	} else {
-		return basegcd(m, n%m)
 	}
+	return basegcd(m, n%m)
 }

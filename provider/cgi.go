@@ -20,18 +20,18 @@ import (
 )
 
 const (
-	CGIKEY_PREFIX    = "CGI_"
-	DEFAULT_CGI_HOST = "127.0.0.1"
-	DEFAULT_CGI_PORT = 9000
-	HTTP_METHOD_POST = "POST"
-	HTTP_METHOD_GET  = "GET"
+	CGIKeyPrefix   = "CGI_"
+	DefaultCGIHost = "127.0.0.1"
+	DefaultCGIPort = 9000
+	HTTPMethodPOST = "POST"
+	HTTPMethodGET  = "GET"
 )
 
 var serverEnvironment = map[string]string{"SERVER_SOFTWARE": "Motan / CGI"}
-var NEEDED_CIG_ENV = []string{"REQUEST_METHOD", "SCRIPT_FILENAME", "DOCUMENT_ROOT"}
+var NeededCGIEnv = []string{"REQUEST_METHOD", "SCRIPT_FILENAME", "DOCUMENT_ROOT"}
 
 type CgiProvider struct {
-	url *motan.Url
+	url *motan.URL
 }
 
 func (c *CgiProvider) Initialize() {
@@ -44,7 +44,7 @@ func (c *CgiProvider) SetSerialization(s motan.Serialization) {}
 
 func (c *CgiProvider) SetProxy(proxy bool) {}
 
-func buildQueryStr(request motan.Request, url *motan.Url) (res string, err error) {
+func buildQueryStr(request motan.Request, url *motan.URL) (res string, err error) {
 	var args []interface{}
 	if err = request.ProcessDeserializable(args); err == nil {
 		paramsTmp := request.GetArguments()
@@ -60,7 +60,7 @@ func buildQueryStr(request motan.Request, url *motan.Url) (res string, err error
 					for k, v := range params {
 						if start == 1 {
 							res = k + "=" + v
-							start += 1
+							start++
 							continue
 						}
 						res = res + "&" + k + "=" + v
@@ -91,12 +91,12 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		env[name] = value
 	}
 	cgiKey := ""
-	for _, key := range NEEDED_CIG_ENV {
-		cgiKey = CGIKEY_PREFIX + key
+	for _, key := range NeededCGIEnv {
+		cgiKey = CGIKeyPrefix + key
 		if info, ok := c.url.Parameters[cgiKey]; ok {
 			env[key] = info
 		} else {
-			vlog.Infof("NEEDED_CIG_ENV %s is not exist\n", cgiKey)
+			vlog.Infof("NeededCGIEnv %s is not exist\n", cgiKey)
 		}
 	}
 
@@ -104,11 +104,11 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		env["MOTAN_"+k] = v
 	}
 
-	if env["REQUEST_METHOD"] == HTTP_METHOD_GET {
+	if env["REQUEST_METHOD"] == HTTPMethodGET {
 		if queryStr, err := buildQueryStr(request, c.url); err == nil {
 			env["QUERY_STRING"] = queryStr
 		}
-	} else if env["REQUEST_METHOD"] == HTTP_METHOD_POST {
+	} else if env["REQUEST_METHOD"] == HTTPMethodPOST {
 		if getReqParams, err := buildQueryStr(request, c.url); err == nil {
 			reqParams = getReqParams
 		}
@@ -116,8 +116,8 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		env["CONTENT_LENGTH"] = strconv.Itoa(len(reqParams))
 	}
 
-	cgiHost := DEFAULT_CGI_HOST
-	cgiPort := DEFAULT_CGI_PORT
+	cgiHost := DefaultCGIHost
+	cgiPort := DefaultCGIPort
 	if host, ok := c.url.Parameters["CGI_HOST"]; ok {
 		cgiHost = host
 	}
@@ -135,7 +135,7 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 
 	statusCode, headers, body, err := ParseFastCgiResponse(string(content))
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
-	resp.RequestId = request.GetRequestId()
+	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
 	if err != nil {
 		//@TODO ErrTYpe
@@ -192,11 +192,11 @@ func (c *CgiProvider) GetName() string {
 	return "CgiProvider"
 }
 
-func (c *CgiProvider) GetUrl() *motan.Url {
+func (c *CgiProvider) GetURL() *motan.URL {
 	return c.url
 }
 
-func (c *CgiProvider) SetUrl(url *motan.Url) {
+func (c *CgiProvider) SetURL(url *motan.URL) {
 	c.url = url
 }
 

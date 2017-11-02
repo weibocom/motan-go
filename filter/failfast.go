@@ -14,7 +14,7 @@ const (
 )
 
 type FailfastFilter struct {
-	Url     *motan.Url
+	URL     *motan.URL
 	next    motan.EndPointFilter
 	address string
 	eps     *endpointStatus
@@ -30,10 +30,10 @@ type endpointStatus struct {
 var epsMap = make(map[string]*endpointStatus)
 var epsMutex sync.RWMutex
 
-func (e *FailfastFilter) NewFilter(url *motan.Url) motan.Filter {
+func (e *FailfastFilter) NewFilter(url *motan.URL) motan.Filter {
 	address := url.GetAddressStr()
 	epsPointer, _ := getEps(address)
-	return &FailfastFilter{Url: url, address: address, eps: epsPointer}
+	return &FailfastFilter{URL: url, address: address, eps: epsPointer}
 }
 
 func getEps(address string) (*endpointStatus, bool) {

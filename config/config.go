@@ -15,7 +15,7 @@ type Config struct {
 	conf *map[string]interface{}
 }
 
-//parse config from file.
+// NewConfigFromFile parse config from file.
 func NewConfigFromFile(path string) (*Config, error) {
 	vlog.Infof("start parse config path:%s \n", path)
 	filename, err := filepath.Abs(path)
@@ -35,7 +35,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 	return &Config{&m}, nil
 }
 
-// It accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,
+// ParseBool accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,
 // 0, 0.0, f, F, FALSE, false, False, NO, no, No, N,n, OFF, off, Off.
 // Any other value returns an error.
 func ParseBool(val interface{}) (value bool, err error) {
@@ -130,7 +130,7 @@ func (c *Config) GetSection(key string) (map[interface{}]interface{}, error) {
 	return nil, errors.New("section not map[interface{}]interface{}")
 }
 
-// getStruct returns struct for the give key and given struct type
+// GetStruct returns struct for the give key and given struct type
 func (c *Config) GetStruct(key string, out interface{}) error {
 	v, err := c.getData(key)
 	if err != nil {

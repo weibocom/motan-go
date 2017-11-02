@@ -9,8 +9,8 @@ motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
     host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.    
-    port: 9981 # use agent port    
-    # port: 8100 # use server direct    
+#    port: 9981 # use agent port
+    port: 8100 # use server direct
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
   # zk-registry:

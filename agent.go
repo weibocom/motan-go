@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	defaultPort        = 9981
-	defaultMport       = 8002
-	defaultPidFileName = "./agent.pid"
-	defaultAgentGroup  = "default_agent_group"
+	defaultPort       = 9981
+	defaultMport      = 8002
+	defaultPidFile    = "./agent.pid"
+	defaultAgentGroup = "default_agent_group"
 )
 
 type Agent struct {
@@ -34,7 +34,11 @@ type Agent struct {
 
 	clustermap map[string]*cluster.MotanCluster
 	status     int
-	agentUrl   *motan.Url
+	agentURL   *motan.URL
+	logdir     string
+	port       int
+	mport      int
+	pidfile    string
 
 	agentPortService map[int]motan.Exporter
 	agentPortServer  map[int]motan.Server
@@ -60,12 +64,31 @@ func (a *Agent) StartMotanAgent() {
 		flag.Parse()
 	}
 	a.initContext()
-	//get from context config
+	a.initParam()
+	a.initAgentURL()
+	a.initClusters()
+	a.startServerAgent()
+	vlog.Infof("Agent URL inited %s\n", a.agentURL.GetIdentity())
+
+	go a.startMServer()
+	f, err := os.Create(a.pidfile)
+	if err != nil {
+		vlog.Errorf("create file %s fail.\n", a.pidfile)
+	} else {
+		defer f.Close()
+		f.WriteString(strconv.Itoa(os.Getpid()))
+	}
+	go a.registerAgent()
+	vlog.Infoln("Motan agent is starting...")
+	a.startAgent()
+
+}
+
+func (a *Agent) initParam() {
 	section, err := a.Context.Config.GetSection("motan-agent")
 	if err != nil {
 		fmt.Println("get config of \"motan-agent\" fail! err " + err.Error())
 	}
-
 	logdir := ""
 	if section != nil && section["log_dir"] != nil {
 		logdir = section["log_dir"].(string)
@@ -91,45 +114,32 @@ func (a *Agent) StartMotanAgent() {
 		mport = defaultMport
 	}
 
-	pidfileName := *motan.Pidfile
-	if pidfileName == "" && section != nil && section["pidfile"] != nil {
-		pidfileName = section["pidfile"].(string)
+	pidfile := *motan.Pidfile
+	if pidfile == "" && section != nil && section["pidfile"] != nil {
+		pidfile = section["pidfile"].(string)
 	}
-	if pidfileName == "" {
-		pidfileName = defaultPidFileName
+	if pidfile == "" {
+		pidfile = defaultPidFile
 	}
-	vlog.Infoln("Motan agent is starting...")
-	vlog.Infof("agent port:%s, manage port:%s, pidfile:%s, logdir:%s\n", port, mport, pidfileName, logdir)
 
-	a.initAgentUrl()
-	a.initClusters()
-	a.startServerAgent()
-	vlog.Infof("Agent Url inited %s\n", a.agentUrl.GetIdentity())
-
-	go a.startMServer(mport)
-	f, err := os.Create(pidfileName)
-	if err != nil {
-		vlog.Errorf("create file %s fail.\n", pidfileName)
-	} else {
-		defer f.Close()
-		f.WriteString(strconv.Itoa(os.Getpid()))
-	}
-	go a.registerAgent()
-	a.startAgent(port)
-
+	vlog.Infof("agent port:%s, manage port:%s, pidfile:%s, logdir:%s\n", port, mport, pidfile, logdir)
+	a.logdir = logdir
+	a.port = port
+	a.mport = mport
+	a.pidfile = pidfile
 }
 
 func (a *Agent) initContext() {
 	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
 	a.Context.Initialize()
-	vlog.Infoln("init agent context sucess.")
+	vlog.Infoln("init agent context success.")
 }
 
 func (a *Agent) initClusters() {
 	var mapKey string
-	for _, url := range a.Context.RefersUrls {
+	for _, url := range a.Context.RefersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
-			url.Parameters[motan.ApplicationKey] = a.agentUrl.Parameters[motan.ApplicationKey]
+			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 		}
 		mapKey = getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 		c := cluster.NewCluster(url, true)
@@ -155,46 +165,46 @@ func (a *Agent) SetSanpshotConf() {
 	registry.SetSanpshotConf(registry.DefaultSnapshotInterval, snapshotDir)
 }
 
-func (a *Agent) initAgentUrl() {
-	agentUrl := a.Context.AgentUrl
-	if agentUrl.Host == "" {
-		agentUrl.Host = motan.GetLocalIp()
+func (a *Agent) initAgentURL() {
+	agentURL := a.Context.AgentURL
+	if agentURL.Host == "" {
+		agentURL.Host = motan.GetLocalIP()
 	}
 
-	if application, ok := agentUrl.Parameters[motan.ApplicationKey]; ok {
-		agentUrl.Group = application // agent's application is same with agent group.
+	if application, ok := agentURL.Parameters[motan.ApplicationKey]; ok {
+		agentURL.Group = application // agent's application is same with agent group.
 	} else {
-		agentUrl.Parameters[motan.ApplicationKey] = agentUrl.Group
+		agentURL.Parameters[motan.ApplicationKey] = agentURL.Group
 	}
-	if agentUrl.Group == "" {
-		agentUrl.Group = defaultAgentGroup
-		agentUrl.Parameters[motan.ApplicationKey] = defaultAgentGroup
+	if agentURL.Group == "" {
+		agentURL.Group = defaultAgentGroup
+		agentURL.Parameters[motan.ApplicationKey] = defaultAgentGroup
 	}
-	if agentUrl.Path == "" {
-		agentUrl.Path = agentUrl.Group
+	if agentURL.Path == "" {
+		agentURL.Path = agentURL.Group
 	}
 
-	if mportstr, ok := agentUrl.Parameters["mport"]; ok {
+	if mportstr, ok := agentURL.Parameters["mport"]; ok {
 		mport, err := strconv.Atoi(mportstr)
 		if err == nil {
-			agentUrl.Port = mport
+			agentURL.Port = mport
 		}
 	}
 
-	agentUrl.Parameters[motan.NODE_TYPE] = "agent"
-	a.agentUrl = agentUrl
+	agentURL.Parameters[motan.NodeTypeKey] = "agent"
+	a.agentURL = agentURL
 }
 
-func (a *Agent) startAgent(port int) {
-	url := &motan.Url{Port: port}
+func (a *Agent) startAgent() {
+	url := &motan.URL{Port: a.port}
 	handler := &agentMessageHandler{agent: a}
-	server := &mserver.MotanServer{Url: url}
+	server := &mserver.MotanServer{URL: url}
 	server.SetMessageHandler(handler)
-	vlog.Infof("Motan agent is started. port:%d\n", port)
+	vlog.Infof("Motan agent is started. port:%d\n", a.port)
 	fmt.Println("Motan agent start.")
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
-		vlog.Fatalf("start agent fail. port :%d, err: %v\n", port, err)
+		vlog.Fatalf("start agent fail. port :%d, err: %v\n", a.port, err)
 	}
 	a.agentServer = server
 	fmt.Println("Motan agent start fail!")
@@ -202,23 +212,23 @@ func (a *Agent) startAgent(port int) {
 
 func (a *Agent) registerAgent() {
 	vlog.Infoln("start agent regitstry.")
-	if reg, exit := a.agentUrl.Parameters[motan.RegistryKey]; exit {
-		if registryUrl, regexit := a.Context.RegistryUrls[reg]; regexit {
-			registry := a.extFactory.GetRegistry(registryUrl)
+	if reg, exit := a.agentURL.Parameters[motan.RegistryKey]; exit {
+		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
+			registry := a.extFactory.GetRegistry(registryURL)
 			if registry != nil {
-				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetUrl().GetIdentity(), a.agentUrl.GetIdentity())
-				registry.Register(a.agentUrl)
+				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), a.agentURL.GetIdentity())
+				registry.Register(a.agentURL)
 				//TODO 503, heartbeat
 				if commandRegisry, ok := registry.(motan.DiscoverCommand); ok {
 					listener := &AgentListener{agent: a}
-					commandRegisry.SubscribeCommand(a.agentUrl, listener)
-					commandInfo := commandRegisry.DiscoverCommand(a.agentUrl)
-					listener.NotifyCommand(registryUrl, cluster.AGENT_CMD, commandInfo)
+					commandRegisry.SubscribeCommand(a.agentURL, listener)
+					commandInfo := commandRegisry.DiscoverCommand(a.agentURL)
+					listener.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 					vlog.Infof("agent subscribe command. init command: %s\n", commandInfo)
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentUrl)
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL)
 		}
 	}
 }
@@ -229,19 +239,19 @@ type agentMessageHandler struct {
 
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	version := "0.1"
-	if request.GetAttachment(mpro.M_version) != "" {
-		version = request.GetAttachment(mpro.M_version)
+	if request.GetAttachment(mpro.MVersion) != "" {
+		version = request.GetAttachment(mpro.MVersion)
 	}
-	ck := getClusterKey(request.GetAttachment(mpro.M_group), version, request.GetAttachment(mpro.M_proxyProtocol), request.GetAttachment(mpro.M_path))
+	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
 	if motanCluster := a.agent.clustermap[ck]; motanCluster != nil {
 		res = motanCluster.Call(request)
 		if res == nil {
 			vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
-			res = getDefaultResponse(request.GetRequestId(), "motanCluster Call return nil. cluster:"+ck)
+			res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
 		}
 	} else {
-		res = getDefaultResponse(request.GetRequestId(), "cluster not found. cluster:"+ck)
-		vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestId())
+		res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
+		vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
 	}
 	return res
 }
@@ -258,10 +268,10 @@ func (a *agentMessageHandler) GetProvider(serviceName string) motan.Provider {
 
 func (a *Agent) startServerAgent() {
 	globalContext := a.Context
-	for _, url := range globalContext.ServiceUrls {
+	for _, url := range globalContext.ServiceURLs {
 		export := url.GetParam(motan.ExportKey, "")
 		url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
-		url.Host = motan.GetLocalIp()
+		url.Host = motan.GetLocalIP()
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
 		if provider == nil {
@@ -303,10 +313,9 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 	p := sa.providers[request.GetServiceName()]
 	if p != nil {
 		return p.Call(request)
-	} else {
-		vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
-		return motan.BuildExceptionResponse(request.GetRequestId(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
 	}
+	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
@@ -341,7 +350,7 @@ type AgentListener struct {
 	processStatus      bool //is command process finish
 }
 
-func (a *AgentListener) NotifyCommand(registryUrl *motan.Url, commandType int, commandInfo string) {
+func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
 	vlog.Infof("agentlistener command notify:%s\n", commandInfo)
 	//TODO notify according cluster
 	if commandInfo != a.CurrentCommandInfo {
@@ -349,7 +358,7 @@ func (a *AgentListener) NotifyCommand(registryUrl *motan.Url, commandType int, c
 		for _, cls := range a.agent.clustermap {
 			for _, registry := range cls.Registrys {
 				if cr, ok := registry.(motan.CommandNotifyListener); ok {
-					cr.NotifyCommand(registryUrl, cluster.AGENT_CMD, commandInfo)
+					cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 				}
 			}
 		}
@@ -358,17 +367,17 @@ func (a *AgentListener) NotifyCommand(registryUrl *motan.Url, commandType int, c
 }
 
 func (a *AgentListener) GetIdentity() string {
-	return a.agent.agentUrl.GetIdentity()
+	return a.agent.agentURL.GetIdentity()
 }
 
-func (a *Agent) startMServer(mport int) {
+func (a *Agent) startMServer() {
 	http.HandleFunc("/", a.rootHandler)
 	http.HandleFunc("/503", a.statusSetHandler)
 	http.HandleFunc("/200", a.statusSetHandler)
 	http.HandleFunc("/getConfig", a.getConfigHandler)
 	http.HandleFunc("/getReferService", a.getReferServiceHandler)
-	vlog.Infof("start listen manage port %s ...", mport)
-	http.ListenAndServe(":"+strconv.Itoa(mport), nil)
+	vlog.Infof("start listen manage port %s ...", a.mport)
+	http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 }
 
 type rpcService struct {
@@ -404,9 +413,9 @@ func (a *Agent) getReferServiceHandler(w http.ResponseWriter, r *http.Request) {
 
 	mbody := body{Service: []rpcService{}}
 	for _, cls := range a.clustermap {
-		rpc := cls.GetUrl().Path
-		avaiable := cls.IsAvaiable()
-		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: avaiable})
+		rpc := cls.GetURL().Path
+		available := cls.IsAvailable()
+		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
 	}
 	retData := &jsonRetData{Code: 200, Body: mbody}
 	if data, err := json.Marshal(&retData); err == nil {

@@ -12,16 +12,16 @@ const (
 )
 
 type FailOverHA struct {
-	url *motan.Url
+	url *motan.URL
 }
 
 func (f *FailOverHA) GetName() string {
 	return "failover"
 }
-func (f *FailOverHA) GetUrl() *motan.Url {
+func (f *FailOverHA) GetURL() *motan.URL {
 	return f.url
 }
-func (f *FailOverHA) SetUrl(url *motan.Url) {
+func (f *FailOverHA) SetURL(url *motan.URL) {
 	f.url = url
 }
 func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
@@ -35,8 +35,8 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 	for i := 0; i <= int(retries); i++ {
 		ep := loadBalance.Select(request)
 		if ep == nil {
-			return getErrorResponse(request.GetRequestId(), fmt.Sprintf("No referers for request, RequestID: %d, Request info: %+v",
-				request.GetRequestId(), request.GetAttachments()))
+			return getErrorResponse(request.GetRequestID(), fmt.Sprintf("No referers for request, RequestID: %d, Request info: %+v",
+				request.GetRequestID(), request.GetAttachments()))
 		}
 		respnose := ep.Call(request)
 		if respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException {
@@ -45,7 +45,7 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 		lastErr = respnose.GetException()
 		vlog.Warningf("FailOverHA call fail! url:%s, err:%+v\n", f.url.GetIdentity(), lastErr)
 	}
-	return getErrorResponse(request.GetRequestId(), fmt.Sprintf("call fail over %d times.Exception:%s", retries, lastErr.ErrMsg))
+	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call fail over %d times.Exception:%s", retries, lastErr.ErrMsg))
 
 }
 

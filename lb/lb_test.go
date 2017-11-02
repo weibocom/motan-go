@@ -9,7 +9,7 @@ import (
 )
 
 func TestWeightedLbWraper(t *testing.T) {
-	url := &motan.Url{Parameters: make(map[string]string)}
+	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Parameters[motan.Lbkey] = Roundrobin
 	defaultExtFactory := &motan.DefaultExtentionFactory{}
 	defaultExtFactory.Initialize()
@@ -27,7 +27,7 @@ func TestWeightedLbWraper(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		group := "group" + strconv.Itoa(i)
 		for j := 0; j < 5; j++ {
-			endpoints = append(endpoints, &endpoint.MockEndpoint{Url: &motan.Url{Port: 1000 + 1000*i + j, Group: group}})
+			endpoints = append(endpoints, &endpoint.MockEndpoint{URL: &motan.URL{Port: 1000 + 1000*i + j, Group: group}})
 		}
 	}
 	wlbw.OnRefresh(endpoints)
@@ -67,8 +67,8 @@ func TestWeightedLbWraper(t *testing.T) {
 	for i := 1; i < 21; i++ { // the first index of weightring used for select is 1
 		ep := wlbw.Select(request)
 		rg := refers.weightRing[i%len(refers.weightRing)]
-		if ep.GetUrl().Group != rg {
-			t.Errorf("ep group not same with weight ring. group:%s, ring: %s\n", ep.GetUrl().Group, rg)
+		if ep.GetURL().Group != rg {
+			t.Errorf("ep group not same with weight ring. group:%s, ring: %s\n", ep.GetURL().Group, rg)
 		}
 	}
 
