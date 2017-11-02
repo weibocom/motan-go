@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"git.intra.weibo.com/openapi_rd/motan-go/metrics"
 	"github.com/rcrowley/go-metrics"
 	"sync"
 	"sync/atomic"
