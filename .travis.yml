@@ -16,7 +16,6 @@ install:
     - go get -d -v $(go list ./... | grep -v main)
 
 script:
-    - go test -v -covermode=count -coverprofile=coverage.out $(go list ./... | grep -v main)
-    - goveralls -coverprofile=coverage.out -service=travis-ci
+    - go test -v $(go list ./... | grep -v main)
 
 after_success:
