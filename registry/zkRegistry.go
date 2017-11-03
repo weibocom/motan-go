@@ -46,7 +46,13 @@ func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
 		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
 	z.timeout = time.Duration(z.url.GetPositiveIntValue(motan.TimeOutKey, DefaultTimeout)) * time.Millisecond
-	if c, _, err := zk.Connect([]string{z.url.GetAddressStr()}, z.sessionTimeout); err == nil {
+	var addrs []string
+	if z.url.Host != "" {
+		addrs = []string{z.url.GetAddressStr()}
+	} else {
+		addrs = strings.Split(z.url.GetParam(motan.AddressKey, ""), ",")
+	}
+	if c, _, err := zk.Connect(addrs, z.sessionTimeout); err == nil {
 		z.zkConn = c
 	} else {
 		vlog.Errorf("zk connect error:%+v\n", err)
