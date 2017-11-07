@@ -62,7 +62,7 @@ func genGraphiteMessages(localIP string, snap metrics.Registry) []string {
 			segment = fmt.Sprintf("motan-agent.%s.%s.%s.byhost.%s.%s:%d|c\n",
 				pni[0], pni[1], pni[2], localIP, pni[3], m.Count())
 		case metrics.Meter:
-			segment = fmt.Sprintf("motan-agent.%s.%s.%s.byhost.%s.%s:%.2f|c\n",
+			segment = fmt.Sprintf("motan-agent.%s.%s.%s.byhost.%s.%s:%d.00|c\n",
 				pni[0], pni[1], pni[2], localIP, pni[3], m.Count())
 		case metrics.Timer:
 			/*TODO
