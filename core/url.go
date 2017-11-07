@@ -38,6 +38,7 @@ const (
 	ModuleKey         = "module"
 	GroupKey          = "group"
 	ProviderKey       = "provider"
+	AddressKey        = "address"
 )
 
 var (
