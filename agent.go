@@ -65,6 +65,7 @@ func (a *Agent) StartMotanAgent() {
 	}
 	a.initContext()
 	a.initParam()
+	a.SetSanpshotConf()
 	a.initAgentURL()
 	a.initClusters()
 	a.startServerAgent()
