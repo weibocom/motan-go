@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	motan "github.com/weibocom/motan-go/core"
+	"math/rand"
 )
 
 // ext name
@@ -190,4 +191,32 @@ func basegcd(n int, m int) int {
 		return m + n
 	}
 	return basegcd(m, n%m)
+}
+
+func selectArrayFromIndex(endpoints []motan.EndPoint, fromIndex int) []motan.EndPoint {
+	if len(endpoints) == 0 || fromIndex < 0 {
+		return make([]motan.EndPoint, 0)
+	}
+	epsLen := len(endpoints)
+	epList := make([]motan.EndPoint, 0, MaxSelectArraySize)
+	for idx := 0; idx < epsLen && len(epList) < MaxSelectArraySize; idx++ {
+		if ep := endpoints[(fromIndex+idx)%epsLen]; ep.IsAvailable() {
+			epList = append(epList, ep)
+		}
+	}
+	return epList
+}
+
+func selectOneAtRandom(endpoints []motan.EndPoint) (int, motan.EndPoint) {
+	epsLen := len(endpoints)
+	if epsLen == 0 {
+		return -1, nil
+	}
+	random := rand.Intn(epsLen)
+	for idx := 0; idx < epsLen; idx++ {
+		if rndIndex := (random + idx) % epsLen; endpoints[rndIndex].IsAvailable() {
+			return rndIndex, endpoints[rndIndex]
+		}
+	}
+	return -1, nil
 }

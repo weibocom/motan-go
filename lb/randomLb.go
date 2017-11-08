@@ -1,9 +1,8 @@
 package lb
 
 import (
-	"math/rand"
-
 	motan "github.com/weibocom/motan-go/core"
+	"math/rand"
 )
 
 type RandomLB struct {
@@ -16,46 +15,31 @@ func (r *RandomLB) OnRefresh(endpoints []motan.EndPoint) {
 	r.endpoints = endpoints
 }
 func (r *RandomLB) Select(request motan.Request) motan.EndPoint {
-	index := r.selectIndex(request)
-	if index == -1 {
-		return nil
-	}
-	return r.endpoints[index]
+	eps := r.endpoints
+	_, endpoint := r.randomSelect(eps)
+	return endpoint
 }
 func (r *RandomLB) SelectArray(request motan.Request) []motan.EndPoint {
-	index := r.selectIndex(request)
-	if index == -1 {
+	eps := r.endpoints
+	index, endpoint := r.randomSelect(eps)
+	if endpoint == nil {
 		return nil
 	}
-	epsLen := len(r.endpoints)
-	eps := make([]motan.EndPoint, 0)
-	for idx := 0; idx < epsLen && idx < MaxSelectArraySize; idx++ {
-		if ep := r.endpoints[(index+idx)%epsLen]; ep.IsAvailable() {
-			eps = append(eps, ep)
-		}
-	}
-	return eps
+	return selectArrayFromIndex(eps, index)
 }
+
 func (r *RandomLB) SetWeight(weight string) {
 	r.weight = weight
 }
 
-func (r *RandomLB) selectIndex(request motan.Request) int {
-	eps := r.endpoints
+func (r *RandomLB) randomSelect(eps []motan.EndPoint) (int, motan.EndPoint) {
 	epsLen := len(eps)
 	if epsLen == 0 {
-		return -1
+		return -1, nil
 	}
 	index := rand.Intn(epsLen)
 	if eps[index].IsAvailable() {
-		return index
+		return index, eps[index]
 	}
-
-	random := rand.Intn(epsLen)
-	for idx := 0; idx < epsLen; idx++ {
-		if index := (index + random + idx) % epsLen; eps[index].IsAvailable() {
-			return index
-		}
-	}
-	return -1
+	return selectOneAtRandom(eps)
 }
