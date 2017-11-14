@@ -83,3 +83,41 @@ func TestWeightedLbWraper(t *testing.T) {
 	wlbw.OnRefresh(endpoints)
 
 }
+
+func TestLBSelect(t *testing.T) {
+	endpoints := make([]motan.EndPoint, 0, 5)
+	for i := 0; i < 5; i++ {
+		if i == 2 {
+			endpoints = append(endpoints, lbTestMockEndpoint{index: i, isAvail: false})
+		} else {
+			endpoints = append(endpoints, lbTestMockEndpoint{index: i, isAvail: true})
+		}
+	}
+
+	eps := SelectArrayFromIndex(endpoints, 1)
+	if len(eps) != MaxSelectArraySize {
+		t.Errorf("SelectArrayFromIndex filter isAvailable error: %v\n", eps)
+	}
+
+	for i := 0; i < 20; i++ {
+		index, ep := SelectOneAtRandom(endpoints)
+		if !ep.IsAvailable() || index == 2 {
+			t.Errorf("SelectOneAtRandom filter isAvailable error: %v\n", eps)
+		}
+	}
+
+}
+
+type lbTestMockEndpoint struct {
+	*endpoint.MockEndpoint
+	isAvail bool
+	index   int
+}
+
+func (e lbTestMockEndpoint) IsAvailable() bool {
+	return e.isAvail
+}
+
+func (e lbTestMockEndpoint) setAvailable(isAvail bool) {
+	e.isAvail = isAvail
+}
