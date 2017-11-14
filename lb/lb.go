@@ -193,7 +193,7 @@ func basegcd(n int, m int) int {
 	return basegcd(m, n%m)
 }
 
-func selectArrayFromIndex(endpoints []motan.EndPoint, fromIndex int) []motan.EndPoint {
+func SelectArrayFromIndex(endpoints []motan.EndPoint, fromIndex int) []motan.EndPoint {
 	if len(endpoints) == 0 || fromIndex < 0 {
 		return make([]motan.EndPoint, 0)
 	}
@@ -207,10 +207,15 @@ func selectArrayFromIndex(endpoints []motan.EndPoint, fromIndex int) []motan.End
 	return epList
 }
 
-func selectOneAtRandom(endpoints []motan.EndPoint) (int, motan.EndPoint) {
+// To prevent put pressure to the next node when a node being unavailable, then need to do two random
+func SelectOneAtRandom(endpoints []motan.EndPoint) (int, motan.EndPoint) {
 	epsLen := len(endpoints)
 	if epsLen == 0 {
 		return -1, nil
+	}
+	index := rand.Intn(epsLen)
+	if endpoints[index].IsAvailable() {
+		return index, endpoints[index]
 	}
 	random := rand.Intn(epsLen)
 	for idx := 0; idx < epsLen; idx++ {

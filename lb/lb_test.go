@@ -94,15 +94,15 @@ func TestLBSelect(t *testing.T) {
 		}
 	}
 
-	eps := selectArrayFromIndex(endpoints, 1)
+	eps := SelectArrayFromIndex(endpoints, 1)
 	if len(eps) != MaxSelectArraySize {
-		t.Errorf("selectArrayFromIndex filter isAvailable error: %v\n", eps)
+		t.Errorf("SelectArrayFromIndex filter isAvailable error: %v\n", eps)
 	}
 
 	for i := 0; i < 20; i++ {
-		index, ep := selectOneAtRandom(endpoints)
+		index, ep := SelectOneAtRandom(endpoints)
 		if !ep.IsAvailable() || index == 2 {
-			t.Errorf("selectOneAtRandom filter isAvailable error: %v\n", eps)
+			t.Errorf("SelectOneAtRandom filter isAvailable error: %v\n", eps)
 		}
 	}
 

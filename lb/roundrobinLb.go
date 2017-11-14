@@ -28,7 +28,7 @@ func (r *RoundrobinLB) SelectArray(request motan.Request) []motan.EndPoint {
 	if endpoint == nil {
 		return nil
 	}
-	return selectArrayFromIndex(eps, index)
+	return SelectArrayFromIndex(eps, index)
 }
 
 func (r *RoundrobinLB) SetWeight(weight string) {
@@ -44,5 +44,5 @@ func (r *RoundrobinLB) roundrobinSelect(eps []motan.EndPoint) (int, motan.EndPoi
 	if index := nextIndex % uint32(epsLen); eps[index].IsAvailable() {
 		return int(index), eps[index]
 	}
-	return selectOneAtRandom(eps)
+	return SelectOneAtRandom(eps)
 }
