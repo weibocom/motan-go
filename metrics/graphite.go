@@ -15,6 +15,12 @@ const (
 	graphiteWriter = "graphite"
 )
 
+var (
+	Charmap map[rune]bool = map[rune]bool{
+		'.': true,
+		'/': true}
+)
+
 type graphite struct {
 	Host string
 	Port int
