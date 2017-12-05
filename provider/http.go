@@ -24,7 +24,7 @@ type HttpProvider struct {
 }
 
 func (h *HttpProvider) Initialize() {
-	h.httpClient = http.Client{Timeout: 1 * 1000000000}
+	h.httpClient = http.Client{Timeout: 1 * time.Second}
 }
 
 func (h *HttpProvider) Destroy() {
