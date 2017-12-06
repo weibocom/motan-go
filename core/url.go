@@ -39,6 +39,7 @@ const (
 	GroupKey          = "group"
 	ProviderKey       = "provider"
 	AddressKey        = "address"
+	GzipSizeKey       = "mingzSize"
 )
 
 var (

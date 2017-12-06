@@ -620,7 +620,7 @@ func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serializ
 		}
 	}
 
-	vlog.Errorf("messageHandler name %s is not found in DefaultExtentionFactory!\n", name)
+	vlog.Errorf("Serialization name %s is not found in DefaultExtentionFactory!\n", name)
 	return nil
 }
 
