@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"github.com/rcrowley/go-metrics"
+	metrics "github.com/rcrowley/go-metrics"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -46,6 +46,8 @@ func (m *meterSnapshot) RateMean() float64 { return m.rateMean }
 
 // Snapshot returns the snapshot.
 func (m *meterSnapshot) Snapshot() metrics.Meter { return m }
+
+func (m *meterSnapshot) Stop() {}
 
 type qpsMeter struct {
 	lock      sync.RWMutex
