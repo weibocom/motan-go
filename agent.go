@@ -291,6 +291,8 @@ func (a *Agent) startServerAgent() {
 				vlog.Fatalf("start server agent fail. port :%d, err: %v\n", url.Port, err)
 			}
 			a.agentPortServer[url.Port] = server
+		} else if canShareChannel(*url, *server.GetURL()) {
+			server.GetMessageHandler().AddProvider(provider)
 		}
 		err := exporter.Export(server, a.extFactory, globalContext)
 		if err != nil {
