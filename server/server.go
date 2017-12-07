@@ -51,6 +51,7 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extention
 	d.extFactory = extFactory
 	d.server = server
 	d.url = d.provider.GetURL()
+	d.url.PutParam(motan.NodeTypeKey, motan.NodeTypeService) // node type must be service in export
 	regs, ok := d.url.Parameters[motan.RegistryKey]
 	if !ok {
 		errInfo := fmt.Sprintf("registry not found! url %+v", d.url)

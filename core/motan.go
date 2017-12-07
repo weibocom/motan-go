@@ -9,23 +9,6 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-//--------------const--------------
-// exception type
-const (
-	FrameworkException = iota
-	// ServiceException : exception by service call
-	ServiceException
-	// BizException : exception by service implements
-	BizException
-)
-
-const (
-	// EndPointFilterType filter for endpoint
-	EndPointFilterType = iota
-	// ClusterFilterType filter for cluster
-	ClusterFilterType
-)
-
 //-----------interface-------------
 
 // Name is a interface can get and set name. especially for extension implements
