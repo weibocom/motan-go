@@ -12,44 +12,105 @@ import (
 	"time"
 )
 
-const (
-	HTTPKeyPrefix = "HTTP_"
-)
+type sConfT map[string]string
+type srvConfT map[string]sConfT
+type srvURLMapT map[string]srvConfT
 
-var NeededHTTPConf = []string{"", "URL"}
-
-type HttpProvider struct {
+// HTTPProvider struct
+type HTTPProvider struct {
 	url        *motan.URL
 	httpClient http.Client
+	srvURLMap  srvURLMapT
+	gctx       *motan.Context
 }
 
-func (h *HttpProvider) Initialize() {
+// Initialize http provider
+func (h *HTTPProvider) Initialize() {
 	h.httpClient = http.Client{Timeout: 1 * time.Second}
+	h.srvURLMap = make(srvURLMapT)
+	urlConf, _ := h.gctx.Config.GetSection("http-service")
+	if urlConf != nil {
+		for confID, info := range urlConf {
+			srvConf := make(srvConfT)
+			for methodArrStr, getSrvConf := range info.(map[interface{}]interface{}) {
+				methodArr := strings.Split(methodArrStr.(string), ",")
+				for _, method := range methodArr {
+					sconf := make(sConfT)
+					for k, v := range getSrvConf.(map[interface{}]interface{}) {
+						keyStr := k.(string)
+						vStr := v.(string)
+						if keyStr == "URL_FORMAT" {
+							if count := strings.Count(vStr, "%s"); count > 1 {
+								vlog.Errorf("Get err URL_FORMAT:%s", vStr)
+							}
+						}
+						sconf[keyStr] = vStr
+					}
+					srvConf[method] = sconf
+				}
+			}
+			h.srvURLMap[confID.(string)] = srvConf
+		}
+	}
 }
 
-func (h *HttpProvider) Destroy() {
+// Destroy a HTTPProvider
+func (h *HTTPProvider) Destroy() {
 }
 
-func (h *HttpProvider) SetSerialization(s motan.Serialization) {}
+// SetSerialization for set a motan.SetSerialization to HTTPProvider
+func (h *HTTPProvider) SetSerialization(s motan.Serialization) {}
 
-func (h *HttpProvider) SetProxy(proxy bool) {}
+// SetProxy for HTTPProvider
+func (h *HTTPProvider) SetProxy(proxy bool) {}
 
-func (h *HttpProvider) Call(request motan.Request) motan.Response {
+// SetContext use to set globle config to HTTPProvider
+func (h *HTTPProvider) SetContext(context *motan.Context) {
+	h.gctx = context
+}
+
+func buildReqURL(request motan.Request, h *HTTPProvider) (string, string) {
+	method := request.GetMethod()
+	httpReqURLFmt := h.url.Parameters["URL_FORMAT"]
+	httpReqMethod := ""
+	if getHTTPReqMethod, ok := h.url.Parameters["HTTP_REQUEST_METHOD"]; ok {
+		httpReqMethod = getHTTPReqMethod
+	}
+	if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][method]; ok {
+		if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
+			httpReqURLFmt = getHTTPReqURL
+		}
+		if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
+			httpReqMethod = getHTTPReqMethod
+		}
+	}
+	var httpReqURL string
+	if count := strings.Count(httpReqURLFmt, "%s"); count == 1 {
+		httpReqURL = fmt.Sprintf(httpReqURLFmt, method)
+	} else {
+		httpReqURL = httpReqURLFmt
+	}
+
+	return httpReqURL, httpReqMethod
+}
+
+// Call for do a motan call through this provider
+func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	defer func() {
 		if err := recover(); err != nil {
 			vlog.Errorln("http provider call error! ", err)
 		}
 	}()
 	t := time.Now().UnixNano()
-	httpReqMethod := h.url.Parameters["HTTP_REQUEST_METHOD"]
-	httpReqUrl := h.url.Parameters["HTTP_URL"]
+	httpReqURL, httpReqMethod := buildReqURL(request, h)
+	vlog.Infof("HTTPProvider read to call: Method:%s, URL:%s", httpReqMethod, httpReqURL)
 	queryStr := ""
 	if getQueryStr, err := buildQueryStr(request, h.url); err == nil {
 		queryStr = getQueryStr
 	}
 	var reqBody io.Reader
 	if httpReqMethod == "GET" {
-		httpReqUrl = httpReqUrl + "?" + queryStr
+		httpReqURL = httpReqURL + "?" + queryStr
 	} else if httpReqMethod == "POST" {
 		data, err := url.ParseQuery(queryStr)
 		if err != nil {
@@ -57,7 +118,7 @@ func (h *HttpProvider) Call(request motan.Request) motan.Response {
 		}
 		reqBody = strings.NewReader(data.Encode())
 	}
-	req, err := http.NewRequest(httpReqMethod, httpReqUrl, reqBody)
+	req, err := http.NewRequest(httpReqMethod, httpReqURL, reqBody)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider NewRequest err: %v", err)
 	}
@@ -78,7 +139,7 @@ func (h *HttpProvider) Call(request motan.Request) motan.Response {
 	}
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
 	resp.RequestID = request.GetRequestID()
-	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
+	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
 		//@TODO ErrTYpe
 		resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: fmt.Sprintf("%s", err), ErrType: statusCode}
@@ -94,26 +155,32 @@ func (h *HttpProvider) Call(request motan.Request) motan.Response {
 	return resp
 }
 
-func (h *HttpProvider) GetName() string {
-	return "HttpProvider"
+// GetName return this provider name
+func (h *HTTPProvider) GetName() string {
+	return "HTTPProvider"
 }
 
-func (h *HttpProvider) GetURL() *motan.URL {
+// GetURL return the url that represent for this provider
+func (h *HTTPProvider) GetURL() *motan.URL {
 	return h.url
 }
 
-func (h *HttpProvider) SetURL(url *motan.URL) {
+// SetURL to set a motan to represent for this provider
+func (h *HTTPProvider) SetURL(url *motan.URL) {
 	h.url = url
 }
 
-func (h *HttpProvider) IsAvailable() bool {
+// IsAvailable to check if this provider is sitll working well
+func (h *HTTPProvider) IsAvailable() bool {
 	//TODO Provider 是否可用
 	return true
 }
 
-func (h *HttpProvider) SetService(s interface{}) {
+// SetService to set services to this provider that wich can handle
+func (h *HTTPProvider) SetService(s interface{}) {
 }
 
-func (h *HttpProvider) GetPath() string {
+// GetPath return current url path from the provider's url
+func (h *HTTPProvider) GetPath() string {
 	return h.url.Path
 }

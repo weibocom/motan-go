@@ -279,6 +279,8 @@ func (a *Agent) startServerAgent() {
 			vlog.Errorf("Didn't have a %s provider, url:%+v\n", url.Protocol, url)
 			return
 		}
+		motan.CanSetContext(provider, globalContext)
+		motan.Initialize(provider)
 		exporter.SetProvider(provider)
 		server := a.agentPortServer[url.Port]
 		if server == nil {
