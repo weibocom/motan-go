@@ -23,7 +23,7 @@ func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 	})
 
 	extFactory.RegistExtProvider(HTTP, func(url *motan.URL) motan.Provider {
-		return &HttpProvider{url: url}
+		return &HTTPProvider{url: url}
 	})
 
 	extFactory.RegistExtProvider(Mock, func(url *motan.URL) motan.Provider {
