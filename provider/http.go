@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -37,14 +38,8 @@ func (h *HTTPProvider) Initialize() {
 				for _, method := range methodArr {
 					sconf := make(sConfT)
 					for k, v := range getSrvConf.(map[interface{}]interface{}) {
-						keyStr := k.(string)
-						vStr := v.(string)
-						if keyStr == "URL_FORMAT" {
-							if count := strings.Count(vStr, "%s"); count > 1 {
-								vlog.Errorf("Get err URL_FORMAT:%s", vStr)
-							}
-						}
-						sconf[keyStr] = vStr
+						// @TODO gracful panic when got a conf err, like more %s in URL_FORMAT
+						sconf[k.(string)] = v.(string)
 					}
 					srvConf[method] = sconf
 				}
@@ -69,7 +64,7 @@ func (h *HTTPProvider) SetContext(context *motan.Context) {
 	h.gctx = context
 }
 
-func buildReqURL(request motan.Request, h *HTTPProvider) (string, string) {
+func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error) {
 	method := request.GetMethod()
 	httpReqURLFmt := h.url.Parameters["URL_FORMAT"]
 	httpReqMethod := ""
@@ -85,13 +80,18 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string) {
 		}
 	}
 	var httpReqURL string
-	if count := strings.Count(httpReqURLFmt, "%s"); count == 1 {
+	if count := strings.Count(httpReqURLFmt, "%s"); count > 0 {
+		if count > 1 {
+			errMsg := "Get err URL_FORMAT: " + httpReqURLFmt
+			vlog.Errorln(errMsg)
+			return httpReqURL, httpReqMethod, errors.New(errMsg)
+		}
 		httpReqURL = fmt.Sprintf(httpReqURLFmt, method)
 	} else {
 		httpReqURL = httpReqURLFmt
 	}
 
-	return httpReqURL, httpReqMethod
+	return httpReqURL, httpReqMethod, nil
 }
 
 // Call for do a motan call through this provider
@@ -102,7 +102,15 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 	}()
 	t := time.Now().UnixNano()
-	httpReqURL, httpReqMethod := buildReqURL(request, h)
+	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
+	resp.RequestID = request.GetRequestID()
+	httpReqURL, httpReqMethod, err := buildReqURL(request, h)
+	if err != nil {
+		resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
+		resp.Exception = &motan.Exception{ErrCode: http.StatusServiceUnavailable,
+			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
+		return resp
+	}
 	vlog.Infof("HTTPProvider read to call: Method:%s, URL:%s", httpReqMethod, httpReqURL)
 	queryStr := ""
 	if getQueryStr, err := buildQueryStr(request, h.url); err == nil {
@@ -137,8 +145,6 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Read body err: %v", err)
 	}
-	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
-	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
 		//@TODO ErrTYpe
