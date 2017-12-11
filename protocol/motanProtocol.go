@@ -13,6 +13,7 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"reflect"
 )
 
 //message type
@@ -475,7 +476,15 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 		if serialize == nil {
 			return nil, errors.New("serialization is nil")
 		}
-		b, err := serialize.Serialize(response.GetValue())
+
+		v := response.GetValue()
+		var b []byte
+		var err error
+		if vv, ok := v.(reflect.Value); ok {
+			b, err = serialize.Serialize(vv.Interface())
+		} else {
+			b, err = serialize.Serialize(v)
+		}
 		if err != nil {
 			return nil, err
 		}
