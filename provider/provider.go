@@ -99,8 +99,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	if inNum > 0 {
 		values := make([]interface{}, 0, inNum)
 		for i := 0; i < inNum; i++ {
-			// TODO how to reflect value pointer???
-			values = append(values, reflect.New(m.Type().In(i)).Type())
+			values = append(values, reflect.New(m.Type().In(i)).Interface())
 		}
 		err := request.ProcessDeserializable(values)
 		if err != nil {
@@ -110,7 +109,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 
 	vs := make([]reflect.Value, 0, len(request.GetArguments()))
 	for _, arg := range request.GetArguments() {
-		vs = append(vs, reflect.ValueOf(arg))
+		vs = append(vs, reflect.Indirect(reflect.ValueOf(arg)))
 	}
 	ret := m.Call(vs)
 	mres := &motan.MotanResponse{RequestID: request.GetRequestID()}
