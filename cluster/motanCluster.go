@@ -135,9 +135,14 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			ep = m.extFactory.GetEndPoint(newURL)
 
 			if ep != nil {
-				motan.Initialize(ep)
 				ep.SetProxy(m.proxy)
-				ep.SetSerialization(motan.GetSerialization(newURL, m.extFactory))
+				serialization := motan.GetSerialization(newURL, m.extFactory)
+				if serialization == nil {
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtentionFactory! url:%+v\n", m.url)
+				} else {
+					ep.SetSerialization(serialization)
+				}
+				motan.Initialize(ep)
 				ep = m.addFilter(ep, m.Filters)
 			}
 		}

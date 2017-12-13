@@ -385,12 +385,15 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Body = DecodeGzipBody(request.Body)
 			request.Header.SetGzip(false)
 		}
-		if serialize == nil {
-			return nil, errors.New("serialization is nil")
+		if rc.Proxy { // put ungzip body to arguments if proxy
+			motanRequest.Arguments = []interface{}{request.Body}
+		} else { // put DeserializableValue to arguments if not proxy
+			if serialize == nil {
+				return nil, errors.New("serialization is nil")
+			}
+			dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
+			motanRequest.Arguments = []interface{}{dv}
 		}
-		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
-		motanRequest.Arguments = []interface{}{dv}
-
 	}
 
 	return motanRequest, nil
@@ -406,13 +409,19 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 		}
 	}
 
-	haeder := BuildHeader(Req, false, serialize.GetSerialNum(), request.GetRequestID(), Normal)
-	req := &Message{Header: haeder, Metadata: make(map[string]string)}
-
-	if len(request.GetArguments()) > 0 {
+	var header *Header
+	if rc.Proxy {
+		header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
+	} else {
 		if serialize == nil {
 			return nil, errors.New("serialization is nil")
 		}
+		header = BuildHeader(Req, false, serialize.GetSerialNum(), request.GetRequestID(), Normal)
+	}
+	req := &Message{Header: header, Metadata: make(map[string]string)}
+
+	if len(request.GetArguments()) > 0 {
+
 		b, err := serialize.SerializeMulti(request.GetArguments())
 		if err != nil {
 			return nil, err
@@ -470,17 +479,31 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	} else {
 		msgType = Normal
 	}
-	res.Header = BuildHeader(Res, false, serialize.GetSerialNum(), response.GetRequestID(), msgType)
-	if response.GetValue() != nil {
+
+	if rc.Proxy {
+		res.Header = BuildHeader(Res, false, rc.SerializeNum, response.GetRequestID(), msgType)
+		res.Header.SetProxy(true)
+		if response.GetValue() != nil {
+			if b, ok := response.GetValue().([]byte); ok {
+				res.Body = b
+			} else {
+				vlog.Warningf("convert response value fail in proxy type! value not []byte. v:%v\n", response.GetValue())
+			}
+		}
+	} else {
 		if serialize == nil {
 			return nil, errors.New("serialization is nil")
 		}
-		b, err := serialize.Serialize(response.GetValue())
-		if err != nil {
-			return nil, err
+		res.Header = BuildHeader(Res, false, serialize.GetSerialNum(), response.GetRequestID(), msgType)
+		if response.GetValue() != nil {
+			b, err := serialize.Serialize(response.GetValue())
+			if err != nil {
+				return nil, err
+			}
+			res.Body = b
 		}
-		res.Body = b
 	}
+
 	res.Metadata = response.GetAttachments()
 
 	if rc != nil {
@@ -493,12 +516,8 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = data
 			}
 		}
-		if rc.Proxy {
-			res.Header.SetProxy(true)
-		}
 	}
 
-	res.Header.SetSerialize(serialize.GetSerialNum())
 	return res, nil
 }
 
@@ -506,18 +525,22 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.Response, error) {
 	mres := &motan.MotanResponse{}
 	rc := mres.GetRPCContext(true)
-
+	rc.Proxy = response.Header.IsProxy()
 	mres.RequestID = response.Header.RequestID
 	if response.Header.GetStatus() == Normal && len(response.Body) > 0 {
 		if response.Header.IsGzip() {
 			response.Body = DecodeGzipBody(response.Body)
 			response.Header.SetGzip(false)
 		}
-		if serialize == nil {
-			return nil, errors.New("serialization is nil")
+		if rc.Proxy {
+			mres.Value = response.Body
+		} else {
+			if serialize == nil {
+				return nil, errors.New("serialization is nil")
+			}
+			dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
+			mres.Value = dv
 		}
-		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
-		mres.Value = dv
 	}
 	if response.Header.GetStatus() == Exception && response.Metadata[MExceptionn] != "" {
 		var exception *motan.Exception

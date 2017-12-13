@@ -12,12 +12,11 @@ import (
 )
 
 type MotanServer struct {
-	URL           *motan.URL
-	handler       motan.MessageHandler
-	listener      net.Listener
-	extFactory    motan.ExtentionFactory
-	serialization motan.Serialization
-	proxy         bool
+	URL        *motan.URL
+	handler    motan.MessageHandler
+	listener   net.Listener
+	extFactory motan.ExtentionFactory
+	proxy      bool
 }
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtentionFactory) error {
@@ -30,7 +29,6 @@ func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler,
 	m.handler = handler
 	m.extFactory = extFactory
 	m.proxy = proxy
-	m.serialization = motan.GetSerialization(m.URL, m.extFactory)
 	vlog.Infof("motan server is started. port:%d\n", m.URL.Port)
 	if block {
 		m.run()
@@ -116,11 +114,11 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		var mres motan.Response
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
-		req.GetRPCContext(true).ExtFactory = m.extFactory
 		if err != nil {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata[mpro.MPath], request.Metadata[mpro.MMethod], err.Error())
 			mres = motan.BuildExceptionResponse(request.Header.RequestID, &motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. method:" + request.Metadata[mpro.MMethod], ErrType: motan.ServiceException})
 		} else {
+			req.GetRPCContext(true).ExtFactory = m.extFactory
 			mres = m.handler.Call(req)
 			//TOOD oneway
 		}
