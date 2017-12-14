@@ -17,6 +17,8 @@ const (
 	agentSection         = "motan-agent"
 	clientSection        = "motan-client"
 	serverSection        = "motan-server"
+	// URLConfKey add confid to url params
+	URLConfKey = "conf-id"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -51,6 +53,7 @@ func (c *Context) confToURLs(section string) map[string]*URL {
 	sectionConf, _ := c.Config.GetSection(section)
 	for key, info := range sectionConf {
 		url := confToURL(info.(map[interface{}]interface{}))
+		url.Parameters[URLConfKey] = InterfaceToString(key)
 		urls[key.(string)] = url
 	}
 	return urls

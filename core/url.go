@@ -20,28 +20,6 @@ type URL struct {
 	Parameters map[string]string
 }
 
-// common parameter key
-const (
-	NodeTypeKey       = "nodeType"
-	Hakey             = "haStrategy"
-	Lbkey             = "loadbalance"
-	TimeOutKey        = "requestTimeout"
-	SessionTimeOutKey = "registrySessionTimeout"
-	ApplicationKey    = "application"
-	VersionKey        = "version"
-	FilterKey         = "filter"
-	RegistryKey       = "registry"
-	WeightKey         = "weight"
-	SerializationKey  = "serialization"
-	RefKey            = "ref"
-	ExportKey         = "export"
-	ModuleKey         = "module"
-	GroupKey          = "group"
-	ProviderKey       = "provider"
-	AddressKey        = "address"
-	GzipSizeKey       = "mingzSize"
-)
-
 var (
 	defaultSerialize = "simple"
 )
@@ -131,6 +109,13 @@ func (u *URL) GetTimeDuration(key string, unit time.Duration, defaultDuration ti
 		}
 	}
 	return defaultDuration
+}
+
+func (u *URL) PutParam(key string, value string) {
+	if u.Parameters == nil {
+		u.Parameters = make(map[string]string)
+	}
+	u.Parameters[key] = value
 }
 
 func (u *URL) ToExtInfo() string {
