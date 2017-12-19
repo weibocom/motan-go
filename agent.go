@@ -281,6 +281,7 @@ func (a *Agent) startServerAgent() {
 		}
 		motan.CanSetContext(provider, globalContext)
 		motan.Initialize(provider)
+		provider = mserver.WarperWithFilter(provider, a.extFactory)
 		exporter.SetProvider(provider)
 		server := a.agentPortServer[url.Port]
 		if server == nil {
