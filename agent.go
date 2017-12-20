@@ -40,8 +40,9 @@ type Agent struct {
 	mport      int
 	pidfile    string
 
-	agentPortService map[int]motan.Exporter
-	agentPortServer  map[int]motan.Server
+	agentPortService  map[int]motan.Exporter
+	agentPortServer   map[int]motan.Server
+	serviceRegistries map[string]motan.Registry // all registries used for services
 }
 
 func NewAgent(extfactory motan.ExtentionFactory) *Agent {
@@ -55,6 +56,7 @@ func NewAgent(extfactory motan.ExtentionFactory) *Agent {
 	agent.clustermap = make(map[string]*cluster.MotanCluster)
 	agent.agentPortService = make(map[int]motan.Exporter)
 	agent.agentPortServer = make(map[int]motan.Server)
+	agent.serviceRegistries = make(map[string]motan.Registry)
 	agent.status = http.StatusOK
 	return agent
 }
@@ -65,12 +67,12 @@ func (a *Agent) StartMotanAgent() {
 	}
 	a.initContext()
 	a.initParam()
+	a.SetSanpshotConf()
 	a.initAgentURL()
 	a.initClusters()
 	a.startServerAgent()
-	vlog.Infof("Agent URL inited %s\n", a.agentURL.GetIdentity())
-
 	go a.startMServer()
+	go a.registerAgent()
 	f, err := os.Create(a.pidfile)
 	if err != nil {
 		vlog.Errorf("create file %s fail.\n", a.pidfile)
@@ -78,10 +80,8 @@ func (a *Agent) StartMotanAgent() {
 		defer f.Close()
 		f.WriteString(strconv.Itoa(os.Getpid()))
 	}
-	go a.registerAgent()
 	vlog.Infoln("Motan agent is starting...")
 	a.startAgent()
-
 }
 
 func (a *Agent) initParam() {
@@ -122,7 +122,7 @@ func (a *Agent) initParam() {
 		pidfile = defaultPidFile
 	}
 
-	vlog.Infof("agent port:%s, manage port:%s, pidfile:%s, logdir:%s\n", port, mport, pidfile, logdir)
+	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s\n", port, mport, pidfile, logdir)
 	a.logdir = logdir
 	a.port = port
 	a.mport = mport
@@ -193,6 +193,7 @@ func (a *Agent) initAgentURL() {
 
 	agentURL.Parameters[motan.NodeTypeKey] = "agent"
 	a.agentURL = agentURL
+	vlog.Infof("Agent URL inited %s\n", a.agentURL.GetIdentity())
 }
 
 func (a *Agent) startAgent() {
@@ -278,6 +279,9 @@ func (a *Agent) startServerAgent() {
 			vlog.Errorf("Didn't have a %s provider, url:%+v\n", url.Protocol, url)
 			return
 		}
+		motan.CanSetContext(provider, globalContext)
+		motan.Initialize(provider)
+		provider = mserver.WarperWithFilter(provider, a.extFactory)
 		exporter.SetProvider(provider)
 		server := a.agentPortServer[url.Port]
 		if server == nil {
@@ -290,12 +294,20 @@ func (a *Agent) startServerAgent() {
 				vlog.Fatalf("start server agent fail. port :%d, err: %v\n", url.Port, err)
 			}
 			a.agentPortServer[url.Port] = server
+		} else if canShareChannel(*url, *server.GetURL()) {
+			server.GetMessageHandler().AddProvider(provider)
 		}
 		err := exporter.Export(server, a.extFactory, globalContext)
 		if err != nil {
 			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
 		} else {
 			vlog.Infof("service export success. url:%v\n", url)
+			for _, r := range exporter.Registrys {
+				rid := r.GetURL().GetIdentity()
+				if _, ok := a.serviceRegistries[rid]; !ok {
+					a.serviceRegistries[rid] = r
+				}
+			}
 		}
 	}
 
@@ -376,7 +388,7 @@ func (a *Agent) startMServer() {
 	http.HandleFunc("/200", a.statusSetHandler)
 	http.HandleFunc("/getConfig", a.getConfigHandler)
 	http.HandleFunc("/getReferService", a.getReferServiceHandler)
-	vlog.Infof("start listen manage port %s ...", a.mport)
+	vlog.Infof("start listen manage port %d ...", a.mport)
 	http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 }
 
@@ -429,8 +441,10 @@ func (a *Agent) getReferServiceHandler(w http.ResponseWriter, r *http.Request) {
 func (a *Agent) statusSetHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.RequestURI {
 	case "/200":
+		availableService(a.serviceRegistries)
 		a.status = http.StatusOK
 	case "/503":
+		unavailableService(a.serviceRegistries)
 		a.status = http.StatusServiceUnavailable
 	}
 	w.Write([]byte("ok."))

@@ -23,7 +23,8 @@ var (
 	defaultKeepaliveInterval   = 10 * time.Second
 	defaultErrorCountThreshold = 10
 	ErrChannelShutdown         = fmt.Errorf("The channel has been shutdown")
-	ErrRequestTimeout          = fmt.Errorf("Timeout err: request timeout")
+	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
+	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
 
 	idOffset            uint64 // id generator offset
 	defaultAsyncResonse = &motan.MotanResponse{Attachment: make(map[string]string, 0), RPCContext: &motan.RPCContext{AsyncCall: true}}
@@ -103,6 +104,8 @@ func (m *MotanEndpoint) Destroy() {
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	rc := request.GetRPCContext(true)
 	rc.Proxy = m.proxy
+	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
+
 	if m.channels == nil {
 		vlog.Errorln("motanEndpoint error: channels is null")
 		m.recordErrAndKeepalive()
@@ -299,7 +302,7 @@ func (s *Stream) Send() error {
 	case s.channel.sendCh <- ready:
 		return nil
 	case <-timer.C:
-		return ErrRequestTimeout
+		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
 	}
@@ -323,7 +326,7 @@ func (s *Stream) Recv() (*mpro.Message, error) {
 		msg.Header.RequestID = s.originRequestID
 		return msg, nil
 	case <-timer.C:
-		return nil, ErrRequestTimeout
+		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
 		return nil, ErrChannelShutdown
 	}
@@ -394,7 +397,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 func (s *Stream) Close() {
 	if !s.isClose {
 		s.channel.streamLock.Lock()
-		delete(s.channel.streams, s.sendMsg.Header.RequestID)
+		delete(s.channel.streams, s.localRequestID)
 		s.channel.streamLock.Unlock()
 		s.isClose = true
 	}
@@ -440,6 +443,7 @@ func (c *Channel) recvLoop() error {
 		if err != nil {
 			return err
 		}
+		//TODO async
 		var handleErr error
 		if res.Header.IsHeartbeat() {
 			handleErr = c.handleHeartbeat(res)
@@ -457,6 +461,7 @@ func (c *Channel) send() {
 		select {
 		case ready := <-c.sendCh:
 			if ready.data != nil {
+				// TODO need async?
 				sent := 0
 				for sent < len(ready.data) {
 					n, err := c.conn.Write(ready.data[sent:])
@@ -626,7 +631,7 @@ func buildChannel(conn net.Conn, config *Config) *Channel {
 		conn:       conn,
 		config:     config,
 		bufRead:    bufio.NewReader(conn),
-		sendCh:     make(chan sendReady, 64),
+		sendCh:     make(chan sendReady, 256),
 		streams:    make(map[uint64]*Stream, 64),
 		heartbeats: make(map[uint64]*Stream),
 		shutdownCh: make(chan struct{}),
