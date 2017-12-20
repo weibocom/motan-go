@@ -397,7 +397,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 func (s *Stream) Close() {
 	if !s.isClose {
 		s.channel.streamLock.Lock()
-		delete(s.channel.streams, s.sendMsg.Header.RequestID)
+		delete(s.channel.streams, s.localRequestID)
 		s.channel.streamLock.Unlock()
 		s.isClose = true
 	}
