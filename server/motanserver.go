@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"bufio"
 	"errors"
 	"net"
@@ -116,6 +117,11 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		var mres motan.Response
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
+
+		var ip string = getRemoteIp(conn.RemoteAddr().String())
+		var headers map[string]string = req.GetAttachments()
+		headers["host"] = ip
+
 		req.GetRPCContext(true).ExtFactory = m.extFactory
 		if err != nil {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata[mpro.MPath], request.Metadata[mpro.MMethod], err.Error())
@@ -137,4 +143,16 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 	}
 	resbuf := res.Encode()
 	conn.Write(resbuf.Bytes())
+}
+
+func getRemoteIp(adress string) string {
+	var ip string
+	var index int = strings.IndexAny(adress,":")
+	if( index > 0){
+		s:= adress
+		ip = string(s[:index])
+	}else{
+		ip = adress;
+	}
+	return ip
 }
