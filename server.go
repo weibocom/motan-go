@@ -12,8 +12,10 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mserver "github.com/weibocom/motan-go/server"
+	"runtime/debug"
 )
 
+// MSContext is Motan Server Context
 type MSContext struct {
 	confFile     string
 	context      *motan.Context
@@ -21,6 +23,7 @@ type MSContext struct {
 	portService  map[int]motan.Exporter
 	portServer   map[int]motan.Server
 	serviceImpls map[string]interface{}
+	registries   map[string]motan.Registry // all registries used for services
 
 	csync  sync.Mutex
 	inited bool
@@ -84,7 +87,8 @@ func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
 func (m *MSContext) export(url *motan.URL) {
 	defer func() {
 		if err := recover(); err != nil {
-			vlog.Errorf("MSContext export fail! url: %v, err:%v\n", url, err)
+			debug.PrintStack()
+			vlog.Errorf("MSContext export fail! url: %v, err:%+v\n", url, err)
 		}
 	}()
 	service := m.serviceImpls[url.Parameters[motan.RefKey]]
@@ -142,6 +146,12 @@ func (m *MSContext) export(url *motan.URL) {
 			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
 		} else {
 			vlog.Infof("service export success. url:%v\n", url)
+			for _, r := range exporter.Registrys {
+				rid := r.GetURL().GetIdentity()
+				if _, ok := m.registries[rid]; !ok {
+					m.registries[rid] = r
+				}
+			}
 		}
 	}
 }
@@ -156,6 +166,7 @@ func (m *MSContext) Initialize() {
 		m.portService = make(map[int]motan.Exporter, 32)
 		m.portServer = make(map[int]motan.Server, 32)
 		m.serviceImpls = make(map[string]interface{}, 32)
+		m.registries = make(map[string]motan.Registry)
 		m.inited = true
 	}
 }
@@ -193,6 +204,16 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 	return nil
 }
 
+// ServicesAvailable will enable all service registed in registries
+func (m *MSContext) ServicesAvailable() {
+	availableService(m.registries)
+}
+
+// ServicesUnavailable will enable all service registed in registries
+func (m *MSContext) ServicesUnavailable() {
+	unavailableService(m.registries)
+}
+
 func canShareChannel(u1 motan.URL, u2 motan.URL) bool {
 	if u1.Protocol != u2.Protocol {
 		return false
@@ -201,4 +222,30 @@ func canShareChannel(u1 motan.URL, u2 motan.URL) bool {
 		return false
 	}
 	return true
+}
+
+func availableService(registries map[string]motan.Registry) {
+	defer func() {
+		if err := recover(); err != nil {
+			vlog.Errorf("availableService got a panic!err:%+v\n", err)
+		}
+	}()
+	if registries != nil {
+		for _, r := range registries {
+			r.Available(nil)
+		}
+	}
+}
+
+func unavailableService(registries map[string]motan.Registry) {
+	defer func() {
+		if err := recover(); err != nil {
+			vlog.Errorf("unavailableService got a panic!err:%+v\n", err)
+		}
+	}()
+	if registries != nil {
+		for _, r := range registries {
+			r.Unavailable(nil)
+		}
+	}
 }

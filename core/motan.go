@@ -9,23 +9,6 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-//--------------const--------------
-// exception type
-const (
-	FrameworkException = iota
-	// ServiceException : exception by service call
-	ServiceException
-	// BizException : exception by service implements
-	BizException
-)
-
-const (
-	// EndPointFilterType filter for endpoint
-	EndPointFilterType = iota
-	// ClusterFilterType filter for cluster
-	ClusterFilterType
-)
-
 //-----------interface-------------
 
 // Name is a interface can get and set name. especially for extension implements
@@ -620,7 +603,7 @@ func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serializ
 		}
 	}
 
-	vlog.Errorf("messageHandler name %s is not found in DefaultExtentionFactory!\n", name)
+	vlog.Errorf("Serialization name %s is not found in DefaultExtentionFactory!\n", name)
 	return nil
 }
 

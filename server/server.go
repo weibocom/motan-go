@@ -51,6 +51,7 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extention
 	d.extFactory = extFactory
 	d.server = server
 	d.url = d.provider.GetURL()
+	d.url.PutParam(motan.NodeTypeKey, motan.NodeTypeService) // node type must be service in export
 	regs, ok := d.url.Parameters[motan.RegistryKey]
 	if !ok {
 		errInfo := fmt.Sprintf("registry not found! url %+v", d.url)
@@ -129,7 +130,9 @@ func (d *DefaultMessageHandler) GetProvider(serviceName string) motan.Provider {
 func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response) {
 	p := d.providers[request.GetServiceName()]
 	if p != nil {
-		return p.Call(request)
+		res = p.Call(request)
+		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
+		return res
 	}
 	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})

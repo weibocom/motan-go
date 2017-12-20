@@ -3,8 +3,6 @@ package provider
 // CGI RFC: https://datatracker.ietf.org/doc/rfc3875/?include_text=1
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"reflect"
@@ -210,52 +208,4 @@ func (c *CgiProvider) SetService(s interface{}) {
 
 func (c *CgiProvider) GetPath() string {
 	return c.url.Path
-}
-
-func MarshalX(v interface{}) ([]byte, error) {
-	var (
-		err error
-		rs  []byte
-	)
-	rsTmp := new(bytes.Buffer)
-	switch v.(type) {
-	case string:
-		rsTmp = bytes.NewBuffer([]byte{})
-		rawV := v.(string)
-		binary.Write(rsTmp, binary.BigEndian, byte(1))
-		binary.Write(rsTmp, binary.BigEndian, int32(len(rawV)))
-		binary.Write(rsTmp, binary.BigEndian, []byte(rawV))
-		rs = rsTmp.Bytes()
-	case map[string]string:
-		// @TODO
-		binary.Write(rsTmp, binary.BigEndian, byte(2))
-	case nil:
-		binary.Write(rsTmp, binary.BigEndian, byte(0))
-	}
-	return rs, err
-}
-
-type simpleCodec struct{}
-
-func (simpleCodec) Marshal(v interface{}) ([]byte, error) {
-	var (
-		err error
-		rs  []byte
-	)
-	switch v.(type) {
-	case string:
-		rsTmp := new(bytes.Buffer)
-		rawV := v.(string)
-		binary.Write(rsTmp, binary.BigEndian, 1)
-		binary.Write(rsTmp, binary.BigEndian, len(rawV))
-		binary.Write(rsTmp, binary.BigEndian, rawV)
-		rs = rsTmp.Bytes()
-	case map[string]string:
-	case nil:
-	}
-	return rs, err
-}
-
-func (simpleCodec) String() string {
-	return "simple"
 }
