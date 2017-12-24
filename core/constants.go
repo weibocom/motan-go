@@ -38,6 +38,7 @@ const (
 	ProviderKey       = "provider"
 	AddressKey        = "address"
 	GzipSizeKey       = "mingzSize"
+	HostKey           = "host"
 )
 
 // nodeType

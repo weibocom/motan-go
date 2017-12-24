@@ -134,7 +134,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		req.Header.Add(k, v)
 	}
-	var ip string = request.GetAttachment("host")
+	ip := request.GetAttachment(motan.HostKey)
 	req.Header.Add("x-forwarded-for",ip)
 	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
