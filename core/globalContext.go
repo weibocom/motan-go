@@ -44,7 +44,7 @@ var (
 	Port    = flag.Int("port", 0, "agent listen port")
 	Mport   = flag.Int("mport", 0, "agent manage port")
 	Pidfile = flag.String("pidfile", "", "agent manage port")
-	CfgFile = flag.String("c", "/Users/zengnjin/go/src/git.intra.weibo.com/openapi_rd/weibo-motan-go/main/motan.yaml", "motan run conf")
+	CfgFile = flag.String("c", "./motan.yaml", "motan run conf")
 	LocalIP = flag.String("localIP", "", "local ip for motan register")
 )
 
