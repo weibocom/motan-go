@@ -25,13 +25,23 @@ func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
 
 // Filter : Filter
 func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
+	role := "server"
+	var ip string
+	switch caller.(type) {
+	case motan.Provider:
+		role = "server-agent"
+		ip =request.GetAttachment(motan.HostKey)
+	case motan.EndPoint:
+		role = "client-agent"
+		ip =caller.GetURL().Host
+	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
 	success := true
 	if response.GetException() != nil {
 		success = false
 	}
-	vlog.Infof("access log--server:%s:%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", caller.GetURL().Host, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
+	vlog.Infof("access log--%s:server:%s:%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
 		request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), response.GetProcessTime(), success, response.GetException())
 	return response
 }
