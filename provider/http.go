@@ -134,13 +134,15 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		req.Header.Add(k, v)
 	}
+	var ip string
 	remoteIP,exist := req.GetAttachments()[motan.RemoteIPKey]
 	if(exist){
-		req.Header.Add("x-forwarded-for",remoteIP)
+		ip = remoteIP
 	}else{
-		ip := getRemoteIP(conn.RemoteAddr().String())
-		req.Header.Add("x-forwarded-for",ip)
+		ip = request.GetAttachment(motan.HostKey)
 	}
+	req.Header.Add("x-forwarded-for",ip)
+
 	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Do HTTP Call err: %v", err)
