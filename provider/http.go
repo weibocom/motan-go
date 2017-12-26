@@ -135,7 +135,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		req.Header.Add(k, v)
 	}
 	var ip string
-	remoteIP,exist := req.GetAttachments()[motan.RemoteIPKey]
+	remoteIP,exist := request.GetAttachments()[motan.RemoteIPKey]
 	if(exist){
 		ip = remoteIP
 	}else{
