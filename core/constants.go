@@ -39,6 +39,7 @@ const (
 	AddressKey        = "address"
 	GzipSizeKey       = "mingzSize"
 	HostKey           = "host"
+	RemoteIPKey       = "remoteIP"
 )
 
 // nodeType
