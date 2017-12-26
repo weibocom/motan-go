@@ -41,7 +41,7 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	if response.GetException() != nil {
 		success = false
 	}
-	vlog.Infof("access log--%s:%s,%s,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
+	vlog.Infof("access log--%s:%s,%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
 		request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), response.GetProcessTime(), success, response.GetException())
 	return response
 }
