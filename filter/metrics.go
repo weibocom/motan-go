@@ -53,6 +53,14 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 }
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
+	role := "server"
+	switch caller.(type){
+	case motan.Provider:
+		role = "server-agent"
+	case motan.EndPoint:
+		role = "client-agent"
+	}
+
 	start := time.Now()
 
 	response := m.GetNext().Filter(caller, request)
@@ -62,8 +70,7 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 			return '_'
 		}
 		return r
-	}, fmt.Sprintf("%s:%s:%s:%s", request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
-
+	}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role,request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count
 
