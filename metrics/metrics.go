@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"fmt"
 
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/log"
