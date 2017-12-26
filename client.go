@@ -66,6 +66,7 @@ func (m *Client) Go(method string, args interface{}, reply interface{}, done cha
 
 func (m *Client) buildRequest(method string, args interface{}) motan.Request {
 	req := &motan.MotanRequest{Method: method, ServiceName: m.url.Path, Arguments: []interface{}{args}, Attachment: make(map[string]string, 16)}
+	fmt.Println(args)
 	version := m.url.GetParam(motan.VersionKey, "")
 	if version != "" {
 		req.Attachment[mpro.MVersion] = version
