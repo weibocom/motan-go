@@ -64,15 +64,16 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	start := time.Now()
 
 	response := m.GetNext().Filter(caller, request)
+	var key string
 	if(role=="server-agent"){
-		key := strings.Map(func(r rune) rune {
+		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'
 			}
 			return r
 		}, fmt.Sprintf("motan-%s:%s:%s:%s", role,request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
 	}else{
-		key := strings.Map(func(r rune) rune {
+		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'
 			}
