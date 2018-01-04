@@ -262,9 +262,11 @@ func Decode(reqbuf *bytes.Buffer) *Message {
 
 	}
 	bodysize := readInt32(reqbuf)
-	body := make([]byte, bodysize)
+	var body []byte
 	if bodysize > 0 {
 		body = reqbuf.Next(int(bodysize))
+	} else {
+		body = make([]byte, bodysize)
 	}
 	msg := &Message{header, metamap, body, Req}
 	return msg
@@ -294,9 +296,11 @@ func DecodeFromReader(buf *bufio.Reader) (msg *Message, err error) {
 
 	}
 	bodysize := readInt32(buf)
-	body := make([]byte, bodysize)
+	var body []byte
 	if bodysize > 0 {
 		body, err = readBytes(buf, int(bodysize))
+	} else {
+		body = make([]byte, 0)
 	}
 	if err != nil {
 		return nil, err
