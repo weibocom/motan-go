@@ -266,7 +266,7 @@ func Decode(reqbuf *bytes.Buffer) *Message {
 	if bodysize > 0 {
 		body = reqbuf.Next(int(bodysize))
 	} else {
-		body = make([]byte, bodysize)
+		body = make([]byte, 0)
 	}
 	msg := &Message{header, metamap, body, Req}
 	return msg
