@@ -30,4 +30,3 @@ func (r *RandomLB) SelectArray(request motan.Request) []motan.EndPoint {
 func (r *RandomLB) SetWeight(weight string) {
 	r.weight = weight
 }
-

@@ -54,7 +54,7 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	role := "server"
-	switch caller.(type){
+	switch caller.(type) {
 	case motan.Provider:
 		role = "server-agent"
 	case motan.EndPoint:
@@ -65,20 +65,20 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 
 	response := m.GetNext().Filter(caller, request)
 	var key string
-	if(role=="server-agent"){
+	if role == "server-agent" {
 		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'
 			}
 			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s", role,request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
-	}else{
+		}, fmt.Sprintf("motan-%s:%s:%s:%s", role, request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
+	} else {
 		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'
 			}
 			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role,request.GetAttachments()["M_s"],request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
+		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
 	}
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count

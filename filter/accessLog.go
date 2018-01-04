@@ -30,10 +30,10 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	switch caller.(type) {
 	case motan.Provider:
 		role = "server-agent"
-		ip =request.GetAttachment(motan.HostKey)
+		ip = request.GetAttachment(motan.HostKey)
 	case motan.EndPoint:
 		role = "client-agent"
-		ip =caller.GetURL().Host
+		ip = caller.GetURL().Host
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)

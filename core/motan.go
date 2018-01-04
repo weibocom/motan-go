@@ -293,6 +293,7 @@ type RPCContext struct {
 	Oneway          bool
 	Proxy           bool
 	GzipSize        int
+	SerializeNum    int
 
 	// for call
 	AsyncCall bool
@@ -602,8 +603,6 @@ func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serializ
 			return newSerialization()
 		}
 	}
-
-	vlog.Errorf("Serialization name %s is not found in DefaultExtentionFactory!\n", name)
 	return nil
 }
 

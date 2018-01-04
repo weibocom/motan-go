@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"git.intra.weibo.com/openapi_rd/motan-go/metrics"
 	"github.com/rcrowley/go-metrics"
 	"github.com/weibocom/motan-go/log"
 )
@@ -16,7 +17,7 @@ const (
 )
 
 var (
-	Charmap map[rune]bool = map[rune]bool{
+	Charmap = map[rune]bool{
 		'.': true,
 		'/': true}
 )

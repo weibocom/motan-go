@@ -135,13 +135,13 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		req.Header.Add(k, v)
 	}
 	var ip string
-	remoteIP,exist := request.GetAttachments()[motan.RemoteIPKey]
-	if(exist){
+	remoteIP, exist := request.GetAttachments()[motan.RemoteIPKey]
+	if exist {
 		ip = remoteIP
-	}else{
+	} else {
 		ip = request.GetAttachment(motan.HostKey)
 	}
-	req.Header.Add("x-forwarded-for",ip)
+	req.Header.Add("x-forwarded-for", ip)
 
 	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
