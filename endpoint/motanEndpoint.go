@@ -67,7 +67,7 @@ func (m *MotanEndpoint) Initialize() {
 	}
 	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
 	if err != nil {
-		vlog.Errorln("Channel pool init failed. ", err)
+		vlog.Errorf("Channel pool init failed. url:%s, err:%s\n", m.url.GetAddressStr(), err.Error())
 		// retry connect
 		go func() {
 			ticker := time.NewTicker(60 * time.Second)
@@ -79,6 +79,7 @@ func (m *MotanEndpoint) Initialize() {
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
+						vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
 						return
 					}
 				case <-m.destroyCh:
@@ -89,6 +90,7 @@ func (m *MotanEndpoint) Initialize() {
 	} else {
 		m.channels = channels
 		m.setAvailable(true)
+		vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
 	}
 }
 
@@ -618,7 +620,7 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *Config, serializat
 		conn, err := factory()
 		if err != nil {
 			channelPool.Close()
-			return nil, errors.New("channel pool init failed")
+			return nil, err
 		}
 		channelPool.channels <- buildChannel(conn, config, serialization)
 	}
