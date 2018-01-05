@@ -389,15 +389,11 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Body = DecodeGzipBody(request.Body)
 			request.Header.SetGzip(false)
 		}
-		if rc.Proxy { // put ungzip body to arguments if proxy
-			motanRequest.Arguments = []interface{}{request.Body}
-		} else { // put DeserializableValue to arguments if not proxy
-			if serialize == nil {
-				return nil, errors.New("serialization is nil")
-			}
-			dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
-			motanRequest.Arguments = []interface{}{dv}
+		if !rc.Proxy && serialize == nil {
+			return nil, errors.New("serialization is nil")
 		}
+		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
+		motanRequest.Arguments = []interface{}{dv}
 	}
 
 	return motanRequest, nil
