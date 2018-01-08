@@ -120,7 +120,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	case <-timer.C:
 	}
 
-	return resp
+	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "timeout"))
 
 }
 
@@ -134,7 +134,7 @@ func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint
 	if respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException {
 		return respnose
 	}
-	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", br.url.GetIdentity(), respnose.GetException())
+	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", endpoint.GetURL().GetIdentity(), respnose.GetException())
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
 		"call backup request fail.Exception:%s", respnose.GetException().ErrMsg), ErrType: motan.ServiceException})
 }

@@ -207,7 +207,7 @@ func SelectArrayFromIndex(endpoints []motan.EndPoint, fromIndex int) []motan.End
 	return epList
 }
 
-// To prevent put pressure to the next node when a node being unavailable, then need to do two random
+// SelectOneAtRandom to prevent put pressure to the next node when a node being unavailable, then need to do two random
 func SelectOneAtRandom(endpoints []motan.EndPoint) (int, motan.EndPoint) {
 	epsLen := len(endpoints)
 	if epsLen == 0 {
