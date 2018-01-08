@@ -65,9 +65,9 @@ func (m *MotanEndpoint) Initialize() {
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.Host+":"+strconv.Itoa((int)(m.url.Port)), connectTimeout)
 	}
-	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil)
+	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
 	if err != nil {
-		vlog.Errorln("Channel pool init failed. ", err)
+		vlog.Errorf("Channel pool init failed. url:%s, err:%s\n", m.url.GetAddressStr(), err.Error())
 		// retry connect
 		go func() {
 			ticker := time.NewTicker(60 * time.Second)
@@ -75,10 +75,11 @@ func (m *MotanEndpoint) Initialize() {
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil)
+					channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
+						vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
 						return
 					}
 				case <-m.destroyCh:
@@ -89,6 +90,7 @@ func (m *MotanEndpoint) Initialize() {
 	} else {
 		m.channels = channels
 		m.setAvailable(true)
+		vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
 	}
 }
 
@@ -250,7 +252,8 @@ func VerifyConfig(config *Config) error {
 
 type Channel struct {
 	// config
-	config *Config
+	config        *Config
+	serialization motan.Serialization
 
 	// connection
 	conn    io.ReadWriteCloser
@@ -339,8 +342,7 @@ func (s *Stream) notify(msg *mpro.Message) {
 	if s.rc != nil && s.rc.AsyncCall {
 		msg.Header.SetProxy(s.rc.Proxy)
 		result := s.rc.Result
-		serialization := s.rc.ExtFactory.GetSerialization("", msg.Header.GetSerialize())
-		response, err := mpro.ConvertToResponse(msg, serialization)
+		response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
 		if err != nil {
 			vlog.Errorf("convert to response fail. requestid:%d, err:%s\n", msg.Header.RequestID, err.Error())
 			result.Error = err
@@ -396,9 +398,15 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 
 func (s *Stream) Close() {
 	if !s.isClose {
-		s.channel.streamLock.Lock()
-		delete(s.channel.streams, s.localRequestID)
-		s.channel.streamLock.Unlock()
+		if s.sendMsg.Header.IsHeartbeat() {
+			s.channel.heartbeatLock.Lock()
+			delete(s.channel.heartbeats, s.localRequestID)
+			s.channel.heartbeatLock.Unlock()
+		} else {
+			s.channel.streamLock.Lock()
+			delete(s.channel.streams, s.localRequestID)
+			s.channel.streamLock.Unlock()
+		}
 		s.isClose = true
 	}
 }
@@ -530,10 +538,11 @@ func (c *Channel) Close() error {
 type ConnFactory func() (net.Conn, error)
 
 type ChannelPool struct {
-	channels     chan *Channel
-	channelsLock sync.Mutex
-	factory      ConnFactory
-	config       *Config
+	channels      chan *Channel
+	channelsLock  sync.Mutex
+	factory       ConnFactory
+	config        *Config
+	serialization motan.Serialization
 }
 
 func (c *ChannelPool) getChannels() chan *Channel {
@@ -554,7 +563,7 @@ func (c *ChannelPool) Get() (*Channel, error) {
 		if err != nil {
 			vlog.Errorln("create channel failed.", err)
 		}
-		channel = buildChannel(conn, c.config)
+		channel = buildChannel(conn, c.config, c.serialization)
 	}
 	if err := retChannelPool(channels, channel); err != nil && channel != nil {
 		channel.closeOnErr(err)
@@ -597,27 +606,28 @@ func (c *ChannelPool) Close() error {
 	return nil
 }
 
-func NewChannelPool(poolCap int, factory ConnFactory, config *Config) (*ChannelPool, error) {
+func NewChannelPool(poolCap int, factory ConnFactory, config *Config, serialization motan.Serialization) (*ChannelPool, error) {
 	if poolCap <= 0 {
 		return nil, errors.New("invalid capacity settings")
 	}
 	channelPool := &ChannelPool{
-		channels: make(chan *Channel, poolCap),
-		factory:  factory,
-		config:   config,
+		channels:      make(chan *Channel, poolCap),
+		factory:       factory,
+		config:        config,
+		serialization: serialization,
 	}
 	for i := 0; i < poolCap; i++ {
 		conn, err := factory()
 		if err != nil {
 			channelPool.Close()
-			return nil, errors.New("channel pool init failed")
+			return nil, err
 		}
-		channelPool.channels <- buildChannel(conn, config)
+		channelPool.channels <- buildChannel(conn, config, serialization)
 	}
 	return channelPool, nil
 }
 
-func buildChannel(conn net.Conn, config *Config) *Channel {
+func buildChannel(conn net.Conn, config *Config, serialization motan.Serialization) *Channel {
 	if conn == nil {
 		return nil
 	}
@@ -628,13 +638,14 @@ func buildChannel(conn net.Conn, config *Config) *Channel {
 		return nil
 	}
 	channel := &Channel{
-		conn:       conn,
-		config:     config,
-		bufRead:    bufio.NewReader(conn),
-		sendCh:     make(chan sendReady, 256),
-		streams:    make(map[uint64]*Stream, 64),
-		heartbeats: make(map[uint64]*Stream),
-		shutdownCh: make(chan struct{}),
+		conn:          conn,
+		config:        config,
+		bufRead:       bufio.NewReader(conn),
+		sendCh:        make(chan sendReady, 256),
+		streams:       make(map[uint64]*Stream, 64),
+		heartbeats:    make(map[uint64]*Stream),
+		shutdownCh:    make(chan struct{}),
+		serialization: serialization,
 	}
 
 	go channel.recv()

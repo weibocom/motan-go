@@ -106,15 +106,14 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	resp.RequestID = request.GetRequestID()
 	httpReqURL, httpReqMethod, err := buildReqURL(request, h)
 	if err != nil {
-		resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
-		resp.Exception = &motan.Exception{ErrCode: http.StatusServiceUnavailable,
-			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
+		fillException(resp, t, err)
 		return resp
 	}
 	//vlog.Infof("HTTPProvider read to call: Method:%s, URL:%s", httpReqMethod, httpReqURL)
-	queryStr := ""
-	if getQueryStr, err := buildQueryStr(request, h.url); err == nil {
-		queryStr = getQueryStr
+	queryStr, err := buildQueryStr(request, h.url)
+	if err != nil {
+		fillException(resp, t, err)
+		return resp
 	}
 	var reqBody io.Reader
 	if httpReqMethod == "GET" {
@@ -135,13 +134,13 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		req.Header.Add(k, v)
 	}
 	var ip string
-	remoteIP,exist := request.GetAttachments()[motan.RemoteIPKey]
-	if(exist){
+	remoteIP, exist := request.GetAttachments()[motan.RemoteIPKey]
+	if exist {
 		ip = remoteIP
-	}else{
+	} else {
 		ip = request.GetAttachment(motan.HostKey)
 	}
-	req.Header.Add("x-forwarded-for",ip)
+	req.Header.Add("x-forwarded-for", ip)
 
 	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
@@ -198,4 +197,10 @@ func (h *HTTPProvider) SetService(s interface{}) {
 // GetPath return current url path from the provider's url
 func (h *HTTPProvider) GetPath() string {
 	return h.url.Path
+}
+
+func fillException(resp *motan.MotanResponse, start int64, err error) {
+	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
+	resp.Exception = &motan.Exception{ErrCode: http.StatusServiceUnavailable,
+		ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 }

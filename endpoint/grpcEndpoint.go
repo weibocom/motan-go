@@ -17,6 +17,10 @@ type GrpcEndPoint struct {
 	proxy    bool
 }
 
+const (
+	GRPCSerialNum = 1
+)
+
 func (g *GrpcEndPoint) Initialize() {
 	grpcconn, err := grpc.Dial((g.url.Host + ":" + strconv.Itoa((int)(g.url.Port))), grpc.WithInsecure(), grpc.WithCodec(&agentCodec{}))
 	if err != nil {
@@ -51,6 +55,10 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
 	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
+	rc := resp.GetRPCContext(true)
+	rc.Serialized = true
+	rc.SerializeNum = GRPCSerialNum
+
 	// @TODO add receiving header and trailers into attachment
 	if err != nil {
 		errcode := int(grpc.Code(err))

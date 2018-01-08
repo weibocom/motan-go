@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	Charmap map[rune]bool = map[rune]bool{
+	Charmap = map[rune]bool{
 		'.': true,
 		'/': true}
 )

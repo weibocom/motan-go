@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"errors"
 	"github.com/weibocom/motan-go/log"
 )
 
@@ -293,6 +294,8 @@ type RPCContext struct {
 	Oneway          bool
 	Proxy           bool
 	GzipSize        int
+	SerializeNum    int
+	Serialized      bool
 
 	// for call
 	AsyncCall bool
@@ -316,11 +319,17 @@ type DeserializableValue struct {
 
 // Deserialize : Deserialize
 func (d *DeserializableValue) Deserialize(v interface{}) (interface{}, error) {
+	if d.Serialization == nil {
+		return nil, errors.New("deserialize fail in DeserializableValue, Serialization is nil")
+	}
 	return d.Serialization.DeSerialize(d.Body, v)
 }
 
 // DeserializeMulti : DeserializeMulti
 func (d *DeserializableValue) DeserializeMulti(v []interface{}) ([]interface{}, error) {
+	if d.Serialization == nil {
+		return nil, errors.New("deserialize fail in DeserializableValue, Serialization is nil")
+	}
 	return d.Serialization.DeSerializeMulti(d.Body, v)
 }
 
@@ -602,8 +611,6 @@ func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serializ
 			return newSerialization()
 		}
 	}
-
-	vlog.Errorf("Serialization name %s is not found in DefaultExtentionFactory!\n", name)
 	return nil
 }
 
