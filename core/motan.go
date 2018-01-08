@@ -295,6 +295,7 @@ type RPCContext struct {
 	Proxy           bool
 	GzipSize        int
 	SerializeNum    int
+	Serialized      bool
 
 	// for call
 	AsyncCall bool
