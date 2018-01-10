@@ -27,6 +27,15 @@ type HTTPProvider struct {
 	mixVars    []string
 }
 
+const (
+	// DefaultMotanMethodConfKey for default motan method conf, when make a http call without a specific motan method
+	DefaultMotanMethodConfKey = "http_default_motan_method"
+	// DefaultMotanHTTPMethod set a default http method
+	DefaultMotanHTTPMethod = "GET"
+	// MotanRequestHTTPMethodKey http method key in a motan request attachment
+	MotanRequestHTTPMethodKey = "HTTP_Method"
+)
+
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
 	h.httpClient = http.Client{Timeout: 1 * time.Second}
@@ -72,14 +81,30 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 	httpReqMethod := ""
 	if getHTTPReqMethod, ok := h.url.Parameters["HTTP_REQUEST_METHOD"]; ok {
 		httpReqMethod = getHTTPReqMethod
+	} else {
+		httpReqMethod = DefaultMotanHTTPMethod
 	}
-	if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][method]; ok {
-		if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
-			httpReqURLFmt = getHTTPReqURL
+	// when set a extconf check the specific method conf first,then use the DefaultMotanMethodConfKey conf
+	if _, haveExtConf := h.srvURLMap[h.url.Parameters[motan.URLConfKey]]; haveExtConf {
+		if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][method]; ok {
+			if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
+				httpReqURLFmt = getHTTPReqURL
+			}
+			if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
+				httpReqMethod = getHTTPReqMethod
+			}
+		} else if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][DefaultMotanMethodConfKey]; ok {
+			if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
+				httpReqURLFmt = getHTTPReqURL
+			}
+			if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
+				httpReqMethod = getHTTPReqMethod
+			}
 		}
-		if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
-			httpReqMethod = getHTTPReqMethod
-		}
+	}
+	// when motan request have a http method specific in attachment use this method
+	if motanRequestHTTPMethod, ok := request.GetAttachments()[MotanRequestHTTPMethodKey]; ok {
+		httpReqMethod = motanRequestHTTPMethod
 	}
 	var httpReqURL string
 	if count := strings.Count(httpReqURLFmt, "%s"); count > 0 {
