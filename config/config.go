@@ -9,30 +9,36 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/weibocom/motan-go/log"
 	"gopkg.in/yaml.v2"
+	"regexp"
 )
 
 type Config struct {
-	conf *map[string]interface{}
+	conf         *map[string]interface{}
+	placeHolders map[string]interface{}
+	rex          *regexp.Regexp
 }
 
 // NewConfigFromFile parse config from file.
 func NewConfigFromFile(path string) (*Config, error) {
-	vlog.Infof("start parse config path:%s \n", path)
+	fmt.Printf("start parse config path:%s \n", path)
 	filename, err := filepath.Abs(path)
 	if err != nil {
-		vlog.Errorf("can not find the file:%s\n", filename)
+		fmt.Printf("can not find the file:%s\n", filename)
+		return nil, errors.New("can not find the file :" + filename)
 	}
 	data, err := ioutil.ReadFile(filename)
-	m := make(map[string]interface{})
-
 	if err != nil {
-		vlog.Errorf("config init failed! file: %s, error: %s\n", filename, err.Error())
+		fmt.Printf("read config file fail. file: %s, error: %s\n", filename, err.Error())
+		return nil, errors.New("read config file fail. " + err.Error())
 	}
+	m := make(map[string]interface{})
 	err = yaml.Unmarshal([]byte(data), &m)
 	if err != nil {
-		vlog.Errorf("config unmarshal failed! file: %s, error: %s\n", filename, err)
+		fmt.Printf("config unmarshal failed! file: %s, error: %s\n", filename, err)
+		return nil, errors.New("config unmarshal failed. " + err.Error())
 	}
-	return &Config{&m}, nil
+	rex, _ := regexp.Compile("^\\${([^}]+)}$") // for placeholder replace
+	return &Config{conf: &m, rex: rex}, nil
 }
 
 // ParseBool accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,
@@ -158,4 +164,54 @@ func (c *Config) getData(key string) (interface{}, error) {
 		return v, nil
 	}
 	return nil, fmt.Errorf("not exist key %q", key)
+}
+
+// ReplacePlaceHolder will replace all palceholders like '${key}', replace 'key' to 'value' according to the properties map.
+func (c *Config) ReplacePlaceHolder(placeHolders map[string]interface{}) {
+	if len(placeHolders) > 0 {
+		c.placeHolders = placeHolders
+		fmt.Printf("dynamic configs:%+v\n", placeHolders)
+		for k, v := range *c.conf {
+			if sv, ok := v.(string); ok {
+				nv := c.getPlaceholderValue(sv)
+				if nv != nil {
+					(*c.conf)[k] = nv
+					vlog.Infof("config value '%s' is replaced by '%v'\n", sv, nv)
+					fmt.Printf("config value '%s' is replaced by '%v'\n", sv, nv)
+				}
+			} else if mv, ok := v.(map[interface{}]interface{}); ok {
+				c.replace(&mv)
+			}
+		}
+	}
+}
+
+// one key must be single palceholder! the key will be replaced entirely.
+func (c *Config) replace(configs *map[interface{}]interface{}) {
+	for k, v := range *configs {
+		if sv, ok := v.(string); ok {
+			nv := c.getPlaceholderValue(sv)
+			if nv != nil {
+				(*configs)[k] = nv
+				vlog.Infof("config value '%s' is replaced by '%v'\n", sv, nv)
+				fmt.Printf("config value '%s' is replaced by '%v'\n", sv, nv)
+			}
+		} else if mv, ok := v.(map[interface{}]interface{}); ok {
+			c.replace(&mv)
+		}
+	}
+}
+
+func (c *Config) getPlaceholderValue(v string) interface{} {
+	var nv interface{}
+	result := c.rex.FindStringSubmatch(v)
+	if len(result) == 2 {
+		nv = c.placeHolders[result[1]]
+	}
+	return nv
+}
+
+// GetOriginMap : get origin configs map
+func (c *Config) GetOriginMap() map[string]interface{} {
+	return *c.conf
 }
