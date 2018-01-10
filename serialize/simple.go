@@ -16,8 +16,15 @@ func (s *SimpleSerialization) GetSerialNum() int {
 }
 
 func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := s.serializeBuf(v, buf)
+	return buf.Bytes(), err
+}
+
+func (s *SimpleSerialization) serializeBuf(v interface{}, buf *bytes.Buffer) error {
 	if v == nil {
-		return []byte{0}, nil
+		buf.WriteByte(0)
+		return nil
 	}
 	var rv reflect.Value
 	if nrv, ok := v.(reflect.Value); ok {
@@ -27,7 +34,7 @@ func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
 	}
 
 	t := fmt.Sprintf("%s", rv.Type())
-	buf := new(bytes.Buffer)
+
 	var err error
 	switch t {
 	case "string":
@@ -40,7 +47,7 @@ func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
 		buf.WriteByte(3)
 		err = encodeBytes(rv, buf)
 	}
-	return buf.Bytes(), err
+	return err
 }
 
 func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{}, error) {
@@ -98,13 +105,12 @@ func (s *SimpleSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
 	if len(v) == 0 {
 		return nil, nil
 	}
-	var buf bytes.Buffer
+	buf := new(bytes.Buffer)
 	for _, o := range v {
-		b, err := s.Serialize(o)
+		err := s.serializeBuf(o, buf)
 		if err != nil {
 			return nil, err
 		}
-		buf.Write(b)
 	}
 	return buf.Bytes(), nil
 }
