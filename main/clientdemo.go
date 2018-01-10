@@ -20,7 +20,7 @@ func runClientDemo() {
 	args["name"] = "ray"
 	args["id"] = "xxxx"
 	var reply string
-	err := mclient.Call("hello", args, &reply)
+	err := mclient.Call("hello", []interface{}{args}, &reply)
 	if err != nil {
 		fmt.Printf("motan call fail! err:%v\n", err)
 	} else {
@@ -29,7 +29,7 @@ func runClientDemo() {
 
 	// async call
 	args["key"] = "test async"
-	result := mclient.Go("hello", args, &reply, make(chan *motancore.AsyncResult, 1))
+	result := mclient.Go("hello", []interface{}{args}, &reply, make(chan *motancore.AsyncResult, 1))
 	res := <-result.Done
 	if res.Error != nil {
 		fmt.Printf("motan async call fail! err:%v\n", res.Error)
@@ -38,7 +38,7 @@ func runClientDemo() {
 	}
 
 	mclient2 := mccontext.GetClient("mytest-demo")
-	err = mclient2.Call("hello", "Ray", &reply)
+	err = mclient2.Call("hello", []interface{}{"Ray"}, &reply)
 	if err != nil {
 		fmt.Printf("motan call fail! err:%v\n", err)
 	} else {

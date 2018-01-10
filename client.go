@@ -32,7 +32,7 @@ type Client struct {
 	extFactory motan.ExtentionFactory
 }
 
-func (m *Client) Call(method string, args interface{}, reply interface{}) error {
+func (m *Client) Call(method string, args []interface{}, reply interface{}) error {
 	req := m.buildRequest(method, args)
 	rc := req.GetRPCContext(true)
 	rc.ExtFactory = m.extFactory
@@ -44,7 +44,7 @@ func (m *Client) Call(method string, args interface{}, reply interface{}) error 
 	return nil
 }
 
-func (m *Client) Go(method string, args interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
+func (m *Client) Go(method string, args []interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
 	req := m.buildRequest(method, args)
 	result := &motan.AsyncResult{}
 	if done == nil || cap(done) == 0 {
@@ -64,8 +64,8 @@ func (m *Client) Go(method string, args interface{}, reply interface{}, done cha
 	return result
 }
 
-func (m *Client) buildRequest(method string, args interface{}) motan.Request {
-	req := &motan.MotanRequest{Method: method, ServiceName: m.url.Path, Arguments: []interface{}{args}, Attachment: make(map[string]string, 16)}
+func (m *Client) buildRequest(method string, args []interface{}) motan.Request {
+	req := &motan.MotanRequest{Method: method, ServiceName: m.url.Path, Arguments: args, Attachment: make(map[string]string, 16)}
 	version := m.url.GetParam(motan.VersionKey, "")
 	if version != "" {
 		req.Attachment[mpro.MVersion] = version
