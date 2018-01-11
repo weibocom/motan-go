@@ -20,7 +20,7 @@ type srvURLMapT map[string]srvConfT
 
 // HTTPProvider struct
 type HTTPProvider struct {
-	url        *motan.URL
+	URL        *motan.URL
 	httpClient http.Client
 	srvURLMap  srvURLMapT
 	gctx       *motan.Context
@@ -145,16 +145,17 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 			start := 1
 			for k, v := range params {
 				if start == 1 {
-					res = k + "=" + v
+					res = k + "=" + URL.QueryEscape(v)
 					start++
 					continue
 				}
-				res = res + "&" + k + "=" + v
+				res = res + "&" + k + "=" + URL.QueryEscape(v)
 			}
 		case "string":
-			res = paramsTmp[0].(string)
+			res = URL.QueryEscape(paramsTmp[0].(string))
 		}
 	}
+	res += "&requestIdFromClient=" + fmt.Sprintf("%d",request.GetRequestID())
 	return res, err
 }
 
@@ -222,6 +223,11 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	statusCode := httpResp.StatusCode
 	defer httpResp.Body.Close()
 	body, err := ioutil.ReadAll(httpResp.Body)
+	l := 0
+	l = len(body)
+	if l == 0 {
+		vlog.Warningf("server_agent result is empty.req:%d,%d,%+v,%s,%s\n", statusCode,l,request,httpReqMethod, httpReqURL)
+	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Read body err: %v", err)

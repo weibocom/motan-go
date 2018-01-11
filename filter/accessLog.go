@@ -2,6 +2,7 @@ package filter
 
 import (
 	"time"
+	"fmt"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -38,11 +39,19 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
 	success := true
+	l := 0
+	if response.GetValue() != nil {
+		//l = len(response.GetValue().([]byte))
+		value := fmt.Sprintf("%v",response.GetValue())
+		l = len(value)
+	}
+	if success && l == 0 {
+		success = false
+	}
 	if response.GetException() != nil {
 		success = false
 	}
-	vlog.Infof("access log--%s:%s,%d,pt:%d, req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, time.Since(start)/1000000, request.GetServiceName(),
-		request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), response.GetProcessTime(), success, response.GetException())
+	vlog.Infof("access log--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, time.Since(start)/1000000,l, request.GetServiceName(),request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), response.GetProcessTime(), success, response.GetException())
 	return response
 }
 
