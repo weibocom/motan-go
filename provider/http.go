@@ -8,7 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/url"
+	URL "net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -20,7 +20,7 @@ type srvURLMapT map[string]srvConfT
 
 // HTTPProvider struct
 type HTTPProvider struct {
-	URL        *motan.URL
+	url        *motan.URL
 	httpClient http.Client
 	srvURLMap  srvURLMapT
 	gctx       *motan.Context
@@ -188,7 +188,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	if httpReqMethod == "GET" {
 		httpReqURL = httpReqURL + "?" + queryStr
 	} else if httpReqMethod == "POST" {
-		data, err := url.ParseQuery(queryStr)
+		data, err := URL.ParseQuery(queryStr)
 		if err != nil {
 			vlog.Errorf("new HTTP Provider ParseQuery err: %v", err)
 		}
