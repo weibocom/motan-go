@@ -42,13 +42,6 @@ var (
 
 // all env flag in motan-go
 var (
-<<<<<<< HEAD
-	Port    = flag.Int("port", 0, "agent listen port")
-	Mport   = flag.Int("mport", 0, "agent manage port")
-	Pidfile = flag.String("pidfile", "", "agent manage port")
-	CfgFile = flag.String("c", "/Users/zengnjin/go/src/git.intra.weibo.com/openapi_rd/weibo-motan-go/main/motan.yaml", "motan run conf")
-	LocalIP = flag.String("localIP", "", "local ip for motan register")
-=======
 	Port         = flag.Int("port", 0, "agent listen port")
 	Mport        = flag.Int("mport", 0, "agent manage port")
 	Pidfile      = flag.String("pidfile", "", "agent manage port")
@@ -56,7 +49,6 @@ var (
 	LocalIP      = flag.String("localIP", "", "local ip for motan register")
 	IDC          = flag.String("idc", "", "the idc info for agent or client.")
 	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
->>>>>>> 6c19c0cb71b20f4b85f6b18e2cc23fbe06686a55
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
