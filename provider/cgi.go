@@ -5,7 +5,6 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +12,6 @@ import (
 	cgi "github.com/beberlei/fastcgi-serve/fcgiclient"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	motanSer "github.com/weibocom/motan-go/serialize"
 	// "github.com/yangchenxing/go-nginx-conf-parser"
 )
 
@@ -42,38 +40,6 @@ func (c *CgiProvider) SetSerialization(s motan.Serialization) {}
 
 func (c *CgiProvider) SetProxy(proxy bool) {}
 
-func buildQueryStr(request motan.Request, url *motan.URL) (res string, err error) {
-	var args []interface{}
-	if err = request.ProcessDeserializable(args); err == nil {
-		paramsTmp := request.GetArguments()
-		if paramsTmp != nil && len(paramsTmp) > 0 {
-			if url.Parameters["serialization"] == motanSer.Simple {
-				// @if is simple, then only have paramsTmp[0]
-				vparamsTmp := reflect.ValueOf(paramsTmp[0])
-				t := fmt.Sprintf("%s", vparamsTmp.Type())
-				switch t {
-				case "map[string]string":
-					params := paramsTmp[0].(map[string]string)
-					start := 1
-					for k, v := range params {
-						if start == 1 {
-							res = k + "=" + v
-							start++
-							continue
-						}
-						res = res + "&" + k + "=" + v
-					}
-				case "string":
-					res = paramsTmp[0].(string)
-				}
-			} else {
-				vlog.Errorf("CGI buildQueryStr error, arguments:%+v\n", request.GetArguments())
-			}
-		}
-	}
-	return res, err
-}
-
 func (c *CgiProvider) Call(request motan.Request) motan.Response {
 	defer func() {
 		// @TODO if cgi server die, should let server node unavailable
@@ -82,6 +48,11 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		}
 	}()
 	t := time.Now().UnixNano()
+	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
+	if err := request.ProcessDeserializable(nil); err != nil {
+		fillException(resp, t, err)
+		return resp
+	}
 	env := make(map[string]string)
 	reqParams := ""
 
@@ -103,11 +74,11 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 	}
 
 	if env["REQUEST_METHOD"] == HTTPMethodGET {
-		if queryStr, err := buildQueryStr(request, c.url); err == nil {
+		if queryStr, err := buildQueryStr(request, c.url, nil); err == nil {
 			env["QUERY_STRING"] = queryStr
 		}
 	} else if env["REQUEST_METHOD"] == HTTPMethodPOST {
-		if getReqParams, err := buildQueryStr(request, c.url); err == nil {
+		if getReqParams, err := buildQueryStr(request, c.url, nil); err == nil {
 			reqParams = getReqParams
 		}
 		env["CONTENT_TYPE"] = "application/x-www-form-urlencoded"
@@ -125,14 +96,17 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 	ccgi, err := cgi.New(cgiHost, cgiPort)
 	if err != nil {
 		vlog.Errorf("new CGI err: %v", err)
+		fillException(resp, t, err)
+		return resp
 	}
 	content, _, err := ccgi.Request(env, reqParams)
 	if err != nil {
 		vlog.Errorf("CGI Call error: %+v\n", err)
+		fillException(resp, t, err)
+		return resp
 	}
 
 	statusCode, headers, body, err := ParseFastCgiResponse(string(content))
-	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
 	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
 	if err != nil {

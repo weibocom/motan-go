@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -23,6 +24,7 @@ type HTTPProvider struct {
 	httpClient http.Client
 	srvURLMap  srvURLMapT
 	gctx       *motan.Context
+	mixVars    []string
 }
 
 // Initialize http provider
@@ -94,6 +96,43 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 	return httpReqURL, httpReqMethod, nil
 }
 
+func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res string, err error) {
+	paramsTmp := request.GetArguments()
+	if paramsTmp != nil && len(paramsTmp) > 0 {
+		// @if is simple, then only have paramsTmp[0]
+		// @TODO multi value support
+		vparamsTmp := reflect.ValueOf(paramsTmp[0])
+		t := fmt.Sprintf("%s", vparamsTmp.Type())
+		switch t {
+		case "map[string]string":
+			params := paramsTmp[0].(map[string]string)
+
+			if mixVars != nil {
+				for _, k := range mixVars {
+					if _, contains := params[k]; !contains {
+						if value, ok := request.GetAttachments()[k]; ok {
+							params[k] = value
+						}
+					}
+				}
+			}
+
+			start := 1
+			for k, v := range params {
+				if start == 1 {
+					res = k + "=" + v
+					start++
+					continue
+				}
+				res = res + "&" + k + "=" + v
+			}
+		case "string":
+			res = paramsTmp[0].(string)
+		}
+	}
+	return res, err
+}
+
 // Call for do a motan call through this provider
 func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	defer func() {
@@ -103,6 +142,10 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}()
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
+	if err := request.ProcessDeserializable(nil); err != nil {
+		fillException(resp, t, err)
+		return resp
+	}
 	resp.RequestID = request.GetRequestID()
 	httpReqURL, httpReqMethod, err := buildReqURL(request, h)
 	if err != nil {
@@ -110,7 +153,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		return resp
 	}
 	//vlog.Infof("HTTPProvider read to call: Method:%s, URL:%s", httpReqMethod, httpReqURL)
-	queryStr, err := buildQueryStr(request, h.url)
+	queryStr, err := buildQueryStr(request, h.url, h.mixVars)
 	if err != nil {
 		fillException(resp, t, err)
 		return resp
@@ -128,14 +171,16 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	req, err := http.NewRequest(httpReqMethod, httpReqURL, reqBody)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider NewRequest err: %v", err)
+		fillException(resp, t, err)
+		return resp
 	}
 	for k, v := range request.GetAttachments() {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		req.Header.Add(k, v)
 	}
-	var ip string
-	remoteIP, exist := request.GetAttachments()[motan.RemoteIPKey]
-	if exist {
+
+	ip := ""
+	if remoteIP, exist := request.GetAttachments()[motan.RemoteIPKey]; exist {
 		ip = remoteIP
 	} else {
 		ip = request.GetAttachment(motan.HostKey)
@@ -145,18 +190,18 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Do HTTP Call err: %v", err)
+		fillException(resp, t, err)
+		return resp
 	}
 	headers := httpResp.Header
 	statusCode := httpResp.StatusCode
 	defer httpResp.Body.Close()
 	body, err := ioutil.ReadAll(httpResp.Body)
-	if err != nil {
-		vlog.Errorf("new HTTP Provider Read body err: %v", err)
-	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
-		//@TODO ErrTYpe
-		resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: fmt.Sprintf("%s", err), ErrType: statusCode}
+		vlog.Errorf("new HTTP Provider Read body err: %v", err)
+		resp.Exception = &motan.Exception{ErrCode: statusCode,
+			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 		return resp
 	}
 	for k, v := range request.GetAttachments() {
@@ -182,6 +227,16 @@ func (h *HTTPProvider) GetURL() *motan.URL {
 // SetURL to set a motan to represent for this provider
 func (h *HTTPProvider) SetURL(url *motan.URL) {
 	h.url = url
+}
+
+// GetMixVars return the HTTPProvider mixVars
+func (h *HTTPProvider) GetMixVars() []string {
+	return h.mixVars
+}
+
+// SetMixVars to set HTTPProvider mixVars to this provider
+func (h *HTTPProvider) SetMixVars(mixVars []string) {
+	h.mixVars = mixVars
 }
 
 // IsAvailable to check if this provider is sitll working well
