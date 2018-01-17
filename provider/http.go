@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	motan "github.com/weibocom/motan-go/core"
@@ -86,20 +87,17 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 	}
 	// when set a extconf check the specific method conf first,then use the DefaultMotanMethodConfKey conf
 	if _, haveExtConf := h.srvURLMap[h.url.Parameters[motan.URLConfKey]]; haveExtConf {
-		if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][method]; ok {
-			if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
-				httpReqURLFmt = getHTTPReqURL
-			}
-			if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
-				httpReqMethod = getHTTPReqMethod
-			}
-		} else if specificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][DefaultMotanMethodConfKey]; ok {
-			if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
-				httpReqURLFmt = getHTTPReqURL
-			}
-			if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
-				httpReqMethod = getHTTPReqMethod
-			}
+		var specificConf = make(map[string]string, 2)
+		if getSpecificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][method]; ok {
+			specificConf = getSpecificConf
+		} else if getSpecificConf, ok := h.srvURLMap[h.url.Parameters[motan.URLConfKey]][DefaultMotanMethodConfKey]; ok {
+			specificConf = getSpecificConf
+		}
+		if getHTTPReqURL, ok := specificConf["URL_FORMAT"]; ok {
+			httpReqURLFmt = getHTTPReqURL
+		}
+		if getHTTPReqMethod, ok := specificConf["HTTP_REQUEST_METHOD"]; ok {
+			httpReqMethod = getHTTPReqMethod
 		}
 	}
 	// when motan request have a http method specific in attachment use this method
@@ -143,14 +141,21 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 			}
 
 			start := 1
+			var buffer bytes.Buffer
 			for k, v := range params {
 				if start == 1 {
-					res = k + "=" + v
+					buffer.WriteString(k)
+					buffer.WriteString("=")
+					buffer.WriteString(v)
 					start++
 					continue
 				}
-				res = res + "&" + k + "=" + v
+				buffer.WriteString("&")
+				buffer.WriteString(k)
+				buffer.WriteString("=")
+				buffer.WriteString(v)
 			}
+			res = buffer.String()
 		case "string":
 			res = paramsTmp[0].(string)
 		}
@@ -167,7 +172,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}()
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
-	if err := request.ProcessDeserializable(nil); err != nil {
+	toType := make([]interface{}, 1)
+	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)
 		return resp
 	}

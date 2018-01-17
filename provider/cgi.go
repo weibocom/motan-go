@@ -49,7 +49,8 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 	}()
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
-	if err := request.ProcessDeserializable(nil); err != nil {
+	toType := make([]interface{}, 1)
+	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)
 		return resp
 	}
