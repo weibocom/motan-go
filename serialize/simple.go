@@ -16,8 +16,15 @@ func (s *SimpleSerialization) GetSerialNum() int {
 }
 
 func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := s.serializeBuf(v, buf)
+	return buf.Bytes(), err
+}
+
+func (s *SimpleSerialization) serializeBuf(v interface{}, buf *bytes.Buffer) error {
 	if v == nil {
-		return []byte{0}, nil
+		buf.WriteByte(0)
+		return nil
 	}
 	var rv reflect.Value
 	if nrv, ok := v.(reflect.Value); ok {
@@ -27,7 +34,7 @@ func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
 	}
 
 	t := fmt.Sprintf("%s", rv.Type())
-	buf := new(bytes.Buffer)
+
 	var err error
 	switch t {
 	case "string":
@@ -40,7 +47,7 @@ func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
 		buf.WriteByte(3)
 		err = encodeBytes(rv, buf)
 	}
-	return buf.Bytes(), err
+	return err
 }
 
 func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{}, error) {
@@ -48,6 +55,10 @@ func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 		return nil, nil
 	}
 	buf := bytes.NewBuffer(b)
+	return s.deSerializeBuf(buf, v)
+}
+
+func (s *SimpleSerialization) deSerializeBuf(buf *bytes.Buffer, v interface{}) (interface{}, error) {
 	tp, _ := buf.ReadByte()
 	switch tp {
 	case 0:
@@ -91,31 +102,30 @@ func (s *SimpleSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 }
 
 func (s *SimpleSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
-	// TODO support multi value
 	if len(v) == 0 {
 		return nil, nil
 	}
-	if len(v) == 1 {
-		return s.Serialize(v[0])
+	buf := new(bytes.Buffer)
+	for _, o := range v {
+		err := s.serializeBuf(o, buf)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return nil, errors.New("do not support multi value in SimpleSerialization")
+	return buf.Bytes(), nil
 }
 
 func (s *SimpleSerialization) DeSerializeMulti(b []byte, v []interface{}) (ret []interface{}, err error) {
-	//TODO support multi value
-	var rv interface{}
-	if v != nil {
-		if len(v) == 0 {
-			return nil, nil
+	ret = make([]interface{}, 0, len(v))
+	buf := bytes.NewBuffer(b)
+	for _, o := range v {
+		rv, err := s.deSerializeBuf(buf, o)
+		if err != nil {
+			return nil, err
 		}
-		if len(v) > 1 {
-			return nil, errors.New("do not support multi value in SimpleSerialization")
-		}
-		rv, err = s.DeSerialize(b, v[0])
-	} else {
-		rv, err = s.DeSerialize(b, nil)
+		ret = append(ret, rv)
 	}
-	return []interface{}{rv}, err
+	return ret, nil
 }
 
 func readInt32(buf *bytes.Buffer) (int, error) {
