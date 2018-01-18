@@ -42,11 +42,12 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	l := 0
 	if response.GetValue() != nil {
 		//l = len(response.GetValue().([]byte))
-		value := fmt.Sprintf("%v",response.GetValue())
-		l = len(value)
-	}
-	if success && l == 0 {
-		success = false
+		if b, ok := response.GetValue().([]byte);ok{
+			l = len(b)
+		}
+		if b, ok := response.GetValue().(string);ok{
+			l = len(b)
+		}
 	}
 	if response.GetException() != nil {
 		success = false

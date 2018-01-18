@@ -121,11 +121,14 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 
 func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res string, err error) {
 	paramsTmp := request.GetArguments()
+	var buffer bytes.Buffer
 	if paramsTmp != nil && len(paramsTmp) > 0 {
 		// @if is simple, then only have paramsTmp[0]
 		// @TODO multi value support
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
+		buffer.WriteString("requestIdFromClient=")
+		buffer.WriteString(fmt.Sprintf("%d",request.GetRequestID()))
 		switch t {
 		case "map[string]string":
 			params := paramsTmp[0].(map[string]string)
@@ -140,27 +143,17 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 				}
 			}
 
-			start := 1
-			var buffer bytes.Buffer
 			for k, v := range params {
-				if start == 1 {
-					buffer.WriteString(k)
-					buffer.WriteString("=")
-					buffer.WriteString(URL.QueryEscape(v))
-					start++
-					continue
-				}
 				buffer.WriteString("&")
 				buffer.WriteString(k)
 				buffer.WriteString("=")
 				buffer.WriteString(URL.QueryEscape(v))
 			}
-			res = buffer.String()
 		case "string":
-			res = URL.QueryEscape(paramsTmp[0].(string))
+			buffer.WriteString(URL.QueryEscape(paramsTmp[0].(string)))
 		}
 	}
-	res += "&requestIdFromClient=" + fmt.Sprintf("%d",request.GetRequestID())
+	res = buffer.String()
 	return res, err
 }
 
@@ -229,10 +222,9 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	statusCode := httpResp.StatusCode
 	defer httpResp.Body.Close()
 	body, err := ioutil.ReadAll(httpResp.Body)
-	l := 0
 	l = len(body)
 	if l == 0 {
-		vlog.Warningf("server_agent result is empty.req:%d,%d,%+v,%s,%s\n", statusCode,l,request,httpReqMethod, httpReqURL)
+		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode,request.GetRequestID(),httpReqURL)
 	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
