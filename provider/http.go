@@ -222,7 +222,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	statusCode := httpResp.StatusCode
 	defer httpResp.Body.Close()
 	body, err := ioutil.ReadAll(httpResp.Body)
-	l = len(body)
+	l := len(body)
 	if l == 0 {
 		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode,request.GetRequestID(),httpReqURL)
 	}
