@@ -71,7 +71,7 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 				return '_'
 			}
 			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s", role, request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
+		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, request.GetAttachments()["M_s"],request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
 	} else {
 		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {

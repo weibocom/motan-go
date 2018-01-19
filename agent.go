@@ -242,6 +242,9 @@ type agentMessageHandler struct {
 }
 
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
+	if request.GetAttachment(mpro.MSource) == "" {
+		request.SetAttachment(mpro.MSource,a.agent.agentURL.Parameters[motan.ApplicationKey])
+	}
 	version := "0.1"
 	if request.GetAttachment(mpro.MVersion) != "" {
 		version = request.GetAttachment(mpro.MVersion)
