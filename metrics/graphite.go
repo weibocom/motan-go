@@ -59,7 +59,6 @@ func genGraphiteMessages(localIP string, snap metrics.Registry) []string {
 	segmentsLength := 0
 
 	snap.Each(func(key string, i interface{}) {
-		fmt.Println(key)
 		var segment string
 		pni := strings.SplitN(key, ":", 5)
 
