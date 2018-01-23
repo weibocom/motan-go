@@ -128,7 +128,7 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
 		buffer.WriteString("requestIdFromClient=")
-		buffer.WriteString(fmt.Sprintf("%d",request.GetRequestID()))
+		buffer.WriteString(fmt.Sprintf("%d", request.GetRequestID()))
 		switch t {
 		case "map[string]string":
 			params := paramsTmp[0].(map[string]string)
@@ -224,7 +224,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
-		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode,request.GetRequestID(),httpReqURL)
+		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode, request.GetRequestID(), httpReqURL)
 	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {
