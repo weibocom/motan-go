@@ -68,18 +68,15 @@ func genGraphiteMessages(localIP string, snap metrics.Registry) []string {
 		case metrics.Counter:
 			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
 				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
-			fmt.Println("metrics.Counter," + segment)
 		case metrics.Meter:
 			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d.00|c\n",
 				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
-			fmt.Println("metrics.Meter," + segment)
 		case metrics.Timer:
 			/*TODO
 			 */
 		case metrics.Gauge:
 			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
 				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Value())
-			fmt.Println("metrics.Gauge," + segment)
 			//	case metrics.GaugeFloat64:
 		case metrics.Histogram:
 			ps := m.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999, 0.9999})

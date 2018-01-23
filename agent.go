@@ -279,6 +279,10 @@ func (a *Agent) startServerAgent() {
 		export := url.GetParam(motan.ExportKey, "")
 		url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
 		url.Host = motan.GetLocalIP()
+		application :=url.GetParam(motan.ApplicationKey,"")
+		if application == "" {
+			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
+		}
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
 		if provider == nil {
