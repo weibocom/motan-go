@@ -243,7 +243,8 @@ type agentMessageHandler struct {
 
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	if request.GetAttachment(mpro.MSource) == "" {
-		request.SetAttachment(mpro.MSource,a.agent.agentURL.Parameters[motan.ApplicationKey])
+		application := a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+		request.SetAttachment(mpro.MSource, application)
 	}
 	version := "0.1"
 	if request.GetAttachment(mpro.MVersion) != "" {
@@ -279,10 +280,10 @@ func (a *Agent) startServerAgent() {
 		export := url.GetParam(motan.ExportKey, "")
 		url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
 		url.Host = motan.GetLocalIP()
-		application :=url.GetParam(motan.ApplicationKey,"")
+		application := url.GetParam(motan.ApplicationKey, "")
 		if application == "" {
-			application = a.agentURL.GetParam(motan.ApplicationKey,"")
-			url.PutParam(motan.ApplicationKey,application);
+			application = a.agentURL.GetParam(motan.ApplicationKey, "")
+			url.PutParam(motan.ApplicationKey, application)
 		}
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
