@@ -66,7 +66,7 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	response := m.GetNext().Filter(caller, request)
 	var key string
 	if role == "server-agent" {
-		application := caller.GetURL().Parameters[motan.ApplicationKey]
+		application := caller.GetURL().GetParam(motan.ApplicationKey,"")
 		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'

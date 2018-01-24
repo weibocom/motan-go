@@ -281,7 +281,8 @@ func (a *Agent) startServerAgent() {
 		url.Host = motan.GetLocalIP()
 		application :=url.GetParam(motan.ApplicationKey,"")
 		if application == "" {
-			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
+			application = a.agentURL.GetParam(motan.ApplicationKey,"")
+			url.PutParam(motan.ApplicationKey,application);
 		}
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
