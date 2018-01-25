@@ -44,7 +44,7 @@ type Agent struct {
 	agentPortServer   map[int]motan.Server
 	serviceRegistries map[string]motan.Registry // all registries used for services
 
-	manageHandlers map[string]func(http.ResponseWriter, *http.Request)
+	manageHandlers map[string]http.Handler
 }
 
 func NewAgent(extfactory motan.ExtentionFactory) *Agent {
@@ -60,7 +60,7 @@ func NewAgent(extfactory motan.ExtentionFactory) *Agent {
 	agent.agentPortServer = make(map[int]motan.Server)
 	agent.serviceRegistries = make(map[string]motan.Registry)
 	agent.status = http.StatusOK
-	agent.manageHandlers = make(map[string]func(http.ResponseWriter, *http.Request))
+	agent.manageHandlers = make(map[string]http.Handler)
 	return agent
 }
 
@@ -394,7 +394,7 @@ func (a *AgentListener) GetIdentity() string {
 	return a.agent.agentURL.GetIdentity()
 }
 
-func (a *Agent) RegisterManageHandler(path string, handler func(http.ResponseWriter, *http.Request)) {
+func (a *Agent) RegisterManageHandler(path string, handler http.Handler) {
 	if path != "" && handler != nil {
 		a.manageHandlers[path] = handler // override
 	}
@@ -402,28 +402,29 @@ func (a *Agent) RegisterManageHandler(path string, handler func(http.ResponseWri
 
 func (a *Agent) startMServer() {
 	if _, ok := a.manageHandlers["/"]; !ok {
-		a.manageHandlers["/"] = a.rootHandler
+		a.manageHandlers["/"] = http.HandlerFunc(a.rootHandler)
 	}
 	if _, ok := a.manageHandlers["/503"]; !ok {
-		a.manageHandlers["/503"] = a.StatusChangeHandler
+		a.manageHandlers["/503"] = http.HandlerFunc(a.StatusChangeHandler)
 	}
 	if _, ok := a.manageHandlers["/200"]; !ok {
-		a.manageHandlers["/200"] = a.StatusChangeHandler
+		a.manageHandlers["/200"] = http.HandlerFunc(a.StatusChangeHandler)
 	}
 	if _, ok := a.manageHandlers["/getConfig"]; !ok {
-		a.manageHandlers["/getConfig"] = a.getConfigHandler
+		a.manageHandlers["/getConfig"] = http.HandlerFunc(a.getConfigHandler)
 	}
 	if _, ok := a.manageHandlers["/getReferService"]; !ok {
-		a.manageHandlers["/getReferService"] = a.getReferServiceHandler
+		a.manageHandlers["/getReferService"] = http.HandlerFunc(a.getReferServiceHandler)
 	}
 	for k, v := range a.manageHandlers {
-		http.HandleFunc(k, v)
+		http.Handle(k, v)
 		vlog.Infof("add manage server handle path:%s\n", k)
 	}
 
 	vlog.Infof("start listen manage port %d ...\n", a.mport)
 	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 	if err != nil {
+		fmt.Printf("start listen manage port fail! port:%d, err:%s\n", a.mport, err.Error())
 		vlog.Warningf("start listen manage port fail! port:%d, err:%s\n", a.mport, err.Error())
 	}
 }
