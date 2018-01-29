@@ -45,7 +45,7 @@ func (g *GrpcEndPoint) SetSerialization(s motan.Serialization) {}
 func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	t := time.Now().UnixNano()
 	var in []byte
-	if dv, ok := request.GetArguments()[0].(motan.DeserializableValue); ok {
+	if dv, ok := request.GetArguments()[0].(*motan.DeserializableValue); ok {
 		in = dv.Body
 	} else if ba, ok := request.GetArguments()[0].([]byte); ok {
 		in = ba
