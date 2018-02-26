@@ -255,9 +255,14 @@ func Decode(reqbuf *bytes.Buffer) *Message {
 	if metasize > 0 {
 		metadata := string(reqbuf.Next(int(metasize)))
 		values := strings.Split(metadata, "\n")
-		for i := 0; i < len(values); i++ {
+		size := len(values)
+		for i := 0; i < size; i++ {
 			key := values[i]
 			i++
+			if i >= size {
+				vlog.Errorf("decode message fail!metadata not paired. header:%v, meta:%s\n", header, metadata)
+				return nil
+			}
 			metamap[key] = values[i]
 		}
 
@@ -289,9 +294,14 @@ func DecodeFromReader(buf *bufio.Reader) (msg *Message, err error) {
 			return nil, err
 		}
 		values := strings.Split(string(metadata), "\n")
-		for i := 0; i < len(values); i++ {
+		size := len(values)
+		for i := 0; i < size; i++ {
 			key := values[i]
 			i++
+			if i >= size {
+				vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
+				return nil, errors.New("decode message fail, metadata not paired")
+			}
 			metamap[key] = values[i]
 		}
 
