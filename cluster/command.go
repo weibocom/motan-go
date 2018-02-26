@@ -67,6 +67,10 @@ func (s *serviceListener) GetIdentity() string {
 
 func (s *serviceListener) Notify(registryURL *motan.URL, urls []*motan.URL) {
 	vlog.Infof("serviceListener notify urls size is %d. refer: %v, registry: %v\n", len(urls), s.referURL, registryURL)
+	if s.crw == nil {
+		vlog.Infof("serviceListener maybe unSubscribed. notify will ignore. s:%+v\n", s)
+		return
+	}
 	s.urls = urls
 	s.crw.getResultWithCommand(true)
 }
@@ -79,6 +83,7 @@ func (s *serviceListener) unSubscribe(registry motan.Registry) {
 }
 
 func (s *serviceListener) subscribe(registry motan.Registry) {
+	// this listener should not reuse, so let it crash when this listener is resubscribe after unsubscribe.
 	registry.Subscribe(s.referURL, s)
 	s.urls = registry.Discover(s.referURL)
 }

@@ -6,6 +6,7 @@ import (
 
 	cfg "github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/log"
+	"strings"
 )
 
 const (
@@ -41,11 +42,13 @@ var (
 
 // all env flag in motan-go
 var (
-	Port    = flag.Int("port", 0, "agent listen port")
-	Mport   = flag.Int("mport", 0, "agent manage port")
-	Pidfile = flag.String("pidfile", "", "agent manage port")
-	CfgFile = flag.String("c", "./motan.yaml", "motan run conf")
-	LocalIP = flag.String("localIP", "", "local ip for motan register")
+	Port         = flag.Int("port", 0, "agent listen port")
+	Mport        = flag.Int("mport", 0, "agent manage port")
+	Pidfile      = flag.String("pidfile", "", "agent manage port")
+	CfgFile      = flag.String("c", "./motan.yaml", "motan run conf")
+	LocalIP      = flag.String("localIP", "", "local ip for motan register")
+	IDC          = flag.String("idc", "", "the idc info for agent or client.")
+	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
@@ -102,6 +105,31 @@ func (c *Context) Initialize() {
 	}
 
 	cfgRs, _ := cfg.NewConfigFromFile(c.ConfigFile)
+	var dynamicFile string
+	if *DynamicConfs != "" {
+		dynamicFile = *DynamicConfs
+	}
+	if dynamicFile == "" && *IDC != "" {
+		suffix := *IDC + ".yaml"
+		idx := strings.LastIndex(c.ConfigFile, "/")
+		if idx > -1 {
+			dynamicFile = c.ConfigFile[0:idx+1] + suffix
+		} else {
+			dynamicFile = suffix
+		}
+	}
+	if dynamicFile != "" {
+		dc, _ := cfg.NewConfigFromFile(dynamicFile)
+		dconfs := make(map[string]interface{})
+		for k, v := range dc.GetOriginMap() {
+			if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
+				continue
+			}
+			dconfs[k] = v
+		}
+		cfgRs.ReplacePlaceHolder(dconfs)
+	}
+
 	c.Config = cfgRs
 	c.parseRegistrys()
 	c.parseBasicRefers()

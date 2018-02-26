@@ -44,7 +44,15 @@ func (g *GrpcEndPoint) SetSerialization(s motan.Serialization) {}
 
 func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	t := time.Now().UnixNano()
-	in := request.GetArguments()[0].([]byte)
+	var in []byte
+	if dv, ok := request.GetArguments()[0].(*motan.DeserializableValue); ok {
+		in = dv.Body
+	} else if ba, ok := request.GetArguments()[0].([]byte); ok {
+		in = ba
+	} else {
+		vlog.Errorf("can not process argument in grpc endpoint. argument:%v\n", request.GetArguments()[0])
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "grpc argument must be []byte", ErrType: motan.ServiceException})
+	}
 	out := new(OutMsg)
 
 	var header, trailer metadata.MD
@@ -55,7 +63,10 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
 	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
-	resp.GetRPCContext(true).SerializeNum = GRPCSerialNum
+	rc := resp.GetRPCContext(true)
+	rc.Serialized = true
+	rc.SerializeNum = GRPCSerialNum
+
 	// @TODO add receiving header and trailers into attachment
 	if err != nil {
 		errcode := int(grpc.Code(err))
