@@ -25,7 +25,6 @@ var (
 	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
 	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
 
-	idOffset            uint64 // id generator offset
 	defaultAsyncResonse = &motan.MotanResponse{Attachment: make(map[string]string, 0), RPCContext: &motan.RPCContext{AsyncCall: true}}
 )
 
@@ -141,7 +140,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	}
 	recvMsg, err := channel.Call(msg, deadline, rc)
 	if err != nil {
-		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, error: %s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
+		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
 	}
@@ -283,9 +282,7 @@ type Stream struct {
 	recvLock     sync.Mutex
 	recvNotifyCh chan struct{}
 	// timeout
-	deadline        time.Time
-	originRequestID uint64
-	localRequestID  uint64
+	deadline time.Time
 
 	rc      *motan.RPCContext
 	isClose bool
@@ -295,9 +292,7 @@ func (s *Stream) Send() error {
 	timer := time.NewTimer(s.deadline.Sub(time.Now()))
 	defer timer.Stop()
 
-	s.sendMsg.Header.RequestID = s.localRequestID
 	buf := s.sendMsg.Encode()
-	s.sendMsg.Header.RequestID = s.originRequestID
 
 	ready := sendReady{data: buf.Bytes()}
 	select {
@@ -325,7 +320,6 @@ func (s *Stream) Recv() (*mpro.Message, error) {
 		if msg == nil {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
-		msg.Header.RequestID = s.originRequestID
 		return msg, nil
 	case <-timer.C:
 		return nil, ErrRecvRequestTimeout
@@ -371,25 +365,23 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		return nil, ErrChannelShutdown
 	}
 	s := &Stream{
-		channel:         c,
-		sendMsg:         msg,
-		recvNotifyCh:    make(chan struct{}, 1),
-		deadline:        time.Now().Add(1 * time.Second),
-		originRequestID: msg.Header.RequestID,
-		rc:              rc,
+		channel:      c,
+		sendMsg:      msg,
+		recvNotifyCh: make(chan struct{}, 1),
+		deadline:     time.Now().Add(1 * time.Second),
+		rc:           rc,
 	}
-	if s.originRequestID == 0 {
-		s.localRequestID = GenerateRequestID()
-	} else {
-		s.localRequestID = s.originRequestID
+	if msg.Header.RequestID == 0 {
+		msg.Header.RequestID = GenerateRequestID()
 	}
+
 	if msg.Header.IsHeartbeat() {
 		c.heartbeatLock.Lock()
-		c.heartbeats[s.localRequestID] = s
+		c.heartbeats[msg.Header.RequestID] = s
 		c.heartbeatLock.Unlock()
 	} else {
 		c.streamLock.Lock()
-		c.streams[s.localRequestID] = s
+		c.streams[msg.Header.RequestID] = s
 		c.streamLock.Unlock()
 	}
 	return s, nil
@@ -399,11 +391,11 @@ func (s *Stream) Close() {
 	if !s.isClose {
 		if s.sendMsg.Header.IsHeartbeat() {
 			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.localRequestID)
+			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
 			s.channel.heartbeatLock.Unlock()
 		} else {
 			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.localRequestID)
+			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
 		s.isClose = true
@@ -653,10 +645,4 @@ func buildChannel(conn net.Conn, config *Config, serialization motan.Serializati
 	go channel.send()
 
 	return channel
-}
-
-func GenerateRequestID() uint64 {
-	ms := uint64(time.Now().UnixNano() / int64(time.Millisecond))
-	offset := atomic.AddUint64(&idOffset, 1) & (1<<20 - 1)
-	return ms + offset
 }
