@@ -8,6 +8,7 @@ import (
 	"github.com/weibocom/motan-go/log"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	URL "net/url"
 	"reflect"
@@ -211,8 +212,24 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		ip = request.GetAttachment(motan.HostKey)
 	}
 	req.Header.Add("x-forwarded-for", ip)
+	req.Header.Set("Accept-Encoding","")  //强制不走gzip
 
-	httpResp, err := h.httpClient.Do(req)
+	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000 * time.Millisecond)
+	c := http.Client{
+		Transport: &http.Transport{
+			Dial: func(netw, addr string) (net.Conn, error) {
+				deadline := time.Now().Add(timeout)
+				c, err := net.DialTimeout(netw, addr, timeout)
+				if err != nil {
+					return nil, err
+				}
+				c.SetDeadline(deadline)
+				return c, nil
+			},
+		},
+	}
+
+	httpResp, err := c.Do(req)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Do HTTP Call err: %v", err)
 		fillException(resp, t, err)

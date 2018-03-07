@@ -336,7 +336,9 @@ func (sa *serverAgentMessageHandler) Initialize() {
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	p := sa.providers[request.GetServiceName()]
 	if p != nil {
-		return p.Call(request)
+		res = p.Call(request)
+		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
+		return res
 	}
 	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
