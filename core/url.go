@@ -28,6 +28,8 @@ var (
 	defaultSerialize = "simple"
 )
 
+//TODO int param cache
+
 // GetIdentity return the identity of url. identity info includes protocol, host, port, path, group
 // the identity will cached, so must clear cached info after update above info by calling ClearCachedInfo()
 func (u *URL) GetIdentity() string {

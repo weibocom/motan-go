@@ -89,7 +89,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	}()
 	buf := bufio.NewReader(conn)
 	for {
-		request, err := mpro.DecodeFromReader(buf)
+		request, err := mpro.Decode(buf)
 		if err != nil {
 			if err.Error() != "EOF" {
 				vlog.Warningf("decode motan message fail! con:%s\n.", conn.RemoteAddr().String())
@@ -107,7 +107,7 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		}
 	}()
 	request.Header.SetProxy(m.proxy)
-
+	// TODO request , response reuse
 	var res *mpro.Message
 	if request.Header.IsHeartbeat() {
 		res = mpro.BuildHeartbeat(request.Header.RequestID, mpro.Res)

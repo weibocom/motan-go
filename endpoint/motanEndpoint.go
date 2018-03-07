@@ -33,7 +33,6 @@ type MotanEndpoint struct {
 	channels   *ChannelPool
 	destroyCh  chan struct{}
 	available  bool
-	mux        sync.RWMutex
 	errorCount uint32
 	proxy      bool
 
@@ -43,9 +42,7 @@ type MotanEndpoint struct {
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
-	m.mux.Lock()
 	m.available = available
-	m.mux.Unlock()
 }
 
 func (m *MotanEndpoint) SetSerialization(s motan.Serialization) {
@@ -224,8 +221,6 @@ func (m *MotanEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MotanEndpoint) IsAvailable() bool {
-	m.mux.RLock()
-	defer m.mux.RUnlock()
 	return m.available
 }
 
@@ -422,12 +417,7 @@ func (c *Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCC
 }
 
 func (c *Channel) IsClosed() bool {
-	select {
-	case <-c.shutdownCh:
-		return true
-	default:
-		return false
-	}
+	return c.shutdown
 }
 
 func (c *Channel) recv() {
@@ -438,7 +428,7 @@ func (c *Channel) recv() {
 
 func (c *Channel) recvLoop() error {
 	for {
-		res, err := mpro.DecodeFromReader(c.bufRead)
+		res, err := mpro.Decode(c.bufRead)
 		if err != nil {
 			return err
 		}
@@ -537,8 +527,6 @@ type ChannelPool struct {
 }
 
 func (c *ChannelPool) getChannels() chan *Channel {
-	c.channelsLock.Lock()
-	defer c.channelsLock.Unlock()
 	channels := c.channels
 	return channels
 }
@@ -579,7 +567,7 @@ func retChannelPool(channels chan *Channel, channel *Channel) (error error) {
 }
 
 func (c *ChannelPool) Close() error {
-	c.channelsLock.Lock()
+	c.channelsLock.Lock() // to prevent channels closed many times
 	channels := c.channels
 	c.channels = nil
 	c.factory = nil

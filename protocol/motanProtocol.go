@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"strings"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -214,11 +213,8 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 }
 
 func (msg *Message) Encode() (buf *bytes.Buffer) {
-	buf = new(bytes.Buffer)
-	var metabuf bytes.Buffer
-	var meta map[string]string
-	meta = msg.Metadata
-	for k, v := range meta {
+	metabuf := bytes.NewBuffer(make([]byte, 0, 256))
+	for k, v := range msg.Metadata {
 		metabuf.WriteString(k)
 		metabuf.WriteString("\n")
 		metabuf.WriteString(v)
@@ -231,85 +227,98 @@ func (msg *Message) Encode() (buf *bytes.Buffer) {
 		metasize = 0
 	}
 
-	body := msg.Body
-	bodysize := int32(len(body))
-	binary.Write(buf, binary.BigEndian, msg.Header)
-	binary.Write(buf, binary.BigEndian, metasize)
+	bodysize := int32(len(msg.Body))
+	buf = bytes.NewBuffer(make([]byte, 0, (HeaderLength + metasize + bodysize + 8)))
+
+	// encode header.
+	temp := make([]byte, 8, 8)
+	binary.BigEndian.PutUint16(temp, msg.Header.Magic)
+	buf.Write(temp[:2])
+	buf.WriteByte(msg.Header.MsgType)
+	buf.WriteByte(msg.Header.VersionStatus)
+	buf.WriteByte(msg.Header.Serialize)
+	binary.BigEndian.PutUint64(temp, msg.Header.RequestID)
+	buf.Write(temp)
+
+	// encode meta
+	binary.BigEndian.PutUint32(temp, uint32(metasize))
+	buf.Write(temp[:4])
 	if metasize > 0 {
-		binary.Write(buf, binary.BigEndian, metabuf.Bytes()[:metasize])
+		buf.Write(metabuf.Bytes()[:metasize])
 	}
 
-	binary.Write(buf, binary.BigEndian, bodysize)
+	// encode body
+	binary.BigEndian.PutUint32(temp, uint32(bodysize))
+	buf.Write(temp[:4])
 	if bodysize > 0 {
-		binary.Write(buf, binary.BigEndian, body)
+		buf.Write(msg.Body)
 	}
 	return buf
 }
 
-// Decode decode one message from buffer
-func Decode(reqbuf *bytes.Buffer) *Message {
-	header := &Header{}
-	binary.Read(reqbuf, binary.BigEndian, header)
-	metasize := readInt32(reqbuf)
-	metamap := make(map[string]string)
-	if metasize > 0 {
-		metadata := string(reqbuf.Next(int(metasize)))
-		values := strings.Split(metadata, "\n")
-		size := len(values)
-		for i := 0; i < size; i++ {
-			key := values[i]
-			i++
-			if i >= size {
-				vlog.Errorf("decode message fail!metadata not paired. header:%v, meta:%s\n", header, metadata)
-				return nil
-			}
-			metamap[key] = values[i]
-		}
+func Decode(buf *bufio.Reader) (msg *Message, err error) {
+	temp := make([]byte, HeaderLength, HeaderLength)
 
-	}
-	bodysize := readInt32(reqbuf)
-	var body []byte
-	if bodysize > 0 {
-		body = reqbuf.Next(int(bodysize))
-	} else {
-		body = make([]byte, 0)
-	}
-	msg := &Message{header, metamap, body, Req}
-	return msg
-}
-
-// DecodeFromReader decode one message from reader
-func DecodeFromReader(buf *bufio.Reader) (msg *Message, err error) {
-	header := &Header{}
-	err = binary.Read(buf, binary.BigEndian, header)
+	// decode header
+	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
 	if err != nil {
+		vlog.Errorf("not enough bytes to decode motan message header. err:%v\n", err)
+		return nil, errors.New("not enough bytes to decode motan message header.")
+	}
+	mn := binary.BigEndian.Uint16(temp[:2])
+	if mn != MotanMagic {
+		vlog.Errorf("worng magic num:%d, err:%v\n", mn, err)
+		return nil, errors.New("motan magic num not correct.")
+	}
+	header := &Header{Magic: MotanMagic}
+	header.MsgType = temp[2]
+	header.VersionStatus = temp[3]
+	header.Serialize = temp[4]
+	header.RequestID = binary.BigEndian.Uint64(temp[5:])
+
+	// decode meta
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	if err != nil {
+		vlog.Errorf("decode motan message fail. err:%v\n", err)
 		return nil, err
 	}
-
-	metasize := readInt32(buf)
+	metasize := int(binary.BigEndian.Uint32(temp[:4]))
 	metamap := make(map[string]string)
 	if metasize > 0 {
-		metadata, err := readBytes(buf, int(metasize))
+		metadata, err := readBytes(buf, metasize)
 		if err != nil {
 			return nil, err
 		}
-		values := strings.Split(string(metadata), "\n")
-		size := len(values)
-		for i := 0; i < size; i++ {
-			key := values[i]
-			i++
-			if i >= size {
-				vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
-				return nil, errors.New("decode message fail, metadata not paired")
+		s, e := 0, 0
+		var k string
+		for i := 0; i <= metasize; i++ {
+			if i == metasize || metadata[i] == '\n' {
+				e = i
+				if k == "" {
+					k = string(metadata[s:e])
+				} else {
+					metamap[k] = string(metadata[s:e])
+					k = ""
+				}
+				s = i + 1
 			}
-			metamap[key] = values[i]
 		}
-
+		if k != "" {
+			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
+			return nil, errors.New("decode message fail, metadata not paired")
+		}
 	}
-	bodysize := readInt32(buf)
+
+	//decode body
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	if err != nil {
+		vlog.Errorf("decode motan message fail. err:%v\n", err)
+		return nil, err
+	}
+	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
 	var body []byte
 	if bodysize > 0 {
-		body, err = readBytes(buf, int(bodysize))
+		body, err = readBytes(buf, bodysize)
 	} else {
 		body = make([]byte, 0)
 	}
@@ -327,12 +336,6 @@ func DecodeGzipBody(body []byte) []byte {
 		return body
 	}
 	return ret
-}
-
-func readInt32(buf io.Reader) int32 {
-	var i int32
-	binary.Read(buf, binary.BigEndian, &i)
-	return i
 }
 
 func readBytes(buf *bufio.Reader, size int) ([]byte, error) {

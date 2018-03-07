@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bufio"
 	"fmt"
 	"testing"
 )
@@ -133,8 +134,9 @@ func TestEncode(t *testing.T) {
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
 	ebytes := msg.Encode()
+
 	fmt.Println("len:", ebytes.Len())
-	newMsg := Decode(ebytes)
+	newMsg, err := Decode(bufio.NewReader(ebytes))
 	if newMsg == nil {
 		t.Fatalf("encode message fail")
 	}
@@ -153,7 +155,7 @@ func TestEncode(t *testing.T) {
 	msg.Header.SetGzip(true)
 	msg.Body, _ = EncodeGzip([]byte("gzip encode"))
 	b := msg.Encode()
-	newMsg = Decode(b)
+	newMsg, _ = Decode(bufio.NewReader(b))
 	// should not decode gzip
 	if !newMsg.Header.IsGzip() {
 		t.Fatalf("encode message fail")
