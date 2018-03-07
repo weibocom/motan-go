@@ -212,9 +212,9 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		ip = request.GetAttachment(motan.HostKey)
 	}
 	req.Header.Add("x-forwarded-for", ip)
-	req.Header.Set("Accept-Encoding","")  //强制不走gzip
+	req.Header.Set("Accept-Encoding", "") //强制不走gzip
 
-	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000 * time.Millisecond)
+	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000*time.Millisecond)
 	c := http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {
