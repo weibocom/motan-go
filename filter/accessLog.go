@@ -1,11 +1,9 @@
 package filter
 
 import (
-	"time"
-    "fmt"
-    "strconv"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"time"
 )
 
 type AccessLogEndPointFilter struct {
@@ -42,12 +40,9 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	l := 0
 	if response.GetValue() != nil {
 		if b, ok := response.GetValue().([]byte); ok {
-			fmt.Println(b)
 			l = len(b)
 		}
-		fmt.Println("size=" + strconv.Itoa(l))
 		if s, ok := response.GetValue().(string); ok {
-			fmt.Println(s)
 			l = len(s)
 		}
 	}
