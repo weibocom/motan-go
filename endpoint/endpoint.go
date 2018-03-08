@@ -3,6 +3,8 @@ package endpoint
 import (
 	motan "github.com/weibocom/motan-go/core"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"sync/atomic"
+	"time"
 )
 
 // ext name
@@ -11,6 +13,13 @@ const (
 	Motan2 = "motan2"
 	Mock   = "mockEndpoint"
 )
+
+const (
+	pMask = 0xfffffffffff00000
+	sMask = 0x000fffff
+)
+
+var idOffset uint64 // id generator offset
 
 func RegistDefaultEndpoint(extFactory motan.ExtentionFactory) {
 	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
@@ -32,6 +41,12 @@ func GetRequestGroup(r motan.Request) string {
 		group = r.GetAttachment(motan.GroupKey)
 	}
 	return group
+}
+
+func GenerateRequestID() uint64 {
+	ms := uint64(time.Now().UnixNano())
+	offset := atomic.AddUint64(&idOffset, 1)
+	return (ms & pMask) | (offset & sMask)
 }
 
 type MockEndpoint struct {

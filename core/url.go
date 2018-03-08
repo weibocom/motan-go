@@ -18,14 +18,31 @@ type URL struct {
 	Path       string //e.g. service name
 	Group      string
 	Parameters map[string]string
+
+	// cached info
+	address  string
+	identity string
 }
 
 var (
 	defaultSerialize = "simple"
 )
 
+//TODO int param cache
+
+// GetIdentity return the identity of url. identity info includes protocol, host, port, path, group
+// the identity will cached, so must clear cached info after update above info by calling ClearCachedInfo()
 func (u *URL) GetIdentity() string {
-	return u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
+	if u.identity != "" {
+		return u.identity
+	}
+	u.identity = u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
+	return u.identity
+}
+
+func (u *URL) ClearCachedInfo() {
+	u.address = ""
+	u.identity = ""
 }
 
 func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
@@ -176,7 +193,11 @@ func (u *URL) GetPortStr() string {
 }
 
 func (u *URL) GetAddressStr() string {
-	return u.Host + ":" + u.GetPortStr()
+	if u.address != "" {
+		return u.address
+	}
+	u.address = u.Host + ":" + u.GetPortStr()
+	return u.address
 }
 
 func (u *URL) Copy() *URL {

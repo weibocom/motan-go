@@ -32,31 +32,39 @@ type Client struct {
 	extFactory motan.ExtentionFactory
 }
 
-func (m *Client) Call(method string, args []interface{}, reply interface{}) error {
-	req := m.buildRequest(method, args)
+func (c *Client) Call(method string, args []interface{}, reply interface{}) error {
+	req := c.BuildRequest(method, args)
+	return c.BaseCall(req, reply)
+}
+
+func (c *Client) BaseCall(req motan.Request, reply interface{}) error {
 	rc := req.GetRPCContext(true)
-	rc.ExtFactory = m.extFactory
+	rc.ExtFactory = c.extFactory
 	rc.Reply = reply
-	res := m.cluster.Call(req)
+	res := c.cluster.Call(req)
 	if res.GetException() != nil {
 		return errors.New(res.GetException().ErrMsg)
 	}
 	return nil
 }
 
-func (m *Client) Go(method string, args []interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
-	req := m.buildRequest(method, args)
+func (c *Client) Go(method string, args []interface{}, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
+	req := c.BuildRequest(method, args)
+	return c.BaseGo(req, reply, done)
+}
+
+func (c *Client) BaseGo(req motan.Request, reply interface{}, done chan *motan.AsyncResult) *motan.AsyncResult {
 	result := &motan.AsyncResult{}
 	if done == nil || cap(done) == 0 {
 		done = make(chan *motan.AsyncResult, 5)
 	}
 	result.Done = done
 	rc := req.GetRPCContext(true)
-	rc.ExtFactory = m.extFactory
+	rc.ExtFactory = c.extFactory
 	rc.Result = result
 	rc.AsyncCall = true
 	rc.Result.Reply = reply
-	res := m.cluster.Call(req)
+	res := c.cluster.Call(req)
 	if res.GetException() != nil {
 		result.Error = errors.New(res.GetException().ErrMsg)
 		result.Done <- result
@@ -64,21 +72,21 @@ func (m *Client) Go(method string, args []interface{}, reply interface{}, done c
 	return result
 }
 
-func (m *Client) buildRequest(method string, args []interface{}) motan.Request {
-	req := &motan.MotanRequest{Method: method, ServiceName: m.url.Path, Arguments: args, Attachment: make(map[string]string, 16)}
-	version := m.url.GetParam(motan.VersionKey, "")
+func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
+	req := &motan.MotanRequest{Method: method, ServiceName: c.url.Path, Arguments: args, Attachment: make(map[string]string, 16)}
+	version := c.url.GetParam(motan.VersionKey, "")
 	if version != "" {
 		req.Attachment[mpro.MVersion] = version
 	}
-	module := m.url.GetParam(motan.ModuleKey, "")
+	module := c.url.GetParam(motan.ModuleKey, "")
 	if module != "" {
 		req.Attachment[mpro.MModule] = module
 	}
-	application := m.url.GetParam(motan.ApplicationKey, "")
+	application := c.url.GetParam(motan.ApplicationKey, "")
 	if application != "" {
 		req.Attachment[mpro.MSource] = application
 	}
-	req.Attachment[mpro.MGroup] = m.url.Group
+	req.Attachment[mpro.MGroup] = c.url.Group
 
 	return req
 }
