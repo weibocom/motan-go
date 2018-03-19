@@ -262,7 +262,6 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	// decode header
 	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
 	if err != nil {
-		vlog.Errorf("not enough bytes to decode motan message header. err:%v\n", err)
 		return nil, errors.New("not enough bytes to decode motan message header.")
 	}
 	mn := binary.BigEndian.Uint16(temp[:2])
@@ -279,7 +278,6 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	// decode meta
 	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		vlog.Errorf("decode motan message fail. err:%v\n", err)
 		return nil, err
 	}
 	metasize := int(binary.BigEndian.Uint32(temp[:4]))
@@ -312,7 +310,6 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	//decode body
 	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		vlog.Errorf("decode motan message fail. err:%v\n", err)
 		return nil, err
 	}
 	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
