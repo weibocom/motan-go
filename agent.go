@@ -354,7 +354,7 @@ func (sa *serverAgentMessageHandler) GetProvider(serviceName string) motan.Provi
 }
 
 func getClusterKey(group, version, protocol, path string) string {
-	return fmt.Sprintf("%s_%s_%s_%s_", group, version, protocol, path)
+	return group + "_" + version + "_" + protocol + "_" + path
 }
 
 func initLog(logdir string) {

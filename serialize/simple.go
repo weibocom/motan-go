@@ -16,7 +16,7 @@ func (s *SimpleSerialization) GetSerialNum() int {
 }
 
 func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
-	buf := new(bytes.Buffer)
+	buf := bytes.NewBuffer(make([]byte, 0, 2048))
 	err := s.serializeBuf(v, buf)
 	return buf.Bytes(), err
 }
@@ -33,19 +33,17 @@ func (s *SimpleSerialization) serializeBuf(v interface{}, buf *bytes.Buffer) err
 		rv = reflect.ValueOf(v)
 	}
 
-	t := fmt.Sprintf("%s", rv.Type())
-
 	var err error
-	switch t {
+	switch rv.Type().String() {
 	case "string":
 		buf.WriteByte(1)
-		_, err = encodeString(rv, buf)
+		_, err = encodeString(rv.String(), buf)
 	case "map[string]string":
 		buf.WriteByte(2)
 		err = encodeMap(rv, buf)
 	case "[]uint8":
 		buf.WriteByte(3)
-		err = encodeBytes(rv, buf)
+		err = encodeBytes(rv.Bytes(), buf)
 	}
 	return err
 }
@@ -105,7 +103,7 @@ func (s *SimpleSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
 	if len(v) == 0 {
 		return nil, nil
 	}
-	buf := new(bytes.Buffer)
+	buf := bytes.NewBuffer(make([]byte, 0, 2048))
 	for _, o := range v {
 		err := s.serializeBuf(o, buf)
 		if err != nil {
@@ -129,12 +127,10 @@ func (s *SimpleSerialization) DeSerializeMulti(b []byte, v []interface{}) (ret [
 }
 
 func readInt32(buf *bytes.Buffer) (int, error) {
-	var i int32
-	err := binary.Read(buf, binary.BigEndian, &i)
-	if err != nil {
-		return 0, err
+	if buf.Len() >= 4 {
+		return int(binary.BigEndian.Uint32(buf.Next(4))), nil
 	}
-	return int(i), nil
+	return 0, errors.New("not enough bytes to parse int32")
 }
 
 func decodeString(buf *bytes.Buffer) (string, int, error) {
@@ -197,11 +193,13 @@ func decodeBytes(buf *bytes.Buffer) ([]byte, error) {
 	return b, nil
 }
 
-func encodeString(v reflect.Value, buf *bytes.Buffer) (int32, error) {
-	b := []byte(v.String())
-	l := int32(len(b))
-	err := binary.Write(buf, binary.BigEndian, l)
-	err = binary.Write(buf, binary.BigEndian, b)
+func encodeString(s string, buf *bytes.Buffer) (int, error) {
+	b := []byte(s)
+	l := len(b)
+	temp := make([]byte, 4, 4)
+	binary.BigEndian.PutUint32(temp, uint32(l))
+	_, err := buf.Write(temp)
+	_, err = buf.Write(b)
 	if err != nil {
 		return 0, err
 	}
@@ -209,30 +207,34 @@ func encodeString(v reflect.Value, buf *bytes.Buffer) (int32, error) {
 }
 
 func encodeMap(v reflect.Value, buf *bytes.Buffer) error {
-	b := new(bytes.Buffer)
-	var size, l int32
+	b := bytes.NewBuffer(make([]byte, 0, 2048))
+	var size, l int
 	var err error
 	for _, mk := range v.MapKeys() {
 		mv := v.MapIndex(mk)
-		l, err = encodeString(mk, b)
+		l, err = encodeString(mk.String(), b)
 		size += l
 		if err != nil {
 			return err
 		}
-		l, err = encodeString(mv, b)
+		l, err = encodeString(mv.String(), b)
 		size += l
 		if err != nil {
 			return err
 		}
 	}
-	err = binary.Write(buf, binary.BigEndian, int32(size))
-	err = binary.Write(buf, binary.BigEndian, b.Bytes()[:size])
+	temp := make([]byte, 4, 4)
+	binary.BigEndian.PutUint32(temp, uint32(size))
+	_, err = buf.Write(temp)
+	_, err = buf.Write(b.Bytes())
 	return err
 }
 
-func encodeBytes(v reflect.Value, buf *bytes.Buffer) error {
-	l := len(v.Bytes())
-	err := binary.Write(buf, binary.BigEndian, int32(l))
-	err = binary.Write(buf, binary.BigEndian, v.Bytes())
+func encodeBytes(b []byte, buf *bytes.Buffer) error {
+	l := len(b)
+	temp := make([]byte, 4, 4)
+	binary.BigEndian.PutUint32(temp, uint32(l))
+	_, err := buf.Write(temp)
+	_, err = buf.Write(b)
 	return err
 }
