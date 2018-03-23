@@ -262,7 +262,7 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	// decode header
 	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
 	if err != nil {
-		return nil, errors.New("not enough bytes to decode motan message header.")
+		return nil, err
 	}
 	mn := binary.BigEndian.Uint16(temp[:2])
 	if mn != MotanMagic {
