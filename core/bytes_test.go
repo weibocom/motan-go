@@ -126,72 +126,72 @@ func TestRead(t *testing.T) {
 		t.Errorf("order not correct. real:%s, expect:%s\n", buf.order, binary.BigEndian)
 	}
 	if buf2.rpos != 0 {
-		t.Errorf("rpos init value not correct. buf:%s\n", buf2)
+		t.Errorf("rpos init value not correct. buf:%v\n", buf2)
 	}
 	rsize := size1 + size2 + 4 + 8 + 1
 	if buf2.Len() != rsize {
-		t.Errorf("read buf len not correct. buf:%s\n", buf2)
+		t.Errorf("read buf len not correct. buf:%v\n", buf2)
 	}
 	if buf2.Remain() != rsize {
-		t.Errorf("read buf remain not correct. buf:%s\n", buf2)
+		t.Errorf("read buf remain not correct. buf:%v\n", buf2)
 	}
 
 	// read uint
 	l1, _ := buf2.ReadUint32()
 	if l1 != 20 || buf2.rpos != 4 {
-		t.Errorf("read uint32 not correct. buf:%s\n", buf2)
+		t.Errorf("read uint32 not correct. buf:%v\n", buf2)
 	}
 	if buf2.Len() != rsize {
-		t.Errorf("read buf len not correct. buf:%s\n", buf2)
+		t.Errorf("read buf len not correct. buf:%v\n", buf2)
 	}
 	if buf2.Remain() != rsize-4 {
-		t.Errorf("read buf remain not correct. buf:%s\n", buf2)
+		t.Errorf("read buf remain not correct. buf:%v\n", buf2)
 	}
 
 	// read bytes
 	rbytes1 := make([]byte, size1)
 	buf2.ReadFull(rbytes1)
 	if len(rbytes1) != size1 {
-		t.Errorf("read bytes not correct. bytes: %v, buf:%s\n", rbytes1, buf2)
+		t.Errorf("read bytes not correct. bytes: %v, buf:%v\n", rbytes1, buf2)
 	}
 
 	// read next
 	buf2.SetRPos(buf2.GetRPos() - size1)
 	rbytes2, _ := buf2.Next(size1)
 	if len(rbytes2) != size1 {
-		t.Errorf("read next not correct. bytes: %v, buf:%s\n", rbytes2, buf2)
+		t.Errorf("read next not correct. bytes: %v, buf:%v\n", rbytes2, buf2)
 	}
 	for i := 0; i < size1; i++ {
 		if rbytes1[i] != 'a' {
-			t.Errorf("read bytes not correct. bytes: %v, buf:%s\n", rbytes1, buf2)
+			t.Errorf("read bytes not correct. bytes: %v, buf:%v\n", rbytes1, buf2)
 		}
 		if rbytes2[i] != 'a' {
-			t.Errorf("read next not correct. bytes: %v, buf:%s\n", rbytes2, buf2)
+			t.Errorf("read next not correct. bytes: %v, buf:%v\n", rbytes2, buf2)
 		}
 	}
 
 	if buf2.rpos != size1+4 {
-		t.Errorf("rpos value not correct. buf:%s\n", buf2)
+		t.Errorf("rpos value not correct. buf:%v\n", buf2)
 	}
 
 	// read byte
 	b, _ := buf2.ReadByte()
 	if b != 'b' {
-		t.Errorf("read byte not correct. byte: %v, buf:%s\n", b, buf2)
+		t.Errorf("read byte not correct. byte: %v, buf:%v\n", b, buf2)
 	}
 
 	// read uint64
 	l2, _ := buf2.ReadUint64()
 	if int(l2) != size2 {
-		t.Errorf("read uint32 not correct. buf:%s\n", buf2)
+		t.Errorf("read uint32 not correct. buf:%v\n", buf2)
 	}
 	rbytes3, _ := buf2.Next(size2)
 	if len(rbytes3) != size2 {
-		t.Errorf("read next not correct. bytes: %v, buf:%s\n", rbytes3, buf2)
+		t.Errorf("read next not correct. bytes: %v, buf:%v\n", rbytes3, buf2)
 	}
 	for i := 0; i < size2; i++ {
 		if rbytes3[i] != 'c' {
-			t.Errorf("read next not correct. bytes: %v, buf:%s\n", rbytes3, buf2)
+			t.Errorf("read next not correct. bytes: %v, buf:%v\n", rbytes3, buf2)
 		}
 	}
 
