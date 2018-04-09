@@ -16,14 +16,10 @@ const (
 	sByteArray
 	sStringArray
 	sBool
-	sInt8
-	sUint8 // byte
+	sByte
 	sInt16
-	sUint16
 	sInt32
-	sUint32
 	sInt64
-	sUint64
 	sFloat32
 	sFloat64
 
@@ -88,22 +84,14 @@ func serializeBuf(v interface{}, buf *motan.BytesBuffer) error {
 		encodeString(rv.String(), buf)
 	case reflect.Bool:
 		encodeBool(rv.Bool(), buf)
-	case reflect.Int8:
-		encodeInt8(rv.Int(), buf)
 	case reflect.Uint8:
-		encodeUint8(rv.Uint(), buf)
+		encodeByte(byte(rv.Uint()), buf)
 	case reflect.Int16:
 		encodeInt16(rv.Int(), buf)
-	case reflect.Uint16:
-		encodeUint16(rv.Uint(), buf)
 	case reflect.Int32:
 		encodeInt32(rv.Int(), buf)
-	case reflect.Uint32:
-		encodeUint32(rv.Uint(), buf)
 	case reflect.Int, reflect.Int64:
 		encodeInt64(rv.Int(), buf)
-	case reflect.Uint, reflect.Uint64:
-		encodeUint64(rv.Uint(), buf)
 	case reflect.Float32:
 		encodeFloat32(rv.Float(), buf)
 	case reflect.Float64:
@@ -184,22 +172,14 @@ func deSerializeBuf(buf *motan.BytesBuffer, v interface{}) (interface{}, error) 
 		return decodeStringArray(buf, v)
 	case sBool:
 		return decodeBool(buf, v)
-	case sInt8:
-		return decodeInt8(buf, v)
-	case sUint8:
-		return decodeUint8(buf, v)
+	case sByte:
+		return decodeByte(buf, v)
 	case sInt16:
 		return decodeInt16(buf, v)
-	case sUint16:
-		return decodeUint16(buf, v)
 	case sInt32:
 		return decodeInt32(buf, v)
-	case sUint32:
-		return decodeUint32(buf, v)
 	case sInt64:
 		return decodeInt64(buf, v)
-	case sUint64:
-		return decodeUint64(buf, v)
 	case sFloat32:
 		return decodeFloat32(buf, v)
 	case sFloat64:
@@ -306,14 +286,9 @@ func encodeArray(v reflect.Value, buf *motan.BytesBuffer) error {
 	return nil
 }
 
-func encodeInt8(i int64, buf *motan.BytesBuffer) {
-	buf.WriteByte(sInt8)
-	buf.WriteByte(uint8(i))
-}
-
-func encodeUint8(i uint64, buf *motan.BytesBuffer) {
-	buf.WriteByte(sUint8)
-	buf.WriteByte(uint8(i))
+func encodeByte(i byte, buf *motan.BytesBuffer) {
+	buf.WriteByte(sByte)
+	buf.WriteByte(i)
 }
 
 func encodeInt16(i int64, buf *motan.BytesBuffer) {
@@ -321,29 +296,14 @@ func encodeInt16(i int64, buf *motan.BytesBuffer) {
 	buf.WriteUint16(uint16(i))
 }
 
-func encodeUint16(u uint64, buf *motan.BytesBuffer) {
-	buf.WriteByte(sUint16)
-	buf.WriteUint16(uint16(u))
-}
-
 func encodeInt32(i int64, buf *motan.BytesBuffer) {
 	buf.WriteByte(sInt32)
 	buf.WriteZigzag32(uint32(i))
 }
 
-func encodeUint32(u uint64, buf *motan.BytesBuffer) {
-	buf.WriteByte(sUint32)
-	buf.WriteZigzag32(uint32(u))
-}
-
 func encodeInt64(i int64, buf *motan.BytesBuffer) {
 	buf.WriteByte(sInt64)
 	buf.WriteZigzag64(uint64(i))
-}
-
-func encodeUint64(u uint64, buf *motan.BytesBuffer) {
-	buf.WriteByte(sUint64)
-	buf.WriteZigzag64(u)
 }
 
 func encodeFloat32(f float64, buf *motan.BytesBuffer) {
@@ -473,7 +433,11 @@ func decodeMap(buf *motan.BytesBuffer, v interface{}) (map[interface{}]interface
 		}
 		m[k] = tv
 	}
-	// TODO set v if v is a pointer
+	if v != nil {
+		if rv, ok := v.(*map[interface{}]interface{}); ok {
+			*rv = m
+		}
+	}
 	return m, nil
 }
 
@@ -498,7 +462,11 @@ func decodeArray(buf *motan.BytesBuffer, v interface{}) ([]interface{}, error) {
 	if (buf.GetRPos() - pos) != total {
 		return nil, ErrWrongSize
 	}
-	// TODO set v if v is a pointer
+	if v != nil {
+		if rv, ok := v.(*[]interface{}); ok {
+			*rv = a
+		}
+	}
 	return a, nil
 }
 
@@ -531,30 +499,17 @@ func decodeStringArray(buf *motan.BytesBuffer, v interface{}) ([]string, error) 
 	return a, nil
 }
 
-func decodeInt8(buf *motan.BytesBuffer, v interface{}) (int8, error) {
+func decodeByte(buf *motan.BytesBuffer, v interface{}) (byte, error) {
 	b, err := buf.ReadByte()
 	if err != nil {
 		return 0, err
 	}
 	if v != nil {
-		if bv, ok := v.(*int8); ok {
-			*bv = int8(b)
+		if bv, ok := v.(*byte); ok {
+			*bv = byte(b)
 		}
 	}
-	return int8(b), nil
-}
-
-func decodeUint8(buf *motan.BytesBuffer, v interface{}) (uint8, error) {
-	b, err := buf.ReadByte()
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		if bv, ok := v.(*uint8); ok {
-			*bv = b
-		}
-	}
-	return b, nil
+	return byte(b), nil
 }
 
 func decodeInt16(buf *motan.BytesBuffer, v interface{}) (int16, error) {
@@ -570,19 +525,6 @@ func decodeInt16(buf *motan.BytesBuffer, v interface{}) (int16, error) {
 	return int16(i), nil
 }
 
-func decodeUint16(buf *motan.BytesBuffer, v interface{}) (uint16, error) {
-	i, err := buf.ReadUint16()
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		if bv, ok := v.(*uint16); ok {
-			*bv = i
-		}
-	}
-	return i, nil
-}
-
 func decodeInt32(buf *motan.BytesBuffer, v interface{}) (int32, error) {
 	i, err := buf.ReadZigzag32()
 	if err != nil {
@@ -594,19 +536,6 @@ func decodeInt32(buf *motan.BytesBuffer, v interface{}) (int32, error) {
 		}
 	}
 	return int32(i), nil
-}
-
-func decodeUint32(buf *motan.BytesBuffer, v interface{}) (uint32, error) {
-	i, err := buf.ReadZigzag32()
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		if bv, ok := v.(*uint32); ok {
-			*bv = uint32(i)
-		}
-	}
-	return uint32(i), nil
 }
 
 func decodeInt64(buf *motan.BytesBuffer, v interface{}) (int64, error) {
@@ -623,22 +552,6 @@ func decodeInt64(buf *motan.BytesBuffer, v interface{}) (int64, error) {
 		}
 	}
 	return int64(i), nil
-}
-
-func decodeUint64(buf *motan.BytesBuffer, v interface{}) (uint64, error) {
-	i, err := buf.ReadZigzag64()
-	if err != nil {
-		return 0, err
-	}
-	if v != nil {
-		if bv, ok := v.(*uint64); ok {
-			*bv = i
-		}
-		if bv, ok := v.(*uint); ok {
-			*bv = uint(i)
-		}
-	}
-	return i, nil
 }
 
 func decodeFloat32(buf *motan.BytesBuffer, v interface{}) (float32, error) {

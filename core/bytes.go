@@ -17,6 +17,8 @@ type BytesBuffer struct {
 }
 
 var ErrNotEnough = errors.New("BytesBuffer: not enough bytes")
+var ErrOverflow = errors.New("BytesBuffer: integer overflow")
+
 
 // NewBytesBuffer create a empty BytesBuffer with initial size
 func NewBytesBuffer(initsize int) *BytesBuffer {
@@ -215,8 +217,7 @@ func (b *BytesBuffer) ReadZigzag32() (x uint64, err error) {
 
 func (b *BytesBuffer) ReadVarint() (x uint64, err error) {
 	var temp byte
-	var offset uint
-	for {
+	for offset := uint(0); offset < 64; offset += 7 {
 		temp, err = b.ReadByte()
 		if err != nil {
 			return 0, err
@@ -226,8 +227,8 @@ func (b *BytesBuffer) ReadVarint() (x uint64, err error) {
 			return x, nil
 		}
 		x |= (uint64(temp&0x7f) << offset)
-		offset += 7
 	}
+	return 0, ErrOverflow
 }
 
 func (b *BytesBuffer) Next(n int) ([]byte, error) {

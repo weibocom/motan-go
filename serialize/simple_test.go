@@ -205,31 +205,22 @@ func TestSerializeBaseType(t *testing.T) {
 	// bool
 	verifyBaseType(true, simple, t)
 	verifyBaseType(false, simple, t)
-	//int8
-	verifyBaseType(int8(-16), simple, t)
-	verifyBaseType(uint8(16), simple, t)
-	verifyBaseType(int8(0), simple, t)
-	verifyBaseType(uint8(255), simple, t)
+	//byte
+	verifyBaseType(byte(16), simple, t)
+	verifyBaseType(byte(0), simple, t)
+	verifyBaseType(byte(255), simple, t)
 	// int16
 	verifyBaseType(int16(-16), simple, t)
-	verifyBaseType(uint16(16), simple, t)
 	verifyBaseType(int16(0), simple, t)
-	verifyBaseType(uint16(65535), simple, t)
 	//int32
 	verifyBaseType(int32(-16), simple, t)
-	verifyBaseType(uint32(16), simple, t)
 	verifyBaseType(int32(0), simple, t)
-	verifyBaseType(uint32(255), simple, t)
 	//int
 	verifyBaseType(int(-16), simple, t)
-	verifyBaseType(uint(16), simple, t)
 	verifyBaseType(int(0), simple, t)
-	verifyBaseType(uint(255), simple, t)
 	//int64
 	verifyBaseType(int64(-16), simple, t)
-	verifyBaseType(uint64(16), simple, t)
 	verifyBaseType(int64(0), simple, t)
-	verifyBaseType(uint64(255), simple, t)
 	//float32
 	verifyBaseType(float32(3.141592653), simple, t)
 	verifyBaseType(float32(-3.141592653), simple, t)
