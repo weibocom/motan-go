@@ -200,6 +200,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		fillException(resp, t, err)
 		return resp
 	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded") //设置后，post参数才可正常传递
 	for k, v := range request.GetAttachments() {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		req.Header.Add(k, v)
