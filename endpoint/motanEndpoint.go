@@ -141,8 +141,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
 	}
-	// reset errorCount
-	m.resetErr()
 	if rc != nil && rc.AsyncCall {
 		return defaultAsyncResonse
 	}
@@ -151,7 +149,13 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	if err != nil {
 		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
-
+	}
+	excep := response.GetException()
+	if excep != nil && excep.ErrCode == 503 {
+		m.recordErrAndKeepalive()
+	} else {
+		// reset errorCount
+		m.resetErr()
 	}
 	response.ProcessDeserializable(rc.Reply)
 	response.SetProcessTime(int64((time.Now().UnixNano() - startTime) / 1000000))
