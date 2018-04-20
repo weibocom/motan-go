@@ -116,8 +116,11 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
 
-		ip := getRemoteIP(conn.RemoteAddr().String())
-		req.SetAttachment(motan.HostKey, ip)
+		if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+			req.SetAttachment(motan.HostKey, ta.IP.String())
+		} else {
+			req.SetAttachment(motan.HostKey, getRemoteIP(conn.RemoteAddr().String()))
+		}
 
 		req.GetRPCContext(true).ExtFactory = m.extFactory
 		if err != nil {

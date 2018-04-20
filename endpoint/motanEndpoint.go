@@ -278,13 +278,13 @@ type Stream struct {
 	sendMsg *mpro.Message
 	// recv msg
 	recvMsg      *mpro.Message
-	recvLock     sync.Mutex
 	recvNotifyCh chan struct{}
 	// timeout
 	deadline time.Time
 
-	rc      *motan.RPCContext
-	isClose bool
+	rc          *motan.RPCContext
+	isClose     bool
+	isHeartBeat bool
 }
 
 func (s *Stream) Send() error {
@@ -313,9 +313,7 @@ func (s *Stream) Recv() (*mpro.Message, error) {
 	defer timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
-		s.recvLock.Lock()
 		msg := s.recvMsg
-		s.recvLock.Unlock()
 		if msg == nil {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
@@ -346,9 +344,7 @@ func (s *Stream) notify(msg *mpro.Message) {
 		result.Done <- result
 		return
 	}
-	s.recvLock.Lock()
 	s.recvMsg = msg
-	s.recvLock.Unlock()
 	s.recvNotifyCh <- struct{}{}
 }
 
@@ -378,6 +374,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		c.heartbeatLock.Lock()
 		c.heartbeats[msg.Header.RequestID] = s
 		c.heartbeatLock.Unlock()
+		s.isHeartBeat = true
 	} else {
 		c.streamLock.Lock()
 		c.streams[msg.Header.RequestID] = s
@@ -388,7 +385,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 
 func (s *Stream) Close() {
 	if !s.isClose {
-		if s.sendMsg.Header.IsHeartbeat() {
+		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
 			s.channel.heartbeatLock.Unlock()

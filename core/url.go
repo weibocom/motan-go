@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,25 +53,21 @@ func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
 }
 
 func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
-	result, err := u.GetInt(key)
-	if err == nil {
+	result, b := u.GetInt(key)
+	if b {
 		return result
 	}
 	return defaultValue
 }
 
-func (u *URL) GetInt(key string) (i int64, err error) {
-
+func (u *URL) GetInt(key string) (i int64, b bool) {
 	if v, ok := u.Parameters[key]; ok {
 		intvalue, err := strconv.ParseInt(v, 10, 64)
 		if err == nil {
-			return intvalue, nil
+			return intvalue, true
 		}
-	} else {
-		err = errors.New("map key not exist")
 	}
-
-	return 0, err
+	return 0, b
 }
 
 func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {
@@ -88,12 +83,12 @@ func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string
 
 func (u *URL) GetMethodIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
 	mkey := method + "(" + methodDesc + ")." + key
-	result, err := u.GetInt(mkey)
-	if err == nil {
+	result, b := u.GetInt(mkey)
+	if b {
 		return result
 	}
-	result, err = u.GetInt(key)
-	if err == nil {
+	result, b = u.GetInt(key)
+	if b {
 		return result
 	}
 	return defaultValue
