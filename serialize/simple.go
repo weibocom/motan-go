@@ -10,7 +10,7 @@ import (
 
 // serialize type
 const (
-	sNull = iota
+	sNull        = iota
 	sString
 	sStringMap
 	sByteArray
@@ -361,23 +361,21 @@ func decodeStringMap(buf *motan.BytesBuffer, v interface{}) (map[string]string, 
 	}
 	m := make(map[string]string, 32)
 	pos := buf.GetRPos()
+	endPos := pos + total
 	var k, tv string
-	for (buf.GetRPos() - pos) < total {
+	for buf.GetRPos() < endPos {
 		k, err = decodeString(buf, nil)
 		if err != nil {
 			return nil, err
-		}
-		if (buf.GetRPos() - pos) > total {
-			return nil, ErrWrongSize
 		}
 		tv, err = decodeString(buf, nil)
 		if err != nil {
 			return nil, err
 		}
-		if (buf.GetRPos() - pos) > total {
-			return nil, ErrWrongSize
-		}
 		m[k] = tv
+	}
+	if buf.GetRPos() != endPos {
+		return nil, ErrWrongSize
 	}
 	if v != nil {
 		if mv, ok := v.(*map[string]string); ok {
@@ -416,22 +414,20 @@ func decodeMap(buf *motan.BytesBuffer, v interface{}) (map[interface{}]interface
 	var k interface{}
 	var tv interface{}
 	pos := buf.GetRPos()
-	for (buf.GetRPos() - pos) < total {
+	endPos := pos + total
+	for buf.GetRPos() < endPos {
 		k, err = deSerializeBuf(buf, nil)
 		if err != nil {
 			return nil, err
-		}
-		if (buf.GetRPos() - pos) > total {
-			return nil, ErrWrongSize
 		}
 		tv, err = deSerializeBuf(buf, nil)
 		if err != nil {
 			return nil, err
 		}
-		if (buf.GetRPos() - pos) > total {
-			return nil, ErrWrongSize
-		}
 		m[k] = tv
+	}
+	if buf.GetRPos() != endPos {
+		return nil, ErrWrongSize
 	}
 	if v != nil {
 		if rv, ok := v.(*map[interface{}]interface{}); ok {
@@ -451,15 +447,16 @@ func decodeArray(buf *motan.BytesBuffer, v interface{}) ([]interface{}, error) {
 	}
 	a := make([]interface{}, 0, 32)
 	pos := buf.GetRPos()
+	endPos := pos + total
 	var tv interface{}
-	for (buf.GetRPos() - pos) < total {
+	for buf.GetRPos() < endPos {
 		tv, err = deSerializeBuf(buf, nil)
 		if err != nil {
 			return nil, err
 		}
 		a = append(a, tv)
 	}
-	if (buf.GetRPos() - pos) != total {
+	if buf.GetRPos() != endPos {
 		return nil, ErrWrongSize
 	}
 	if v != nil {
@@ -480,15 +477,16 @@ func decodeStringArray(buf *motan.BytesBuffer, v interface{}) ([]string, error) 
 	}
 	a := make([]string, 0, 32)
 	pos := buf.GetRPos()
+	endPos := pos + total
 	var tv string
-	for (buf.GetRPos() - pos) < total {
+	for buf.GetRPos() < endPos {
 		tv, err = decodeString(buf, nil)
 		if err != nil {
 			return nil, err
 		}
 		a = append(a, tv)
 	}
-	if (buf.GetRPos() - pos) != total {
+	if buf.GetRPos() != endPos {
 		return nil, ErrWrongSize
 	}
 	if v != nil {
