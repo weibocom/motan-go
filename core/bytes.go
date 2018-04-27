@@ -19,7 +19,6 @@ type BytesBuffer struct {
 var ErrNotEnough = errors.New("BytesBuffer: not enough bytes")
 var ErrOverflow = errors.New("BytesBuffer: integer overflow")
 
-
 // NewBytesBuffer create a empty BytesBuffer with initial size
 func NewBytesBuffer(initsize int) *BytesBuffer {
 	return NewBytesBufferWithOrder(initsize, binary.BigEndian)
@@ -49,6 +48,9 @@ func CreateBytesBufferWithOrder(data []byte, order binary.ByteOrder) *BytesBuffe
 
 // SetWPos set the write position of BytesBuffer
 func (b *BytesBuffer) SetWPos(pos int) {
+	if len(b.buf) < pos {
+		b.grow(pos - len(b.buf))
+	}
 	b.wpos = pos
 }
 
@@ -202,7 +204,7 @@ func (b *BytesBuffer) ReadZigzag64() (x uint64, err error) {
 	if err != nil {
 		return
 	}
-	x = (x >> 1) ^ uint64((int64(x&1)<<63)>>63)
+	x = (x >> 1) ^ uint64(-int64(x&1))
 	return
 }
 
@@ -211,7 +213,7 @@ func (b *BytesBuffer) ReadZigzag32() (x uint64, err error) {
 	if err != nil {
 		return
 	}
-	x = uint64((uint32(x) >> 1) ^ uint32((int32(x&1)<<31)>>31))
+	x = uint64((uint32(x) >> 1) ^ uint32(-int32(x&1)))
 	return
 }
 

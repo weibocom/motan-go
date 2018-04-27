@@ -10,7 +10,7 @@ import (
 
 // serialize type
 const (
-	sNull        = iota
+	sNull = iota
 	sString
 	sStringMap
 	sByteArray
