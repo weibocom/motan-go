@@ -8,7 +8,7 @@ import (
 
 func TestWrite(t *testing.T) {
 	// new BytesBuffer
-	initsize := 128
+	initsize := 1
 	buf := NewBytesBufferWithOrder(initsize, binary.LittleEndian)
 	if buf.order != binary.LittleEndian {
 		t.Errorf("order not correct. real:%s, expect:%s\n", buf.order, binary.LittleEndian)
@@ -30,6 +30,13 @@ func TestWrite(t *testing.T) {
 	if buf.wpos != 0 || buf.rpos != 0 {
 		t.Errorf("buf wpos or rpos init value not correct.wpos:%d, rpos:%d\n", buf.wpos, buf.rpos)
 	}
+
+	buf.SetWPos(3)
+	if buf.Cap() < 3 || buf.wpos != 3{
+		t.Errorf("buf SetWPos expand buffer failed: %d", buf.Cap())
+	}
+
+	buf.SetWPos(0)
 
 	// write byte
 	buf.WriteByte('a')
