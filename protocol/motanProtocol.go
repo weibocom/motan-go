@@ -401,7 +401,7 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			return nil, errors.New("serialization is nil")
+			return nil, errors.New("serialization not found")
 		}
 		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
 		motanRequest.Arguments = []interface{}{dv}
