@@ -83,7 +83,7 @@ var (
 	ErrStatus         = errors.New("message status not correct")
 	ErrMetadata       = errors.New("decode meta data fail")
 	ErrSerializeNum   = errors.New("message serialize number not correct")
-	ErrSerializeNil   = errors.New("message serialize is nil")
+	ErrSerializeNil   = errors.New("message serialize not found")
 	ErrSerializedData = errors.New("message serialized data not correct")
 )
 
