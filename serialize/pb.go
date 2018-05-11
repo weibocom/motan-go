@@ -68,7 +68,8 @@ func (p *PbSerialization) GetSerialNum() int {
 
 func (p *PbSerialization) Serialize(v interface{}) ([]byte, error) {
 	buf := proto.NewBuffer(nil)
-	return buf.Bytes(), p.serializeBuf(buf, v)
+	err := p.serializeBuf(buf, v)
+	return buf.Bytes(), err
 }
 
 func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) error {
@@ -81,36 +82,41 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) error {
 		buf.Marshal(message)
 		return nil
 	}
-
+	var err error = nil
 	rv := getReflectValue(v)
+	fmt.Println("Se--TypeOf:", reflect.TypeOf(v).Kind(), "Type:", rv.Type(), "Kind:", rv.Kind())
 	switch rv.Kind() {
 	case reflect.Bool:
 		if rv.Bool() {
-			buf.EncodeVarint(1)
+			err = buf.EncodeVarint(1)
 		} else {
-			buf.EncodeVarint(0)
+			err = buf.EncodeVarint(0)
 		}
 	case reflect.Int32, reflect.Int16:
-		buf.EncodeZigzag32(uint64(rv.Int()))
+		err = buf.EncodeZigzag32(uint64(rv.Int()))
 	case reflect.Uint32, reflect.Uint16:
-		buf.EncodeZigzag32(rv.Uint())
+		err = buf.EncodeZigzag32(rv.Uint())
 	case reflect.Int, reflect.Int64:
-		buf.EncodeZigzag64(uint64(rv.Int()))
+		err = buf.EncodeZigzag64(uint64(rv.Int()))
 	case reflect.Uint, reflect.Uint64:
-		buf.EncodeZigzag64(rv.Uint())
+		err = buf.EncodeZigzag64(rv.Uint())
 	case reflect.Float32:
-		buf.EncodeFixed32(uint64(rv.Float()))
+		err = buf.EncodeFixed32(uint64(rv.Float()))
 	case reflect.Float64:
-		buf.EncodeFixed64(uint64(rv.Float()))
+		err = buf.EncodeFixed64(uint64(rv.Float()))
 	case reflect.String:
-		buf.EncodeStringBytes(rv.String())
+		err = buf.EncodeStringBytes(rv.String())
 	default:
 		if rv.Type().String() == "[]uint8" {
-			buf.EncodeRawBytes(rv.Bytes())
+			err = buf.EncodeRawBytes(rv.Bytes())
 		} else {
-			vlog.Errorf("%v is not support in PbSerialization\n", rv.Type().String())
-			return errors.New("not support serialize type : " + rv.Type().String())
+			err = errors.New("not support serialize type : " + rv.Type().String())
 		}
+	}
+	if err != nil {
+		vlog.Errorln(err)
+		fmt.Println(err)
+		return err
 	}
 	return nil
 }
@@ -121,48 +127,69 @@ func (p *PbSerialization) DeSerialize(b []byte, v interface{}) (interface{}, err
 }
 
 func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (interface{}, error) {
+	var temp interface{}
 	i, err := buf.DecodeVarint()
+	if err == nil {
+		if i == 1 {
+			return nil, nil
+		}
+		if message, ok := v.(proto.Message); ok {
+			err = buf.Unmarshal(message)
+			return message, err
+		}
+		rv := getReflectValue(v)
+		k := rv.Kind()
+		if k == reflect.Interface {
+			rv = reflect.ValueOf(rv.Interface())
+			k = rv.Kind()
+		}
+		fmt.Println("De--", v, "TypeOf:", reflect.TypeOf(v).Elem().Kind(), "Type:", rv.Type(), "Kind:", rv.Kind(), "k:", k)
+
+		k = reflect.String //test
+
+		switch k {
+		case reflect.Bool:
+			temp, err = buf.DecodeVarint()
+			if err == nil {
+				if temp == 1 {
+					v = true
+				} else {
+					v = false
+				}
+			}
+		case reflect.Int32, reflect.Int16:
+			temp, err = buf.DecodeZigzag32()
+			v = temp.(int32)
+		case reflect.Uint32, reflect.Uint16:
+			temp, err = buf.DecodeZigzag32()
+			v = temp.(uint32)
+		case reflect.Int, reflect.Int64:
+			temp, err = buf.DecodeZigzag64()
+			v = temp.(int)
+		case reflect.Uint, reflect.Uint64:
+			temp, err = buf.DecodeZigzag64()
+			v = temp.(uint)
+		case reflect.Float32:
+			temp, err = buf.DecodeFixed32()
+			v = temp.(float32)
+		case reflect.Float64:
+			temp, err = buf.DecodeFixed64()
+			v = temp.(float64)
+		case reflect.String:
+			temp, err = buf.DecodeStringBytes()
+			v = temp.(string)
+		default:
+			if rv.Type().String() == "[]uint8" {
+				v, err = buf.DecodeRawBytes(true)
+			} else {
+				err = errors.New("not support deserialize type : " + rv.Type().String())
+			}
+		}
+	}
 	if err != nil {
+		vlog.Errorln(err)
+		fmt.Println(err)
 		return nil, err
-	}
-	if i == 1 {
-		return nil, nil
-	}
-	if message, ok := v.(proto.Message); ok {
-		err := buf.Unmarshal(message)
-		return message, err
-	}
-	rv := getReflectValue(v)
-	switch rv.Kind() {
-	case reflect.Bool:
-		u, err := buf.DecodeVarint()
-		if rv.Bool() {
-			buf.de
-			buf.EncodeVarint(1)
-		} else {
-			buf.EncodeVarint(0)
-		}
-	case reflect.Int32, reflect.Int16:
-		buf.EncodeZigzag32(uint64(rv.Int()))
-	case reflect.Uint32, reflect.Uint16:
-		buf.EncodeZigzag32(rv.Uint())
-	case reflect.Int, reflect.Int64:
-		buf.EncodeZigzag64(uint64(rv.Int()))
-	case reflect.Uint, reflect.Uint64:
-		buf.EncodeZigzag64(rv.Uint())
-	case reflect.Float32:
-		buf.EncodeFixed32(uint64(rv.Float()))
-	case reflect.Float64:
-		buf.EncodeFixed64(uint64(rv.Float()))
-	case reflect.String:
-		buf.EncodeStringBytes(rv.String())
-	default:
-		if rv.Type().String() == "[]uint8" {
-			buf.EncodeRawBytes(rv.Bytes())
-		} else {
-			vlog.Errorf("%v is not support in PbSerialization\n", rv.Type().String())
-			return nil, errors.New("not support serialize type : " + rv.Type().String())
-		}
 	}
 	return v, nil
 }

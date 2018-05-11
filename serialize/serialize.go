@@ -7,11 +7,19 @@ import (
 
 const (
 	Simple = "simple"
+	Pb     = "pb"
+	GrpcPb = "grpcPb"
 )
 
 func RegistDefaultSerializations(extFactory motan.ExtentionFactory) {
 	extFactory.RegistryExtSerialization(Simple, 6, func() motan.Serialization {
 		return &SimpleSerialization{}
+	})
+	extFactory.RegistryExtSerialization(Pb, 5, func() motan.Serialization {
+		return &PbSerialization{}
+	})
+	extFactory.RegistryExtSerialization(GrpcPb, 4, func() motan.Serialization {
+		return &GrpcPbSerialization{}
 	})
 }
 
