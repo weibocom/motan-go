@@ -1,11 +1,14 @@
 package serialize
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/weibocom/motan-go/log"
+	"math"
 	"reflect"
+	"strings"
 )
 
 type GrpcPbSerialization struct{}
@@ -84,7 +87,6 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) error {
 	}
 	var err error = nil
 	rv := getReflectValue(v)
-	fmt.Println("Se--TypeOf:", reflect.TypeOf(v).Kind(), "Type:", rv.Type(), "Kind:", rv.Kind())
 	switch rv.Kind() {
 	case reflect.Bool:
 		if rv.Bool() {
@@ -137,18 +139,10 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			err = buf.Unmarshal(message)
 			return message, err
 		}
-		rv := getReflectValue(v)
-		k := rv.Kind()
-		if k == reflect.Interface {
-			rv = reflect.ValueOf(rv.Interface())
-			k = rv.Kind()
-		}
-		fmt.Println("De--", v, "TypeOf:", reflect.TypeOf(v).Elem().Kind(), "Type:", rv.Type(), "Kind:", rv.Kind(), "k:", k)
-
-		k = reflect.String //test
-
-		switch k {
-		case reflect.Bool:
+		vv := fmt.Sprintf("%s", v)
+		vStr := strings.Replace(vv, "*", "", -1)
+		switch vStr {
+		case "bool":
 			temp, err = buf.DecodeVarint()
 			if err == nil {
 				if temp == 1 {
@@ -157,32 +151,34 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 					v = false
 				}
 			}
-		case reflect.Int32, reflect.Int16:
+		case "int32", "int16":
 			temp, err = buf.DecodeZigzag32()
-			v = temp.(int32)
-		case reflect.Uint32, reflect.Uint16:
+			v = temp
+		case "uint32", "uint16":
 			temp, err = buf.DecodeZigzag32()
-			v = temp.(uint32)
-		case reflect.Int, reflect.Int64:
+			v = temp
+		case "int", "int64":
 			temp, err = buf.DecodeZigzag64()
-			v = temp.(int)
-		case reflect.Uint, reflect.Uint64:
+			v = temp
+		case "uint", "uint64":
 			temp, err = buf.DecodeZigzag64()
-			v = temp.(uint)
-		case reflect.Float32:
-			temp, err = buf.DecodeFixed32()
-			v = temp.(float32)
-		case reflect.Float64:
+			v = temp
+		case "float32": //todo:浮点型如何反序列化
+			bits := binary.BigEndian.Uint32(buf.Bytes())
+			v = math.Float32frombits(bits)
+			//temp, err = buf.DecodeFixed32()
+			//v = temp
+		case "float64":
 			temp, err = buf.DecodeFixed64()
-			v = temp.(float64)
-		case reflect.String:
+			v = temp
+		case "string":
 			temp, err = buf.DecodeStringBytes()
-			v = temp.(string)
+			v = temp
 		default:
-			if rv.Type().String() == "[]uint8" {
+			if vStr == "[]uint8" {
 				v, err = buf.DecodeRawBytes(true)
 			} else {
-				err = errors.New("not support deserialize type : " + rv.Type().String())
+				err = errors.New("not support deserialize type : " + vStr)
 			}
 		}
 	}
@@ -192,6 +188,11 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 		return nil, err
 	}
 	return v, nil
+}
+func ByteToFloat32(bytes []byte) float32 {
+	bits := binary.LittleEndian.Uint32(bytes)
+
+	return math.Float32frombits(bits)
 }
 
 func (p *PbSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
