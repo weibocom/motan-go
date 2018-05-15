@@ -134,6 +134,11 @@ func (p *PbSerialization) DeSerialize(b []byte, v interface{}) (interface{}, err
 	return p.deSerializeBuf(buf, v)
 }
 
+type Stringer interface {
+	String() string
+	//Kind() reflect.Kind
+}
+
 func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (interface{}, error) {
 	var temp uint64
 	i, err := buf.DecodeVarint()
@@ -145,10 +150,7 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			err = buf.Unmarshal(message)
 			return message, err
 		}
-		//todo：*reflect.rtype类型，如何处理？
-		//fmt.Println("vvvvv:", **(**reflect.Value)(unsafe.Pointer(&v)), reflect.ValueOf(*(*reflect.Value)(unsafe.Pointer(&v))))
-		vv := fmt.Sprintf("%s", v)
-		vStr := strings.Replace(vv, "*", "", -1)
+		vStr := strings.Replace(v.(Stringer).String(), "*", "", 1)
 		switch vStr {
 		case "bool":
 			temp, err = buf.DecodeVarint()
