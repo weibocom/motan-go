@@ -161,7 +161,6 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 					v = false
 				}
 			}
-
 		case "int32", "int16":
 			temp, err = buf.DecodeZigzag32()
 			v = int32(temp)
