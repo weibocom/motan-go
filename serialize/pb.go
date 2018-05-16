@@ -92,7 +92,6 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 	} else {
 		rv = reflect.ValueOf(v)
 	}
-	//fmt.Println(float32(rv.Float()), rv.Kind())
 	switch rv.Kind() {
 	case reflect.Bool:
 		if rv.Bool() {
@@ -136,7 +135,7 @@ func (p *PbSerialization) DeSerialize(b []byte, v interface{}) (interface{}, err
 
 type Stringer interface {
 	String() string
-	//Kind() reflect.Kind
+	Kind() reflect.Kind
 }
 
 func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (interface{}, error) {
@@ -151,6 +150,7 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			return message, err
 		}
 		vStr := strings.Replace(v.(Stringer).String(), "*", "", 1)
+		//vStr := (v.(Stringer)).String()
 		switch vStr {
 		case "bool":
 			temp, err = buf.DecodeVarint()

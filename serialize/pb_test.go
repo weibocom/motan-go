@@ -88,6 +88,20 @@ func TestPbSerialization_Serialize(t *testing.T) {
 		t.Errorf("deserialize value not correct. result:%v\n", r3)
 	}
 
+	//type: bool
+	var rBool = true
+	seBool, err := s.Serialize(rBool)
+	if err != nil || len(seBool) == 0 {
+		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seBool), err)
+	}
+	var resBool = false
+	deBool, err := s.DeSerialize(seBool, reflect.TypeOf(resBool))
+	if err != nil {
+		t.Errorf("serialize fail. err:%v\n", err)
+	} else if deBool != rBool {
+		t.Errorf("deserialize value not correct. result:%v\n", rBool)
+	}
+
 	//type: int32
 	var rInt32 int32 = 323232
 	seInt32, err := s.Serialize(rInt32)
