@@ -7,6 +7,11 @@ import (
 	"github.com/weibocom/motan-go/core"
 );
 
+const (
+	tracingWithAgent = "x-tracing-by-agent"
+	yes              = "true"
+)
+
 // TracingFilter用来拦截所有的RPC请求，包括接收的请求和发出的请求
 //
 //    1. 接收的请求，当前作为服务端，此时caller应该为core.Provider类型
@@ -26,6 +31,15 @@ import (
 //    caller -----------> agent -----------> worker -----------> agent -----------> dependents
 //             [span1]            [span1] <pass-thru> [span1]            [span2]
 //
+// 该功能是会影响现有功能的，影响包括两方面
+//
+//    1. 如果业务已经有了trace功能，那么对外调用的时候，它就已经用了合适的span信息了。
+//       该Filter对对外调用的trace信息的更改，会影响trace的正确性。
+//    2. 如果业务已经有了trace功能，业务会记录一遍trace相关的信息，而agent也会记录一遍
+//       会导致trace信息重复
+//
+//  TODO 需要自动识别业务是否有trace功能，或者有开关控制是否启用
+//
 type TracingFilter struct {
 	next core.EndPointFilter
 }
@@ -39,16 +53,17 @@ func (t *TracingFilter) GetNext() core.EndPointFilter {
 }
 
 func (cf *TracingFilter) Filter(caller core.Caller, request core.Request) core.Response {
-	if _, ok := caller.(core.Provider); ok {
-		return filterForProvider(caller.(core.Provider), request)
-	} else if _, ok := caller.(core.EndPoint); ok {
-		return filterForClient(caller.(core.EndPoint), request)
-	} else {
+	switch caller.(type) {
+	case core.Provider:
+		return cf.filterForProvider(caller.(core.Provider), request)
+	case core.EndPoint:
+		return cf.filterForClient(caller.(core.EndPoint), request)
+	default:
 		return caller.Call(request)
 	}
 }
 
-func filterForClient(caller core.EndPoint, request core.Request) core.Response {
+func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Request) core.Response {
 	sc, err := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	if err == ot.ErrSpanContextNotFound {
@@ -67,7 +82,9 @@ func filterForClient(caller core.EndPoint, request core.Request) core.Response {
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer recoverFromPanic(&span)
-	response := caller.Call(request)
+
+	var response = callNext(cf, caller, request)
+
 	if response.GetException() != nil {
 		span.SetTag("error", true)
 		span.LogFields(log.Int("error.kind", response.GetException().ErrType))
@@ -76,7 +93,7 @@ func filterForClient(caller core.EndPoint, request core.Request) core.Response {
 	return response
 }
 
-func filterForProvider(caller core.Provider, request core.Request) core.Response {
+func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
 	sc, _ := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	// 如果请求中没有span信息，则创建一个根span
@@ -89,11 +106,23 @@ func filterForProvider(caller core.Provider, request core.Request) core.Response
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer recoverFromPanic(&span)
-	response := caller.Call(request)
+
+	response := callNext(cf, caller, request)
+
 	if response.GetException() != nil {
 		span.SetTag("error", true)
 		span.LogFields(log.Int("error.kind", response.GetException().ErrType))
 		span.LogFields(log.String("message", response.GetException().ErrMsg))
+	}
+	return response
+}
+
+func callNext(cf *TracingFilter, caller core.Caller, request core.Request) core.Response {
+	var response core.Response
+	if next := cf.GetNext(); next != nil {
+		response = next.Filter(caller, request)
+	} else {
+		response = caller.Call(request)
 	}
 	return response
 }

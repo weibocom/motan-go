@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"github.com/opentracing/opentracing-go"
 	motan "github.com/weibocom/motan-go/core"
 )
 
