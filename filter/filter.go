@@ -1,6 +1,9 @@
 package filter
 
-import motan "github.com/weibocom/motan-go/core"
+import (
+	"github.com/opentracing/opentracing-go"
+	motan "github.com/weibocom/motan-go/core"
+)
 
 // ext name
 const (
@@ -8,6 +11,7 @@ const (
 	Metrics        = "metrics"
 	CircuitBreaker = "circuitbreaker"
 	FailFast       = "failfast"
+	Tracing        = "tracing"
 )
 
 func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
@@ -25,5 +29,9 @@ func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
 
 	extFactory.RegistExtFilter(FailFast, func() motan.Filter {
 		return &FailfastFilter{}
+	})
+
+	extFactory.RegistExtFilter(Tracing, func() motan.Filter {
+		return &TracingFilter{}
 	})
 }

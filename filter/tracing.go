@@ -1,10 +1,10 @@
 package filter
 
 import (
-	"github.com/weibocom/motan-go/core"
 	ot "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
+	"github.com/weibocom/motan-go/core"
 );
 
 // TracingFilter用来拦截所有的RPC请求，包括接收的请求和发出的请求
