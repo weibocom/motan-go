@@ -7,11 +7,6 @@ import (
 	"github.com/weibocom/motan-go/core"
 );
 
-const (
-	tracingWithAgent = "x-tracing-by-agent"
-	yes              = "true"
-)
-
 // TracingFilter用来拦截所有的RPC请求，包括接收的请求和发出的请求
 //
 //    1. 接收的请求，当前作为服务端，此时caller应该为core.Provider类型
