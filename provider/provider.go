@@ -116,9 +116,8 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	mres := &motan.MotanResponse{RequestID: request.GetRequestID()}
 	if len(ret) > 0 { // only use first return value.
 		mres.Value = ret[0]
-		res = mres
 	}
-	return res
+	return mres
 }
 
 type MockProvider struct {

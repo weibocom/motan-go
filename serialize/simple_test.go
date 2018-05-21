@@ -2,6 +2,7 @@ package serialize
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -13,7 +14,7 @@ func TestSerializeString(t *testing.T) {
 	verifyString("", simple, t)
 }
 
-func TestSerializeMap(t *testing.T) {
+func TestSerializeStringMap(t *testing.T) {
 	simple := &SimpleSerialization{}
 	var m map[string]string
 	verifyMap(m, simple, t)
@@ -21,6 +22,129 @@ func TestSerializeMap(t *testing.T) {
 	m["k1"] = "v1"
 	m["k2"] = "v2"
 	verifyMap(m, simple, t)
+}
+
+func TestSerializeMap(t *testing.T) {
+	simple := &SimpleSerialization{}
+	value := make([]interface{}, 0, 16)
+	var m map[interface{}]interface{}
+	m = make(map[interface{}]interface{}, 16)
+	var ik, iv int64 = 123, 456 // must use int64 for value check
+
+	m["k1"] = "v1"
+	m["k2"] = "v2"
+	m[ik] = iv
+	m[true] = false
+
+	a := make([]interface{}, 0, 16)
+	a = append(a, "test")
+	a = append(a, "asdf")
+	m["sarray"] = a
+
+	value = append(value, m)
+	value = append(value, 3.1415)
+	bytes, err := simple.SerializeMulti(value)
+	if err != nil {
+		t.Errorf("serialize multi map fail. err:%v\n", err)
+	}
+	nvalue, err := simple.DeSerializeMulti(bytes, nil)
+	if err != nil {
+		t.Errorf("deserialize multi map fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	if len(value) != len(nvalue) {
+		t.Errorf("deserialize multi map fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	nmap := nvalue[0].(map[interface{}]interface{})
+	for k, v := range nmap {
+		if sa, ok := v.([]interface{}); ok {
+			ra := m[k].([]interface{})
+			for i, st := range sa {
+				if ra[i] != st {
+					t.Errorf("deserialize multi map fail. k: %+v, v:%+v, nv:%+v\n", k, m[k], v)
+				}
+			}
+		} else {
+			if m[k] != v {
+				t.Errorf("deserialize multi map fail. k: %+v, v:%+v, nv:%+v\n", k, m[k], v)
+			}
+		}
+
+	}
+}
+
+func TestSerializeArray(t *testing.T) {
+	simple := &SimpleSerialization{}
+	// string array
+	value := make([]interface{}, 0, 16)
+	sa := make([]string, 0, 16)
+	for i := 0; i < 20; i++ {
+		sa = append(sa, "slkje"+strconv.Itoa(i))
+	}
+
+	value = append(value, sa)
+	bytes, err := simple.SerializeMulti(value)
+
+	if err != nil {
+		t.Errorf("serialize array fail. err:%v\n", err)
+	}
+	nvalue, err := simple.DeSerializeMulti(bytes, nil)
+	if err != nil {
+		t.Errorf("deserialize array fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	rsa := value[0].([]string)
+	if len(rsa) != len(sa) {
+		t.Errorf("deserialize array fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	for i, ts := range sa {
+		if rsa[i] != ts {
+			t.Errorf("deserialize array fail. sa:%v, rsa:%v\n", sa, rsa)
+		}
+	}
+
+	//interface{} array
+	a := make([]interface{}, 0, 16)
+	var m map[interface{}]interface{}
+	m = make(map[interface{}]interface{}, 16)
+	var ik, iv int64 = 123, 456 // must use int64 for value check
+
+	m["k1"] = "v1"
+	m["k2"] = "v2"
+	m[ik] = iv
+	m[true] = false
+
+	a = append(a, "test")
+	a = append(a, "asdf")
+	a = append(a, m)
+	a = append(a, 3.1415)
+	value = make([]interface{}, 0, 16)
+	value = append(value, a)
+
+	bytes, err = simple.SerializeMulti(value)
+	if err != nil {
+		t.Errorf("serialize array fail. err:%v\n", err)
+	}
+	nvalue, err = simple.DeSerializeMulti(bytes, nil)
+	if err != nil {
+		t.Errorf("deserialize array fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	ria := value[0].([]interface{})
+	if len(ria) != len(a) {
+		t.Errorf("deserialize array fail. nvalue:%v, err:%v\n", nvalue, err)
+	}
+	for i, ts := range a {
+		if im, ok := ts.(map[interface{}]interface{}); ok {
+			for mk, mv := range m {
+				if im[mk] != mv {
+					t.Errorf("deserialize array fail. m: %+v, im:%+v\n", m, im)
+				}
+			}
+		} else {
+			if ria[i] != ts {
+				t.Errorf("deserialize array fail. sa:%v, rsa:%v\n", sa, rsa)
+			}
+		}
+
+	}
 }
 
 func TestSerializeBytes(t *testing.T) {
@@ -74,6 +198,57 @@ func TestSerializeMulti(t *testing.T) {
 	r := []interface{}{&rs, &rm, &rb, nil}
 	verifyMulti(a, r, simple, t)
 
+}
+
+func TestSerializeBaseType(t *testing.T) {
+	simple := &SimpleSerialization{}
+	// bool
+	verifyBaseType(true, simple, t)
+	verifyBaseType(false, simple, t)
+	//byte
+	verifyBaseType(byte(16), simple, t)
+	verifyBaseType(byte(0), simple, t)
+	verifyBaseType(byte(255), simple, t)
+	// int16
+	verifyBaseType(int16(-16), simple, t)
+	verifyBaseType(int16(0), simple, t)
+	//int32
+	verifyBaseType(int32(-16), simple, t)
+	verifyBaseType(int32(0), simple, t)
+	//int
+	verifyBaseType(int(-16), simple, t)
+	verifyBaseType(int(0), simple, t)
+	//int64
+	verifyBaseType(int64(-16), simple, t)
+	verifyBaseType(int64(0), simple, t)
+	//float32
+	verifyBaseType(float32(3.141592653), simple, t)
+	verifyBaseType(float32(-3.141592653), simple, t)
+	verifyBaseType(float32(0), simple, t)
+	//float64
+	verifyBaseType(float64(3.141592653), simple, t)
+	verifyBaseType(float64(-3.141592653), simple, t)
+	verifyBaseType(float64(0), simple, t)
+}
+
+func verifyBaseType(v interface{}, simple *SimpleSerialization, t *testing.T) {
+	bytes, err := simple.Serialize(v)
+	if err != nil {
+		t.Errorf("serialize fail. err:%v\n", err)
+	}
+	rv, err := simple.DeSerialize(bytes, nil)
+	if err != nil {
+		t.Errorf("serialize not correct. v:%v, rv:%v, err :%v\n", v, rv, err)
+	}
+	// int should cast to int64; uint should cast to uint64
+	if iv, ok := v.(int); ok {
+		v = int64(iv)
+	} else if uv, ok := v.(uint); ok {
+		v = uint64(uv)
+	}
+	if rv != v {
+		t.Errorf("serialize not correct. v:%v, rv:%v, err :%v\n", v, rv, err)
+	}
 }
 
 func verifySingleValue(i interface{}, reply interface{}, simple *SimpleSerialization, t *testing.T) {
