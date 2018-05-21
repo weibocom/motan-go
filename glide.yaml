@@ -29,3 +29,7 @@ import:
   subpackages:
   - metadata
 - package: gopkg.in/yaml.v2
+- package: github.com/opentracing/opentracing-go
+  subpackages:
+  - ext
+  - log
