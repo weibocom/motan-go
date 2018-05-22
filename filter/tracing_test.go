@@ -26,7 +26,9 @@ func TestAttachmentReader_ForeachKey(t *testing.T) {
 
 func TestAttachmentWriter_Set(t *testing.T) {
 	cases :=
-		[]entry{
+		[]struct{
+			K, V string
+		} {
 			{"a", "b"},
 			{"c", "d"},
 			{"a", "h"},
@@ -121,10 +123,6 @@ func (r *Referrer) SetSerialization(s core.Serialization) {
 
 func (r *Referrer) SetProxy(proxy bool) {
 	// DO NOTHING
-}
-
-type entry struct {
-	K, V string
 }
 
 type TestAttachment map[string]string

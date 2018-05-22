@@ -20,11 +20,23 @@ import (
 //
 // 此时span1为span2的parent。
 //
-// 那么增加agent之后调用边变成
+// 那么将trace功能设置在agent之后，服务不再需要做trace的事情，只需要将trace相关数据透传。如下：
 //
-//               (1)                (1)                 (2)                (2)
-//    caller -----------> agent -----------> worker -----------> agent -----------> dependents
-//             [span1]            [span1] <pass-thru> [span1]            [span2]
+//
+//                                agent
+//                              +-------+
+//                      span1   |       |  span1
+//                   *----------+- in <-+---------- user
+//                   |          |       |
+//                   V          |       |
+//             | -------        |       |
+//   pass-thru | service        |       |
+//             V -------        |       |
+//                   |          |       |
+//                   |  span1   |       |  span2
+//                   *----------+> out -+---------> dep
+//                              |       |
+//                              +-------+
 //
 // 该功能是会影响现有功能的，影响包括两方面
 //
@@ -32,8 +44,6 @@ import (
 //       该Filter对对外调用的trace信息的更改，会影响trace的正确性。
 //    2. 如果业务已经有了trace功能，业务会记录一遍trace相关的信息，而agent也会记录一遍
 //       会导致trace信息重复
-//
-//  TODO 需要自动识别业务是否有trace功能，或者有开关控制是否启用
 //
 type TracingFilter struct {
 	next core.EndPointFilter
