@@ -12,7 +12,7 @@ import (
 const (
 	CGI     = "cgi"
 	HTTP    = "http"
-	MOTAN   = "motanProvider"
+	MOTAN   = "motan2"
 	Mock    = "mockProvider"
 	Default = "default"
 )
@@ -28,7 +28,7 @@ func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 	})
 
 	extFactory.RegistExtProvider(MOTAN, func(url *motan.URL) motan.Provider {
-		return &MotanProvider{url: url}
+		return &MotanProvider{url: url, extFactory: extFactory}
 	})
 
 	extFactory.RegistExtProvider(Mock, func(url *motan.URL) motan.Provider {

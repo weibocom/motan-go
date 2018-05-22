@@ -2,7 +2,7 @@
 motan-client:
   mport: 8002 # client manage port
   log_dir: "./clientlogs" 
-  application: "zha-test" # client identify.
+  application: "ray-test" # client identify.
 
 #config of registries
 motan-registry:
@@ -10,8 +10,8 @@ motan-registry:
     protocol: direct   # registry type. will get instance from extFactory.
     host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
 #    port: 9981 # use agent port
-#    port: 8105 # use server direct
-    port: 8104 # use agentservice port
+    port: 8100 # use server direct
+    port: 8104 # use reverse proxy port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
   # zk-registry:
@@ -36,29 +36,17 @@ motan-basicRefer:
 
 #conf of refers
 motan-refer:
-#  mytest-motan2:
-#    path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
-#    registry: direct-registry
-#    # registry: zk-registry
-#    basicRefer: mybasicRefer # basic refer id
-#
+  mytest-motan2:
+    path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
+    registry: direct-registry
+    # registry: zk-registry
+    basicRefer: mybasicRefer # basic refer id
   mytest-demo:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
     registry: direct-registry
     basicRefer: mybasicRefer # basic refer id
 
-  #zha测试
-#  httptest-zha: #clientid，创建client时使用，与server端配置对应
-#    path: com.weibo.motan.demo.service.HttpService
-#    registry: direct-registry
-#    basicRefer: mybasicRefer
-
-  motantest-zha0: #clientid，创建client时使用，与server端配置对应
-      path: com.weibo.motan.demo.service.MotanService0
+  reverseProxyService: #clientid，创建client时使用，与server端配置对应
+      path: com.weibo.motan.demo.service.ReverseProxyService
       registry: direct-registry
       basicRefer: mybasicRefer
-
-  motantest-zha1: #clientid，创建client时使用，与server端配置对应
-        path: com.weibo.motan.demo.service.MotanService1
-        registry: direct-registry
-        basicRefer: mybasicRefer

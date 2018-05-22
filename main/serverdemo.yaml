@@ -2,7 +2,7 @@
 motan-server:
   mport: 8002 # agent manage port
   log_dir: "./serverlogs" 
-  application: "zha-test" # server identify.
+  application: "ray-test" # server identify.
 
 #config of registries
 motan-registry:
@@ -12,38 +12,33 @@ motan-registry:
     port: 8012 #direct server port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
-  # zha测试
-#   zk-registry:
-#     protocol: zookeeper
-#     host: 10.210.235.157
-#     port: 2181
-#     registrySessionTimeout: 10000
-#     requestTimeout: 5000
+  # zk-registry:
+  #   protocol: zookeeper
+  #   host: 10.210.235.157
+  #   port: 2181
+  #   registrySessionTimeout: 10000
+  #   requestTimeout: 5000
 
 #conf of basic service
-#zha测试
 motan-basicService:
-  mybasicRefer: # basic refer id
-    group: "motan-demo-rpc"
-    protocol: motan2
-    mingzSize: 5000
-    registry: "direct-registry"
+  mybasicService: # basic refer id
+    group: motan-demo-rpc # group name
+    protocol: motan2 # rpc protocol
+    registry: "direct-registry" # registry id
     filter: "accessLog" # filter registed in extFactory
     serialization: simple
     nodeType: server
-    application: "demo-server"
 
-# conf of services
-# 一个service可以理解为一个接口，一个ref可以理解为一个实现接口的方法
+#conf of services
 motan-service:
   mytest-motan2:
-    path: com.weibo.motan2.test.Motan2TestService # 服务名称e.g. service name for subscrib
-    registry: direct-registry #上面有direct-registry的配置
+    path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
+    registry: direct-registry
     # registry: zk-registry
-    basicRefer: mybasicService #对应motan-basicService的子节点
-    ref : "main.Motan2TestService" # golang中对service的具体实现类引用。此处为`包名.类名`方式引用，也可以使用自定义的id，需要与注册服务实现类时的id参数一致
-    export: "motan2:8100" # 对外提供服务的端口。不同service可以使用相同export端口，前提条件为协议与序列化等配置必须相同。
 
+    basicRefer: mybasicService
+    ref : "main.Motan2TestService"
+    export: "motan2:8100"
   mytest-demo:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
     registry: direct-registry
@@ -51,23 +46,9 @@ motan-service:
     ref : "main.MotanDemoService"
     export: "motan2:8100"
 
-  #zha测试
-#  httptest-zha: #clientid，创建client时使用，与client端配置对应
-#    path: com.weibo.motan.demo.service.HttpService
-#    registry: direct-registry
-#    basicRefer: mybasicService
-#    ref: "main.MotanTestService"
-#    export: "motan2:8105" #对外提供服务的端口。不同service可以使用相同export端口，前提条件为协议与序列化等配置必须相同。
-
-  motantest-zha0: #clientid，创建client时使用，与client端配置对应
-      path: com.weibo.motan.demo.service.MotanService0
+  reverseProxyService:
+      path: com.weibo.motan.demo.service.ReverseProxyService
       registry: direct-registry
       basicRefer: mybasicService
-      ref: "main.MotanTestService0"
-      export: "motan2:8105" #对外提供服务的端口。不同service可以使用相同export端口，前提条件为协议与序列化等配置必须相同。
-  motantest-zha1:
-      path: com.weibo.motan.demo.service.MotanService1
-      registry: direct-registry
-      basicRefer: mybasicService
-      ref: "main.MotanTestService1"
-      export: "motan2:8106"
+      ref: "main.ReverseProxyService"
+      export: "motan2:8105"
