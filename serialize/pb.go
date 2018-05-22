@@ -7,7 +7,6 @@ import (
 	"github.com/weibocom/motan-go/log"
 	"math"
 	"reflect"
-	"strings"
 )
 
 // ------- grpc-pb --------
@@ -117,7 +116,7 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		if rv.Type().String() == "[]uint8" {
 			err = buf.EncodeRawBytes(rv.Bytes())
 		} else {
-			err = errors.New("not support serialize type : " + rv.Type().String())
+			err = errors.New("not support serialize type: " + rv.Type().String())
 		}
 	}
 	if err != nil {
@@ -145,12 +144,14 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 		if i == 1 {
 			return nil, nil
 		}
+		//fmt.Println("Reflect type:", reflect.TypeOf(v)) //todo: test
 		if message, ok := v.(proto.Message); ok {
 			err = buf.Unmarshal(message)
 			return message, err
 		}
-		vStr := strings.Replace(v.(Stringer).String(), "*", "", 1)
-		//vStr := (v.(Stringer)).String()
+		//vStr := strings.Replace(v.(Stringer).String(), "*", "", 1)
+		vStr := v.(Stringer).String()
+		//fmt.Println("Stringer type: " + v.(Stringer).String()) //todo: test
 		switch vStr {
 		case "bool":
 			temp, err = buf.DecodeVarint()
@@ -161,34 +162,33 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 					v = false
 				}
 			}
-		case "int32", "int16":
+		case "int32", "int16", "*int32", "*int16":
 			temp, err = buf.DecodeZigzag32()
 			v = int32(temp)
-		case "uint32", "uint16":
+		case "uint32", "uint16", "*uint32", "*uint16":
 			temp, err = buf.DecodeZigzag32()
 			v = uint32(temp)
-		case "int", "int64":
+		case "int", "int64", "*int", "*int64":
 			temp, err = buf.DecodeZigzag64()
 			v = int64(temp)
-		case "uint", "uint64":
+		case "uint", "uint64", "*uint", "*uint64":
 			v, err = buf.DecodeZigzag64()
-		case "float32":
+		case "float32", "*float32":
 			temp, err = buf.DecodeFixed32()
 			v = math.Float32frombits(uint32(temp))
-		case "float64":
+		case "float64", "*float64":
 			temp, err = buf.DecodeFixed64()
 			v = math.Float64frombits(temp)
-		case "string":
+		case "string", "*string":
 			v, err = buf.DecodeStringBytes()
-		case "[]uint8":
+		case "uint8", "[]uint8":
 			v, err = buf.DecodeRawBytes(true)
 		default:
-			err = errors.New("not support deserialize type : " + vStr)
+			err = errors.New("not support deserialize type: " + vStr)
 		}
 	}
 	if err != nil {
 		vlog.Errorln(err)
-		fmt.Println(err)
 		return nil, err
 	}
 	return v, nil

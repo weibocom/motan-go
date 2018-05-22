@@ -72,6 +72,61 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	s := &PbSerialization{}
 
 	//type: message
+	verifyMessage(s, t)
+
+	//type: bool
+	verifyBaseTypes(true, s, t)
+
+	//type: int32
+	verifyBaseTypes(int32(66), s, t)
+	verifyBaseTypes(int32(-66), s, t)
+	verifyBaseTypes(int32(0), s, t)
+
+	//type: uint32
+	verifyBaseTypes(uint32(66), s, t)
+	verifyBaseTypes(uint32(0), s, t)
+
+	//type: int, int64
+	verifyBaseTypes(int64(66), s, t)
+	verifyBaseTypes(int64(-66), s, t)
+	verifyBaseTypes(int64(0), s, t)
+
+	//type: uint, uint64
+	verifyBaseTypes(uint64(66), s, t)
+	verifyBaseTypes(uint64(0), s, t)
+
+	//type: float32
+	verifyBaseTypes(float32(32.32), s, t)
+	verifyBaseTypes(float32(-32.32), s, t)
+	verifyBaseTypes(float32(0), s, t)
+
+	//type: float64
+	verifyBaseTypes(float64(64.6464), s, t)
+	verifyBaseTypes(float64(-64.6464), s, t)
+	verifyBaseTypes(float64(0), s, t)
+
+	//type: string
+	verifyBaseTypes("stringType", s, t)
+
+	//type: []uint8
+	verifyByte(s, t)
+}
+
+func verifyBaseTypes(v interface{}, s motan.Serialization, t *testing.T) {
+	sv, err := s.Serialize(v)
+	if err != nil || len(sv) == 0 {
+		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(sv), err)
+	}
+	dv, err := s.DeSerialize(sv, reflect.TypeOf(v))
+	fmt.Printf("deserialize value not correct. result:%v, %v\n", v, dv)
+	if err != nil {
+		t.Errorf("serialize fail. err:%v\n", err)
+	} else if v != dv {
+		t.Errorf("deserialize value not correct. result:%v, %v\n", v, dv)
+	}
+}
+
+func verifyMessage(s motan.Serialization, t *testing.T) {
 	r := &HelloRequest{Name: "ray"}
 	b, err := s.Serialize(r)
 	if err != nil || len(b) == 0 {
@@ -87,123 +142,11 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	} else if req.Name != "ray" {
 		t.Errorf("deserialize value not correct. result:%v\n", r3)
 	}
-
-	//type: bool
-	var rBool = true
-	seBool, err := s.Serialize(rBool)
-	if err != nil || len(seBool) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seBool), err)
-	}
-	var resBool = false
-	deBool, err := s.DeSerialize(seBool, reflect.TypeOf(resBool))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deBool != rBool {
-		t.Errorf("deserialize value not correct. result:%v\n", rBool)
-	}
-
-	//type: int32
-	var rInt32 int32 = 323232
-	seInt32, err := s.Serialize(rInt32)
-	if err != nil || len(seInt32) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seInt32), err)
-	}
-	var resInt32 int32
-	deInt32, err := s.DeSerialize(seInt32, reflect.TypeOf(resInt32))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deInt32 != rInt32 {
-		t.Errorf("deserialize value not correct. result:%v\n", rInt32)
-	}
-
-	//type: uint32
-	var rUint32 uint32 = 232323
-	seUint32, err := s.Serialize(rUint32)
-	if err != nil || len(seUint32) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seUint32), err)
-	}
-	var resUint32 uint32
-	deUint32, err := s.DeSerialize(seUint32, reflect.TypeOf(resUint32))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deUint32 != rUint32 {
-		t.Errorf("deserialize value not correct. result:%v\n", rUint32)
-	}
-
-	//type: int, int64
-	var rInt int64 = 646464
-	seInt, err := s.Serialize(rInt)
-	if err != nil || len(seInt) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seInt), err)
-	}
-	var resInt int
-	deInt, err := s.DeSerialize(seInt, reflect.TypeOf(resInt))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deInt != rInt {
-		t.Errorf("deserialize value not correct. result:%v, %v\n", rInt, deInt)
-	}
-
-	//type: uint, uint64
-	var rUint uint64 = 464646
-	seUint, err := s.Serialize(rUint)
-	if err != nil || len(seUint) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seUint), err)
-	}
-	var resUint uint
-	deUint, err := s.DeSerialize(seUint, reflect.TypeOf(resUint))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deUint != rUint {
-		t.Errorf("deserialize value not correct. result:%v, %v\n", rUint, deUint)
-	}
-
-	//type: float32
-	var rFloat32 float32 = 32.3232
-	seFloat32, err := s.Serialize(rFloat32)
-	if err != nil || len(seFloat32) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seFloat32), err)
-	}
-	var resFloat32 float32
-	deFloat32, err := s.DeSerialize(seFloat32, reflect.TypeOf(resFloat32))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deFloat32 != rFloat32 {
-		t.Errorf("deserialize value not correct. result:%v\n", rFloat32)
-	}
-
-	//type: float64
-	rFloat64 := 64.6464
-	seFloat64, err := s.Serialize(rFloat64)
-	if err != nil || len(seFloat64) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seFloat64), err)
-	}
-	var resFloat64 float64
-	deFloat64, err := s.DeSerialize(seFloat64, reflect.TypeOf(resFloat64))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if deFloat64 != rFloat64 {
-		t.Errorf("deserialize value not correct. result:%v\n", rFloat64)
-	}
-
-	//type: string
-	rString := "string type"
-	seString, err := s.Serialize(rString)
-	if err != nil || len(seString) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seString), err)
-	}
-	var resString string
-	deString, err := s.DeSerialize(seString, reflect.TypeOf(resString))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if rString != deString {
-		t.Errorf("deserialize value not correct. result:%v\n", rString)
-	}
-
-	//type: []uint8
+}
+func verifyByte(s motan.Serialization, t *testing.T) {
 	rUint8 := []uint8("a")
 	seUint8, err := s.Serialize(rUint8)
-	if err != nil || len(seString) == 0 {
+	if err != nil || len(seUint8) == 0 {
 		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seUint8), err)
 	}
 	var resUint8 []uint8
@@ -213,7 +156,6 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	} else if rUint8[0] != deUint8.([]uint8)[0] {
 		t.Errorf("deserialize value not correct. result:%v, %v\n", rUint8, deUint8)
 	}
-
 }
 
 func TestPbSerialization_SerializeMulti(t *testing.T) {
@@ -223,18 +165,26 @@ func TestPbSerialization_SerializeMulti(t *testing.T) {
 	if err != nil || len(b) == 1 {
 		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(b), err)
 	}
-
 	var r2 HelloRequest
-
 	r, err := s.DeSerializeMulti(b, []interface{}{&r2})
 	if err != nil || len(r) != 1 || r2.Name != "ray" {
 		t.Errorf("deserialize multi value not correct. result:%v, r2:%v, err:%v,\n", r, r2, err)
 	}
-
 	if req, ok := r[0].(*HelloRequest); !ok {
 		t.Errorf("deserialize not correct. result:%v, err:%v,\n", r[0], err)
 	} else if req.Name != "ray" {
 		t.Errorf("deserialize value not correct. result:%v\n", r[0])
+	}
+
+	vMult0, vMult1 := 123, 1.23
+	vMult := []interface{}{vMult0, vMult1}
+	bMult, err := s.SerializeMulti(vMult)
+	if err != nil || len(bMult) == 1 {
+		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(bMult), err)
+	}
+	rMult, err := s.DeSerializeMulti(bMult, []interface{}{reflect.TypeOf(vMult0), reflect.TypeOf(vMult1)})
+	if err != nil || len(rMult) != 2 || vMult[0].(int64) != rMult[0].(int64) || vMult[1].(float32) != rMult[1].(float32) {
+		t.Errorf("deserialize multi value not correct. vMult:%v, rMult:%v, err:%v,\n", vMult, rMult, err)
 	}
 }
 
