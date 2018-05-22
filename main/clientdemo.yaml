@@ -46,7 +46,7 @@ motan-refer:
     registry: direct-registry
     basicRefer: mybasicRefer # basic refer id
 
-  reverseProxyService: #clientid，创建client时使用，与server端配置对应
+  reverseProxyService:
       path: com.weibo.motan.demo.service.ReverseProxyService
       registry: direct-registry
       basicRefer: mybasicRefer

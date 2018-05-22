@@ -25,7 +25,7 @@ func runServerDemo() {
 type MotanDemoService struct{}
 
 func (m *MotanDemoService) Hello(name string) string {
-	fmt.Printf("MotanTestService hello:%s\n", name)
+	fmt.Printf("MotanDemoService hello:%s\n", name)
 	return "hello " + name
 }
 
@@ -45,7 +45,7 @@ func (m *Motan2TestService) Hello(params map[string]string) string {
 		buffer.WriteString(v)
 
 	}
-	fmt.Printf("HttpTestService1 hello:%s\n", buffer.String())
+	fmt.Printf("Motan2TestService hello:%s\n", buffer.String())
 	return buffer.String()
 }
 
