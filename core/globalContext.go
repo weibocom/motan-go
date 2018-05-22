@@ -18,7 +18,7 @@ const (
 	agentSection         = "motan-agent"
 	clientSection        = "motan-client"
 	serverSection        = "motan-server"
-	ReverseProxySection  = "reverse-proxy-service"
+	reverseProxySection  = "reverse-proxy-service"
 	// URLConfKey add confid to url params
 	URLConfKey = "conf-id"
 )
@@ -216,5 +216,5 @@ func (c *Context) parserBasicServices() {
 }
 
 func (c *Context) parserReverseProxyServices() {
-	c.ReverseProxyURLs = c.confToURLs(ReverseProxySection)
+	c.ReverseProxyURLs = c.confToURLs(reverseProxySection)
 }
