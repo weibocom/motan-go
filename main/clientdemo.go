@@ -50,8 +50,8 @@ func runClientDemo() {
 	var rpReply string
 	rpErr := rpClient.Call("MotanConnStr", []interface{}{rpArgs}, &rpReply)
 	if rpErr != nil {
-		fmt.Printf("motan call0000 fail! err:%v\n", rpErr)
+		fmt.Printf("motan call reverse proxy service fail! err:%v\n", rpErr)
 	} else {
-		fmt.Printf("motan call0000 success! reply:%s\n", rpReply)
+		fmt.Printf("motan call reverse proxy service success! reply:%s\n", rpReply)
 	}
 }
