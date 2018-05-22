@@ -86,7 +86,7 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer recoverFromPanic(&span)
+	defer handleIfPanic(span)
 
 	var response = callNext(cf, caller, request)
 
@@ -110,7 +110,7 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer recoverFromPanic(&span)
+	defer handleIfPanic(span)
 
 	response := callNext(cf, caller, request)
 
@@ -132,11 +132,11 @@ func callNext(cf *TracingFilter, caller core.Caller, request core.Request) core.
 	return response
 }
 
-func recoverFromPanic(span *ot.Span) {
+func handleIfPanic(span ot.Span) {
 	if r := recover(); r != nil {
-		(*span).SetTag("error", true)
-		(*span).LogFields(log.Int("error.kind", core.ServiceException))
-		(*span).LogFields(log.Object("message", r))
+		span.SetTag("error", true)
+		span.LogFields(log.Int("error.kind", core.ServiceException))
+		span.LogFields(log.Object("message", r))
 		panic(r)
 	}
 }
