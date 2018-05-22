@@ -69,7 +69,7 @@ func (cf *TracingFilter) Filter(caller core.Caller, request core.Request) core.R
 }
 
 func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Request) core.Response {
-	sc, err := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
+	sc, err := ot.GlobalTracer().Extract(ot.TextMap, &AttachmentReader{attach: request})
 	var span ot.Span
 	if err == ot.ErrSpanContextNotFound {
 		// 如果请求中没有span信息，则创建一个根span
@@ -169,7 +169,7 @@ type AttachmentReader struct {
 	attach core.Attachment
 }
 
-func (a *AttachmentReader) ForeachKey(handler func(key, val string) error) error {
+func (a AttachmentReader) ForeachKey(handler func(key, val string) error) error {
 	att := a.attach.GetAttachments()
 	if att == nil {
 		return nil
@@ -189,6 +189,6 @@ type AttachmentWriter struct {
 	attach core.Attachment
 }
 
-func (a *AttachmentWriter) Set(key, val string) {
+func (a AttachmentWriter) Set(key, val string) {
 	a.attach.SetAttachment(key, val)
 }
