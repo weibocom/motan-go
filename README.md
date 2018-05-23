@@ -130,7 +130,7 @@ func runClientDemo() {
 	mclient := mccontext.GetClient("mytest-motan2")
 
 	var reply string
-	err := mclient.Call("hello", "Ray", &reply)  // sync call
+	err := mclient.Call("hello", []interface{}{"Ray"}, &reply)  // sync call
 	if err != nil {
 		fmt.Printf("motan call fail! err:%v\n", err)
 	} else {
@@ -138,7 +138,7 @@ func runClientDemo() {
 	}
 
 	// async call
-	result := mclient.Go("hello", "Ray", &reply, make(chan *motancore.AsyncResult, 1))
+	result := mclient.Go("hello", []interface{}{"Ray"}, &reply, make(chan *motancore.AsyncResult, 1))
 	res := <-result.Done
 	if res.Error != nil {
 		fmt.Printf("motan async call fail! err:%v\n", res.Error)
@@ -209,6 +209,8 @@ func runAgentDemo() {
 * Arthur Guo([@jealone](https://github.com/jealone))
 * huzhongx([@huzhongx](https://github.com/huzhongx))
 * dingzk([@dingzk](https://github.com/dingzk))
+* lion2luo([@lion2luo](https://github.com/lion2luo))
+* Zha([@Zha-Zha](https://github.com/Zha-Zha))
 
 # License
 
