@@ -45,8 +45,3 @@ motan-refer:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
     registry: direct-registry
     basicRefer: mybasicRefer # basic refer id
-
-  reverseProxyService:
-      path: com.weibo.motan.demo.service.ReverseProxyService
-      registry: direct-registry
-      basicRefer: mybasicRefer

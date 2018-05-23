@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/weibocom/motan-go"
+	motan "github.com/weibocom/motan-go"
 	motancore "github.com/weibocom/motan-go/core"
 )
 
@@ -12,7 +12,7 @@ func main() {
 }
 
 func runClientDemo() {
-	mccontext := motan.GetClientContext("main/clientdemo.yaml")
+	mccontext := motan.GetClientContext("./clientdemo.yaml")
 	mccontext.Start(nil)
 	mclient := mccontext.GetClient("mytest-motan2")
 
@@ -43,15 +43,5 @@ func runClientDemo() {
 		fmt.Printf("motan call fail! err:%v\n", err)
 	} else {
 		fmt.Printf("motan call success! reply:%s\n", reply)
-	}
-
-	rpClient := mccontext.GetClient("reverseProxyService")
-	rpArgs := map[string]string{"num1": "12345", "num2": "54321"}
-	var rpReply string
-	rpErr := rpClient.Call("MotanConnStr", []interface{}{rpArgs}, &rpReply)
-	if rpErr != nil {
-		fmt.Printf("motan call reverse proxy service fail! err:%v\n", rpErr)
-	} else {
-		fmt.Printf("motan call reverse proxy service success! reply:%s\n", rpReply)
 	}
 }

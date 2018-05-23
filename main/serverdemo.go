@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/weibocom/motan-go"
+	motan "github.com/weibocom/motan-go"
 )
 
 func main() {
@@ -13,11 +13,9 @@ func main() {
 }
 
 func runServerDemo() {
-	mscontext := motan.GetMotanServerContext("main/serverdemo.yaml")
+	mscontext := motan.GetMotanServerContext("./serverdemo.yaml")
 	mscontext.RegisterService(&Motan2TestService{}, "")
 	mscontext.RegisterService(&MotanDemoService{}, "")
-	mscontext.RegisterService(&ReverseProxyService{}, "")
-
 	mscontext.Start(nil)
 	mscontext.ServicesAvailable() //注册服务后，默认并不提供服务，调用此方法后才会正式提供服务。需要根据实际使用场景决定提供服务的时机。作用与java版本中的服务端心跳开关一致。
 	time.Sleep(time.Second * 50000000)
@@ -48,11 +46,4 @@ func (m *Motan2TestService) Hello(params map[string]string) string {
 	}
 	fmt.Printf("Motan2TestService hello:%s\n", buffer.String())
 	return buffer.String()
-}
-
-type ReverseProxyService struct{}
-
-func (m *ReverseProxyService) MotanConnStr(nums map[string]string) string {
-	fmt.Println("Server call success.")
-	return nums["num1"] + nums["num2"]
 }

@@ -18,7 +18,6 @@ const (
 	agentSection         = "motan-agent"
 	clientSection        = "motan-client"
 	serverSection        = "motan-server"
-	reverseProxySection  = "reverse-proxy-service"
 	// URLConfKey add confid to url params
 	URLConfKey = "conf-id"
 )
@@ -32,7 +31,6 @@ type Context struct {
 	BasicRefers      map[string]*URL
 	ServiceURLs      map[string]*URL
 	BasicServiceURLs map[string]*URL
-	ReverseProxyURLs map[string]*URL
 	AgentURL         *URL
 	ClientURL        *URL
 	ServerURL        *URL
@@ -139,7 +137,6 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHostURL()
-	c.parserReverseProxyServices()
 }
 
 // parse host url including agenturl, clienturl, serverurl
@@ -213,8 +210,4 @@ func (c *Context) parseServices() {
 
 func (c *Context) parserBasicServices() {
 	c.BasicServiceURLs = c.confToURLs(basicServicesSection)
-}
-
-func (c *Context) parserReverseProxyServices() {
-	c.ReverseProxyURLs = c.confToURLs(reverseProxySection)
 }

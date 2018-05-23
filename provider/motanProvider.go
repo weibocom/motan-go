@@ -3,37 +3,65 @@ package provider
 import (
 	"errors"
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/endpoint"
 	"github.com/weibocom/motan-go/log"
+	"strconv"
 	"time"
 )
 
 type MotanProvider struct {
 	url        *motan.URL
-	ep         *endpoint.MotanEndpoint
+	ep         motan.EndPoint
 	gctx       *motan.Context
 	available  bool
 	extFactory motan.ExtentionFactory
 }
 
+const (
+	ProtocolConfKey      = "proxy.protocol"
+	HostConfKey          = "proxy.host"
+	PortConfKey          = "proxy.port"
+	SerializationConfKey = "proxy.serialization"
+)
+
 func (m *MotanProvider) Initialize() {
-	m.ep = &endpoint.MotanEndpoint{}
-	m.ep.SetProxy(true)
 	if confId, ok := m.url.Parameters[motan.URLConfKey]; ok {
-		if url, ok := m.gctx.ReverseProxyURLs[confId]; ok {
-			m.ep.SetURL(url)
+		if url, ok := m.gctx.ServiceURLs[confId]; ok {
+			hostTemp, err := url.Parameters[HostConfKey]
+			if !err {
+				vlog.Errorf("Can not find %s in service config!\n", HostConfKey)
+			}
+			portTemp, e := strconv.Atoi(url.Parameters[PortConfKey])
+			if e != nil {
+				vlog.Errorf("Can not find %s in service config!\n", PortConfKey)
+			}
+			protocolTemp, err := url.Parameters[ProtocolConfKey]
+			if !err {
+				vlog.Errorf("Can not find %s in service config!\n", ProtocolConfKey)
+			}
+			serialTemp, err := url.Parameters[SerializationConfKey]
+			if !err {
+				vlog.Errorf("Can not find %s in service config!\n", SerializationConfKey)
+			}
+			proxyUrl := &motan.URL{Host: hostTemp, Port: portTemp, Protocol: protocolTemp, Parameters: map[string]string{motan.URLConfKey: confId, motan.SerializationKey: serialTemp}}
+			m.ep = m.extFactory.GetEndPoint(proxyUrl)
+			if m.ep != nil {
+				m.ep.SetURL(proxyUrl)
+			} else {
+				vlog.Errorf("Can not find endpoint in ExtentionFactory! url: %+v\n", proxyUrl)
+			}
 			if serialization := motan.GetSerialization(url, m.extFactory); serialization != nil {
 				m.ep.SetSerialization(serialization)
 			} else {
-				vlog.Errorf("MotanProvider can not find Serialization in DefaultExtentionFactory! url:%+v\n", url)
+				vlog.Errorf("Can not find Serialization in ExtentionFactory! url: %+v\n", url)
 			}
 		} else {
-			vlog.Errorf("MotanProvider can not find URL in ReverseProxyService! ServiceId:%s\n", confId)
+			vlog.Errorf("Can not find URL in ServiceURLs! ServiceId: %s\n", confId)
 		}
 	} else {
-		vlog.Errorf("MotanProvider can not find ServiceId in ReverseProxyService! ServiceId:%s\n", confId)
+		vlog.Errorf("Can not find ServiceId! ServiceId: %s\n", confId)
 	}
-	m.ep.Initialize()
+	m.ep.SetProxy(true)
+	motan.Initialize(m.ep)
 }
 
 func (m *MotanProvider) Call(request motan.Request) motan.Response {

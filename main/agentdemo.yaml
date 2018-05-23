@@ -55,18 +55,26 @@ testextconf:
     sub1: zzz
     sub2: zzz
 
+#conf of basic service
+motan-basicService:
+  mybasicService:
+    group: motan-demo-rpc
+    protocol: motan2 # rpc protocol
+    registry: "direct-registry"
+    filter: "accessLog"
+    serialization: simple
+    nodeType: server
+
+#conf of services
 motan-service:
   reverseProxyService:
     path: com.weibo.motan.demo.service.ReverseProxyService
     registry: "direct-registry"
     provider: motan2
     requestTimeout: 2000
-    basicRefer: mybasicRefer
+    basicRefer: mybasicService
     export: "motan2:8104"
-
-reverse-proxy-service:
-  reverseProxyService:
-    protocol: motan2
-    host: 127.0.0.1
-    port: 8105
-    serialization: simple
+    proxy.protocol: motan2
+    proxy.host: 127.0.0.1
+    proxy.port: 8105
+    proxy.serialization: simple

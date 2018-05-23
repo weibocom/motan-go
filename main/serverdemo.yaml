@@ -45,10 +45,3 @@ motan-service:
     basicRefer: mybasicService # basic refer id
     ref : "main.MotanDemoService"
     export: "motan2:8100"
-
-  reverseProxyService:
-      path: com.weibo.motan.demo.service.ReverseProxyService
-      registry: direct-registry
-      basicRefer: mybasicService
-      ref: "main.ReverseProxyService"
-      export: "motan2:8105"
