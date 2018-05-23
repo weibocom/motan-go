@@ -126,8 +126,6 @@ func callNext(cf *TracingFilter, caller core.Caller, request core.Request) core.
 	var response core.Response
 	if next := cf.GetNext(); next != nil {
 		response = next.Filter(caller, request)
-	} else {
-		response = caller.Call(request)
 	}
 	return response
 }
