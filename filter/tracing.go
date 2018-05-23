@@ -101,6 +101,7 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	span.SetTag("ca", core.GetLocalIP())
 	span.SetTag("peer.ipv4", caller.GetURL().Host)
 	span.SetTag("peer.port", caller.GetURL().Port)
+	span.SetTag("service.type", "motan")
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
@@ -126,6 +127,8 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	defer span.Finish()
 
 	span.SetTag("ca", core.GetLocalIP())
+	remoteHost := request.GetAttachment(core.HostKey)
+	span.SetTag("peer.ipv4", remoteHost)
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
@@ -135,6 +138,7 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	if response.GetException() != nil {
 		span.SetTag("error", true)
+		span.SetTag("service.type", "motan")
 		span.LogFields(log.Int("error.kind", response.GetException().ErrType))
 		span.LogFields(log.String("message", response.GetException().ErrMsg))
 	}
