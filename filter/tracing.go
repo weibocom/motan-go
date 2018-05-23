@@ -69,7 +69,7 @@ func (cf *TracingFilter) Filter(caller core.Caller, request core.Request) core.R
 }
 
 func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Request) core.Response {
-	sc, err := ot.GlobalTracer().Extract(ot.TextMap, &AttachmentReader{attach: request})
+	sc, err := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	if err == ot.ErrSpanContextNotFound {
 		// 如果请求中没有span信息，则创建一个根span
@@ -150,7 +150,7 @@ func (*TracingFilter) GetName() string {
 }
 
 func (t *TracingFilter) NewFilter(url *core.URL) core.Filter {
-	return t
+	return &TracingFilter{}
 }
 
 func (t *TracingFilter) HasNext() bool {
@@ -165,6 +165,8 @@ func (*TracingFilter) GetType() int32 {
 	return core.EndPointFilterType
 }
 
+// AttachmentReader is used to read the Attachment.
+// use value type, to decrease the number of escaped variables
 type AttachmentReader struct {
 	attach core.Attachment
 }

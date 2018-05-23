@@ -3,6 +3,7 @@ package filter
 import (
 	"fmt"
 	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/core"
@@ -47,16 +48,7 @@ func TestAttachmentWriter_Set(t *testing.T) {
 	}
 }
 
-// This test case needs to mock a lot of things:
-//
-//
-//    * Tracer
-//    * Request
-//	  * Response
-//    * caller
-//
-// But the infrastructure is not enough, So disable it temporary
-func TestTracingFilter_Filter(t *testing.T) {
+func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 	req := core.MotanRequest{
 		RequestID: 1,
 		Attachment: map[string]string{
@@ -71,15 +63,15 @@ func TestTracingFilter_Filter(t *testing.T) {
 		RPCContext:  &core.RPCContext{},
 	}
 
-	filterFunc := func(caller core.Caller, request core.Request) core.Response {
-		assert.Equal(t, request.GetAttachment("tid"), "1")
-		assert.Equal(t, request.GetAttachment("pid"), "2")
+	outgoing := func(caller core.Caller, request core.Request) core.Response {
+		assert.Equal(t, "1", request.GetAttachment("tid"))
+		assert.Equal(t, "2", request.GetAttachment("pid"))
 		return &MockResponse{}
 	}
 
 	referrer := Referrer{
 		name: "foo referrer",
-		call: filterFunc,
+		call: outgoing,
 		url:  core.URL{Host: "1.2.3.4", Port: 8065, Group: "test-group"},
 	}
 
@@ -87,11 +79,76 @@ func TestTracingFilter_Filter(t *testing.T) {
 	opentracing.SetGlobalTracer(tracer)
 
 	mockFilter := MockFilter{
-		filter: filterFunc,
+		filter: outgoing,
 	}
+
+	previous := len(tracer.spans)
+
 	filter := &TracingFilter{next: &mockFilter}
 	filter.Filter(&referrer, &req)
 
+	current := len(tracer.spans)
+	assert.Equal(t, previous+1, current)
+
+	if span, ok := tracer.spans[current-1].(*MockSpan); ok {
+		assert.Equal(t, "1", span.context.traceId)
+		assert.Equal(t, "2", span.context.parentId)
+		assert.Equal(t, ext.SpanKindRPCClientEnum, span.tags[string(ext.SpanKind)])
+		assert.True(t, span.finished)
+	}
+}
+
+func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
+	req := core.MotanRequest{
+		RequestID: 1,
+		Attachment: map[string]string{
+			"tid": "1",
+			"id":  "2",
+			"pid": "3",
+		},
+		Method:      "foo",
+		ServiceName: "FooService",
+		Arguments:   []interface{}{},
+		MethodDesc:  "FooService.foo()",
+		RPCContext:  &core.RPCContext{},
+	}
+
+	outgoing := func(caller core.Caller, request core.Request) core.Response {
+		// check the request passed to next filter
+		assert.Equal(t, "1", request.GetAttachment("tid"))
+		assert.Equal(t, "2", request.GetAttachment("id"))
+		assert.Equal(t, "3", request.GetAttachment("pid"))
+		return &MockResponse{}
+	}
+
+	provider := Provider{
+		url: &core.URL{Host: "1.2.3.4", Port: 8065, Group: "test-group"},
+	}
+
+	tracer := &MockTracer{}
+	opentracing.SetGlobalTracer(tracer)
+
+	mockFilter := MockFilter{
+		filter: outgoing,
+	}
+
+	previous := len(tracer.spans)
+
+	filter := &TracingFilter{next: &mockFilter}
+	filter.Filter(&provider, &req)
+
+	current := len(tracer.spans)
+	assert.Equal(t, previous+1, current)
+
+	if span, ok := tracer.spans[current-1].(*MockSpan); ok {
+		// check recorded span
+		assert.Equal(t, "1", span.context.traceId)
+		assert.Equal(t, "2", span.context.id)
+		assert.Equal(t, "3", span.context.parentId)
+		assert.Contains(t, span.tags, string(ext.SpanKind))
+		assert.Equal(t, ext.SpanKindRPCServerEnum, span.tags[string(ext.SpanKind)])
+		assert.True(t, span.finished)
+	}
 }
 
 type SpanContext struct {
@@ -117,20 +174,21 @@ func (c *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 }
 
 type MockSpan struct {
-	name    string
-	context SpanContext
-	tags    map[string]interface{}
-	logs    map[string]log.Field
-	tracer  *MockTracer
-	kind    string
+	name     string
+	context  SpanContext
+	tags     map[string]interface{}
+	logs     map[string]log.Field
+	tracer   *MockTracer
+	kind     string
+	finished bool
 }
 
-func (*MockSpan) Finish() {
-
+func (s *MockSpan) Finish() {
+	s.finished = true
 }
 
-func (*MockSpan) FinishWithOptions(opts opentracing.FinishOptions) {
-
+func (s *MockSpan) FinishWithOptions(opts opentracing.FinishOptions) {
+	s.finished = true
 }
 
 func (s *MockSpan) Context() opentracing.SpanContext {
@@ -193,6 +251,7 @@ func (*MockSpan) Log(data opentracing.LogData) {
 }
 
 type MockTracer struct {
+	spans []opentracing.Span
 }
 
 func (t *MockTracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
@@ -201,19 +260,29 @@ func (t *MockTracer) StartSpan(operationName string, opts ...opentracing.StartSp
 		opt.Apply(&options)
 	}
 
-	id := fmt.Sprintf("%x", rand.Uint64())
 	var ctxt *SpanContext
 	if options.References != nil && len(options.References) > 0 {
 		ref := options.References[0].ReferencedContext
+
 		if c, ok := ref.(*SpanContext); ok {
-			ctxt = &SpanContext{traceId: c.traceId, parentId: c.id, id: id}
+			if options.Tags[string(ext.SpanKind)] == ext.SpanKindRPCServerEnum {
+				ctxt = &SpanContext{traceId: c.traceId, parentId: c.parentId, id: c.id}
+			} else {
+				id := fmt.Sprintf("%x", rand.Uint64())
+				ctxt = &SpanContext{traceId: c.traceId, parentId: c.id, id: id}
+			}
 		}
 	}
 	if ctxt == nil {
+		id := fmt.Sprintf("%x", rand.Uint64())
 		ctxt = &SpanContext{traceId: id, id: id}
 	}
 
-	return &MockSpan{context: *ctxt, name: operationName, tracer: t, tags: options.Tags}
+	span := &MockSpan{context: *ctxt, name: operationName, tracer: t, tags: options.Tags, finished: false}
+
+	t.spans = append(t.spans, span)
+
+	return span
 }
 
 func (*MockTracer) Inject(sm opentracing.SpanContext, format interface{}, carrier interface{}) error {
@@ -333,6 +402,42 @@ func (*MockFilter) GetIndex() int {
 }
 
 func (*MockFilter) GetType() int32 {
+	panic("implement me")
+}
+
+type Provider struct {
+	available bool
+	handler   func(request core.Request) core.Response
+	url       *core.URL
+}
+
+func (p *Provider) SetService(s interface{}) {
+	if f, ok := s.(func(request core.Request) core.Response); ok {
+		p.handler = f
+	}
+}
+
+func (p *Provider) GetURL() *core.URL {
+	return p.url
+}
+
+func (p *Provider) SetURL(url *core.URL) {
+	p.url = url
+}
+
+func (p *Provider) IsAvailable() bool {
+	return p.available
+}
+
+func (p *Provider) Call(request core.Request) core.Response {
+	return p.handler(request)
+}
+
+func (p *Provider) Destroy() {
+	p.available = false
+}
+
+func (*Provider) GetPath() string {
 	panic("implement me")
 }
 
