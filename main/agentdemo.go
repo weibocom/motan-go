@@ -13,7 +13,7 @@ func main() {
 
 func runAgentDemo() {
 	agent := motan.NewAgent(nil)
-	agent.ConfigFile = "main/agentdemo.yaml"
+	agent.ConfigFile = "./agentdemo.yaml"
 	// you can registry custom extension implements to defaultExtFactory. extensions includes ha, lb, endpoint, regisry,filter
 	// the default implements of extension is already registered in defaultExtFactory.
 	weiboExtFactory := motan.GetDefaultExtFactory()

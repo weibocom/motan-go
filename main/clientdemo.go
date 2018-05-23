@@ -44,4 +44,5 @@ func runClientDemo() {
 	} else {
 		fmt.Printf("motan call success! reply:%s\n", reply)
 	}
+
 }
