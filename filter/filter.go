@@ -10,7 +10,7 @@ const (
 	Metrics        = "metrics"
 	CircuitBreaker = "circuitbreaker"
 	FailFast       = "failfast"
-	Tracing        = "tracing"
+	Trace          = "trace"
 )
 
 func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
@@ -30,7 +30,7 @@ func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
 		return &FailfastFilter{}
 	})
 
-	extFactory.RegistExtFilter(Tracing, func() motan.Filter {
+	extFactory.RegistExtFilter(Trace, func() motan.Filter {
 		return &TracingFilter{}
 	})
 }

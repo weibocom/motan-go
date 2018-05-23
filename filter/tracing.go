@@ -7,44 +7,62 @@ import (
 	"github.com/weibocom/motan-go/core"
 );
 
-// TracingFilter用来拦截所有的RPC请求，包括接收的请求和发出的请求
+// TracingFilter is designed to support OpenTracing, thus we make use of
+// tracing capability many tracing systems (such as zipkin, etc.)
 //
-//    1. 接收的请求，当前作为服务端，此时caller应该为core.Provider类型
-//    2. 发出的请求，当前作为客户端，此时caller应该为core.Endpoint类型
+// As described by OpenTracing, for a single call from client to server, both sides will start a span,
+// with the server side span to be child of the client side. Described as following
 //
-// 正常情况下，假设有一个调用链为
+//                       call
+//          caller ---------------> callee
+//              [span1]      [span2]
 //
-//               (1)                 (2)
-//    caller -----------> worker -----------> dependents
-//             [span1]             [span2]
+// here [span1] is parent of [span2].
 //
-// 此时span1为span2的parent。
+// When this filter is applied, it will filter both the incoming and
+// outgoing requests to record trace information. The following diagram is a demonstration.
 //
-// 那么将trace功能设置在agent之后，服务不再需要做trace的事情，只需要将trace相关数据透传。如下：
+//                            filter
+//                         +---------+
+//                         |         |              [span1]
+//          [span2]  *-----+-- in <--+--------------------- | user |
+//                   |     |         |
+//                   V     |         |
+//             | -------   |         |
+//   pass-thru | service   |         |
+//    [span2]  V -------   |         |
+//                   |     |         |
+//                   |     |         |  [span3]
+//          [span2]  *-----+-> out --+--------------------> | dep  |
+//                         |         |
+//                         +---------+
 //
+// When the filter receives an incoming request, it will:
 //
-//                                agent
-//                              +-------+
-//                      span1   |       |  span1
-//                   *----------+- in <-+---------- user
-//                   |          |       |
-//                   V          |       |
-//             | -------        |       |
-//   pass-thru | service        |       |
-//             V -------        |       |
-//                   |          |       |
-//                   |  span1   |       |  span2
-//                   *----------+> out -+---------> dep
-//                              |       |
-//                              +-------+
+//     1. extract span context from request (will get [span1])
+//     2. start a child span of the extracted span ([span2], child of [span1])
+//     3. forward the request with [span2] to the service
 //
-// 该功能是会影响现有功能的，影响包括两方面
+// Then the service may make an outgoing request to some dependent services,
+// it should pass-through the span information ([span2]).
+// The filter will receive the outgoing request with [span2], then it will.
 //
-//    1. 如果业务已经有了trace功能，那么对外调用的时候，它就已经用了合适的span信息了。
-//       该Filter对对外调用的trace信息的更改，会影响trace的正确性。
-//    2. 如果业务已经有了trace功能，业务会记录一遍trace相关的信息，而agent也会记录一遍
-//       会导致trace信息重复
+//     1. extract span context from the outgoing request (it should the [span2])
+//     2. start a child span of the extracted span ([span3], child of [span2])
+//     3. forward the request with [span3] to the dependent service
 //
+// So here
+//
+//              (parent)        (parent)
+//      [span1] <------ [span2] <------ [span3]
+//
+// NOTE:
+//
+// The tracing capability should not be duplicated, because duplicated tracing will start more than one subsequent span,
+// then there will be some unwanted spans in the result.
+//
+// So the TracingFilter should not be applied more than once.
+// and if an existing trace work has been done by the service itself, the TracingFilter should not be used.
 type TracingFilter struct {
 	next core.EndPointFilter
 }
@@ -72,10 +90,10 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	sc, err := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	if err == ot.ErrSpanContextNotFound {
-		// 如果请求中没有span信息，则创建一个根span
+		// If the request doesn't contain information of a span, then create a root span
 		span = ot.StartSpan(spanName(&request), ext.SpanKindRPCClient)
 	} else {
-		// 如果请求中有span信息，则创建该span对应的一个子span
+		// If the request has contained information of a span, create a child span of the existing span
 		span = ot.StartSpan(spanName(&request), ot.ChildOf(sc), ext.SpanKindRPCClient)
 	}
 	defer span.Finish()
@@ -101,8 +119,9 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
 	sc, _ := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
-	// 如果请求中没有span信息，则创建一个根span
-	// 如果请求中有span信息，则创建该span对应的一个子span
+	// If there is no span information in the request,
+	// Just create a root span
+	// If a span exists in the request, then start a child span of the existing span
 	span = ot.StartSpan(spanName(&request), ext.RPCServerOption(sc))
 	defer span.Finish()
 
