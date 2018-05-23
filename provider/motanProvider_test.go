@@ -16,11 +16,9 @@ func TestGetName(t *testing.T) {
 	factory.Initialize()
 	serialize.RegistDefaultSerializations(factory)
 	endpoint.RegistDefaultEndpoint(factory)
-
 	mProvider.extFactory = factory
 	mProvider.Initialize()
 	request := &motan.MotanRequest{}
-	request.Attachment = make(map[string]string, 0)
 	res := mProvider.Call(request)
 	if res.GetValue().(string) != "ok" {
 		t.Errorf("Incorrect response! response:%+v", res.GetValue())
