@@ -112,12 +112,10 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		err = buf.EncodeFixed64(math.Float64bits(rv.Float()))
 	case reflect.String:
 		err = buf.EncodeStringBytes(rv.String())
+	case reflect.Uint8:
+		err = buf.EncodeVarint(rv.Uint())
 	default:
-		if rv.Type().String() == "[]uint8" {
-			err = buf.EncodeRawBytes(rv.Bytes())
-		} else {
-			err = errors.New("not support serialize type: " + rv.Type().String())
-		}
+		err = errors.New("not support serialize type: " + rv.Type().String())
 	}
 	if err != nil {
 		vlog.Errorln(err)
@@ -144,14 +142,11 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 		if i == 1 {
 			return nil, nil
 		}
-		//fmt.Println("Reflect type:", reflect.TypeOf(v)) //todo: test
 		if message, ok := v.(proto.Message); ok {
 			err = buf.Unmarshal(message)
 			return message, err
 		}
-		//vStr := strings.Replace(v.(Stringer).String(), "*", "", 1)
 		vStr := v.(Stringer).String()
-		//fmt.Println("Stringer type: " + v.(Stringer).String()) //todo: test
 		switch vStr {
 		case "bool":
 			temp, err = buf.DecodeVarint()
@@ -181,8 +176,9 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			v = math.Float64frombits(temp)
 		case "string", "*string":
 			v, err = buf.DecodeStringBytes()
-		case "uint8", "[]uint8":
-			v, err = buf.DecodeRawBytes(true)
+		case "uint8", "*uint8":
+			temp, err = buf.DecodeVarint()
+			v = uint8(temp)
 		default:
 			err = errors.New("not support deserialize type: " + vStr)
 		}

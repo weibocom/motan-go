@@ -109,7 +109,7 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	verifyBaseTypes("stringType", s, t)
 
 	//type: []uint8
-	verifyByte(s, t)
+	verifyBaseTypes('a', s, t)
 }
 
 func verifyBaseTypes(v interface{}, s motan.Serialization, t *testing.T) {
@@ -143,22 +143,9 @@ func verifyMessage(s motan.Serialization, t *testing.T) {
 		t.Errorf("deserialize value not correct. result:%v\n", r3)
 	}
 }
-func verifyByte(s motan.Serialization, t *testing.T) {
-	rUint8 := []uint8("a")
-	seUint8, err := s.Serialize(rUint8)
-	if err != nil || len(seUint8) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(seUint8), err)
-	}
-	var resUint8 []uint8
-	deUint8, err := s.DeSerialize(seUint8, reflect.TypeOf(resUint8))
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if rUint8[0] != deUint8.([]uint8)[0] {
-		t.Errorf("deserialize value not correct. result:%v, %v\n", rUint8, deUint8)
-	}
-}
 
 func TestPbSerialization_SerializeMulti(t *testing.T) {
+	//type: message multi
 	s := &PbSerialization{}
 	v := []interface{}{&HelloRequest{Name: "ray"}}
 	b, err := s.SerializeMulti(v)
@@ -176,15 +163,16 @@ func TestPbSerialization_SerializeMulti(t *testing.T) {
 		t.Errorf("deserialize value not correct. result:%v\n", r[0])
 	}
 
-	vMult0, vMult1 := 123, 1.23
-	vMult := []interface{}{vMult0, vMult1}
-	bMult, err := s.SerializeMulti(vMult)
-	if err != nil || len(bMult) == 1 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(bMult), err)
+	//type: base type multi
+	var0, var1, var2 := int64(123), float32(1.23), uint8('a')
+	vMulti := []interface{}{var0, var1, var2}
+	buffer, err := s.SerializeMulti(vMulti)
+	if err != nil || len(buffer) == 1 {
+		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(buffer), err)
 	}
-	rMult, err := s.DeSerializeMulti(bMult, []interface{}{reflect.TypeOf(vMult0), reflect.TypeOf(vMult1)})
-	if err != nil || len(rMult) != 2 || vMult[0].(int64) != rMult[0].(int64) || vMult[1].(float32) != rMult[1].(float32) {
-		t.Errorf("deserialize multi value not correct. vMult:%v, rMult:%v, err:%v,\n", vMult, rMult, err)
+	rMulti, err := s.DeSerializeMulti(buffer, []interface{}{reflect.TypeOf(var0), reflect.TypeOf(var1), reflect.TypeOf(var2)})
+	if err != nil || len(rMulti) != 3 || vMulti[0].(int64) != rMulti[0].(int64) || vMulti[1].(float32) != rMulti[1].(float32) || vMulti[2].(uint8) != rMulti[2].(uint8) {
+		t.Errorf("deserialize multi value not correct. vMulti:%v, rMulti:%v, err:%v,\n", vMulti, rMulti, err)
 	}
 }
 
