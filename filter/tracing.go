@@ -26,7 +26,7 @@ type CallData struct {
 // If this function is set, when a call is made, the function will be called
 var CustomRecordingFunc func(span *ot.Span, data CallData)
 
-// TracingFilter is designed to support OpenTracing, thus we make use of
+// TracingFilter is designed to support OpenTracing, so that we can make use of
 // tracing capability many tracing systems (such as zipkin, etc.)
 //
 // As described by OpenTracing, for a single call from client to server, both sides will start a span,
