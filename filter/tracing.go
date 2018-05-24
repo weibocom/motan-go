@@ -156,7 +156,6 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	span = ot.StartSpan(spanName(&request), ext.RPCServerOption(sc))
 	defer span.Finish()
 
-	span.SetTag("ca", core.GetLocalIP())
 	remoteHost := request.GetAttachment(core.HostKey)
 	span.SetTag(string(ext.PeerHostIPv4), remoteHost)
 
