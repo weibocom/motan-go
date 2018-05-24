@@ -7,7 +7,6 @@ import (
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/core"
-	"math/rand"
 	"testing"
 )
 
@@ -66,6 +65,7 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 	outgoing := func(caller core.Caller, request core.Request) core.Response {
 		assert.Equal(t, "1", request.GetAttachment("tid"))
 		assert.Equal(t, "2", request.GetAttachment("pid"))
+		assert.Equal(t, "a", request.GetAttachment("id"))
 		return &MockResponse{}
 	}
 
@@ -75,7 +75,7 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 		url:  core.URL{Host: "1.2.3.4", Port: 8065, Group: "test-group"},
 	}
 
-	tracer := &MockTracer{}
+	tracer := &MockTracer{lastid: 10}
 	opentracing.SetGlobalTracer(tracer)
 
 	mockFilter := MockFilter{
@@ -93,6 +93,7 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 	if span, ok := tracer.spans[current-1].(*MockSpan); ok {
 		assert.Equal(t, "1", span.context.traceId)
 		assert.Equal(t, "2", span.context.parentId)
+		assert.Equal(t, "a", span.context.id)
 		assert.Equal(t, ext.SpanKindRPCClientEnum, span.tags[string(ext.SpanKind)])
 		assert.True(t, span.finished)
 	}
@@ -125,7 +126,7 @@ func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
 		url: &core.URL{Host: "1.2.3.4", Port: 8065, Group: "test-group"},
 	}
 
-	tracer := &MockTracer{}
+	tracer := &MockTracer{lastid: 10}
 	opentracing.SetGlobalTracer(tracer)
 
 	mockFilter := MockFilter{
@@ -251,7 +252,13 @@ func (*MockSpan) Log(data opentracing.LogData) {
 }
 
 type MockTracer struct {
-	spans []opentracing.Span
+	spans  []opentracing.Span
+	lastid uint64
+}
+
+func (t *MockTracer) id() uint64 {
+	defer func() { t.lastid++ }()
+	return t.lastid
 }
 
 func (t *MockTracer) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
@@ -268,13 +275,13 @@ func (t *MockTracer) StartSpan(operationName string, opts ...opentracing.StartSp
 			if options.Tags[string(ext.SpanKind)] == ext.SpanKindRPCServerEnum {
 				ctxt = &SpanContext{traceId: c.traceId, parentId: c.parentId, id: c.id}
 			} else {
-				id := fmt.Sprintf("%x", rand.Uint64())
+				id := fmt.Sprintf("%x", t.id())
 				ctxt = &SpanContext{traceId: c.traceId, parentId: c.id, id: id}
 			}
 		}
 	}
 	if ctxt == nil {
-		id := fmt.Sprintf("%x", rand.Uint64())
+		id := fmt.Sprintf("%x", t.id())
 		ctxt = &SpanContext{traceId: id, id: id}
 	}
 
