@@ -119,7 +119,8 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 
 	span.SetTag(string(ext.PeerHostIPv4), caller.GetURL().Host)
 	span.SetTag(string(ext.PeerPort), caller.GetURL().Port)
-	span.SetTag(string(ext.PeerService), "motan")
+	span.SetTag("service.type", "motan")
+	span.SetTag("service.group", caller.GetURL().Group)
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
@@ -156,8 +157,11 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	span = ot.StartSpan(spanName(&request), ext.RPCServerOption(sc))
 	defer span.Finish()
 
-	remoteHost := request.GetAttachment(core.HostKey)
-	span.SetTag(string(ext.PeerHostIPv4), remoteHost)
+	if remoteHost := request.GetAttachment(core.HostKey); remoteHost != "" {
+		span.SetTag(string(ext.PeerHostIPv4), remoteHost)
+	}
+	span.SetTag("service.type", "motan")
+	span.SetTag("service.group", caller.GetURL().Group)
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
