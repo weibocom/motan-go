@@ -124,9 +124,8 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer handleIfPanic(span)
+	defer handleIfPanic(span, caller, request, OUT_BOUND_CALL)
 
-	defer customRecordError(span, caller, request, OUT_BOUND_CALL)
 	var response = callNext(cf, caller, request)
 
 	if CustomRecordingFunc != nil {
@@ -140,12 +139,6 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	}
 
 	return response
-}
-
-func customRecordError(span ot.Span, caller core.Caller, request core.Request, direction uint32) {
-	if r := recover(); r != nil && CustomRecordingFunc != nil {
-		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
-	}
 }
 
 func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
@@ -165,9 +158,8 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer handleIfPanic(span)
+	defer handleIfPanic(span, caller, request, IN_BOUND_CALL)
 
-	defer customRecordError(span, caller, request, IN_BOUND_CALL)
 	response := callNext(cf, caller, request)
 	if CustomRecordingFunc != nil {
 		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
@@ -182,21 +174,24 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	return response
 }
 
+func handleIfPanic(span ot.Span, caller core.Caller, request core.Request, direction uint32) {
+	if r := recover(); r != nil {
+		span.SetTag(string(ext.Error), true)
+		span.LogFields(log.Int("error.kind", core.ServiceException))
+		span.LogFields(log.Object("error.object", r))
+		if CustomRecordingFunc != nil {
+			CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
+		}
+		panic(r)
+	}
+}
+
 func callNext(cf *TracingFilter, caller core.Caller, request core.Request) core.Response {
 	var response core.Response
 	if next := cf.GetNext(); next != nil {
 		response = next.Filter(caller, request)
 	}
 	return response
-}
-
-func handleIfPanic(span ot.Span) {
-	if r := recover(); r != nil {
-		span.SetTag(string(ext.Error), true)
-		span.LogFields(log.Int("error.kind", core.ServiceException))
-		span.LogFields(log.Object("message", r))
-		panic(r)
-	}
 }
 
 func spanName(request *core.Request) string {
