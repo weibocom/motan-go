@@ -7,6 +7,25 @@ import (
 	"github.com/weibocom/motan-go/core"
 );
 
+const (
+	IN_BOUND_CALL  = iota
+	OUT_BOUND_CALL
+)
+
+type CallData struct {
+	Caller   core.Caller
+	Request  core.Request
+	Response core.Response
+
+	// If any error occurred during this call, response not get
+	Error interface{}
+	// the call direction, please refer to IN_BOUND_CALL and OUT_BOUND_CALL
+	Direction uint32
+}
+
+// If this function is set, when a call is made, the function will be called
+var CustomRecordingFunc func(span *ot.Span, data CallData)
+
 // TracingFilter is designed to support OpenTracing, thus we make use of
 // tracing capability many tracing systems (such as zipkin, etc.)
 //
@@ -98,23 +117,34 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	}
 	defer span.Finish()
 
-	span.SetTag("ca", core.GetLocalIP())
-	span.SetTag("peer.ipv4", caller.GetURL().Host)
-	span.SetTag("peer.port", caller.GetURL().Port)
-	span.SetTag("service.type", "motan")
+	span.SetTag(string(ext.PeerHostIPv4), caller.GetURL().Host)
+	span.SetTag(string(ext.PeerPort), caller.GetURL().Port)
+	span.SetTag(string(ext.PeerService), "motan")
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer handleIfPanic(span)
 
+	defer customRecordError(span, caller, request, OUT_BOUND_CALL)
 	var response = callNext(cf, caller, request)
 
-	if response.GetException() != nil {
-		span.SetTag("error", true)
-		span.LogFields(log.Int("error.kind", response.GetException().ErrType))
-		span.LogFields(log.String("message", response.GetException().ErrMsg))
+	if CustomRecordingFunc != nil {
+		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
 	}
+
+	if ex := response.GetException(); ex != nil {
+		span.SetTag(string(ext.Error), true)
+		span.LogFields(log.Int("error.kind", ex.ErrType))
+		span.LogFields(log.String("message", ex.ErrMsg))
+	}
+
 	return response
+}
+
+func customRecordError(span ot.Span, caller core.Caller, request core.Request, direction uint32) {
+	if r := recover(); r != nil && CustomRecordingFunc != nil {
+		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
+	}
 }
 
 func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
@@ -128,20 +158,24 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	span.SetTag("ca", core.GetLocalIP())
 	remoteHost := request.GetAttachment(core.HostKey)
-	span.SetTag("peer.ipv4", remoteHost)
+	span.SetTag(string(ext.PeerHostIPv4), remoteHost)
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer handleIfPanic(span)
 
+	defer customRecordError(span, caller, request, IN_BOUND_CALL)
 	response := callNext(cf, caller, request)
-
-	if response.GetException() != nil {
-		span.SetTag("error", true)
-		span.SetTag("service.type", "motan")
-		span.LogFields(log.Int("error.kind", response.GetException().ErrType))
-		span.LogFields(log.String("message", response.GetException().ErrMsg))
+	if CustomRecordingFunc != nil {
+		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
 	}
+
+	if ex := response.GetException(); ex != nil {
+		span.SetTag(string(ext.Error), true)
+		span.LogFields(log.Int("error.kind", ex.ErrType))
+		span.LogFields(log.String("message", ex.ErrMsg))
+	}
+
 	return response
 }
 
@@ -155,7 +189,7 @@ func callNext(cf *TracingFilter, caller core.Caller, request core.Request) core.
 
 func handleIfPanic(span ot.Span) {
 	if r := recover(); r != nil {
-		span.SetTag("error", true)
+		span.SetTag(string(ext.Error), true)
 		span.LogFields(log.Int("error.kind", core.ServiceException))
 		span.LogFields(log.Object("message", r))
 		panic(r)
