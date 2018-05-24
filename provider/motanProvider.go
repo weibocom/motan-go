@@ -15,7 +15,9 @@ type MotanProvider struct {
 }
 
 const (
-	ProxyConfKey = "proxy"
+	ProxyConfKey     = "proxy"
+	ProxyHostConfKey = "proxy.host"
+	DefaultHost      = "127.0.0.1"
 )
 
 func (m *MotanProvider) Initialize() {
@@ -23,18 +25,19 @@ func (m *MotanProvider) Initialize() {
 	if err != nil {
 		vlog.Errorf("reverse proxy service config in %s error!\n", ProxyConfKey)
 		return
-	} else if port <= 0 || port == 9982 {
+	} else if port <= 0 {
 		vlog.Errorln("reverse proxy service port config error!")
 		return
 	}
-	m.ep = m.extFactory.GetEndPoint(&motan.URL{Protocol: protocol, Port: port})
+	host := m.url.GetParam(ProxyHostConfKey, DefaultHost)
+	m.ep = m.extFactory.GetEndPoint(&motan.URL{Protocol: protocol, Host: host, Port: port})
 	if m.ep == nil {
 		vlog.Errorf("Can not find %s endpoint in ExtentionFactory!\n", protocol)
 		return
 	}
 	m.ep.SetProxy(true)
 	motan.Initialize(m.ep)
-	m.available = m.ep.IsAvailable()
+	m.available = true
 }
 
 func (m *MotanProvider) Call(request motan.Request) motan.Response {
@@ -74,5 +77,5 @@ func (m *MotanProvider) SetProxy(proxy bool) {}
 func (m *MotanProvider) Destroy() {}
 
 func (m *MotanProvider) IsAvailable() bool {
-	return m.available
+	return m.available && m.ep.IsAvailable()
 }

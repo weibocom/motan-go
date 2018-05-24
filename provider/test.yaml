@@ -17,4 +17,4 @@ motan-service:
     requestTimeout: 2000
     basicRefer: mybasicService
     export: "motan2:8104"
-    proxy: ""
+    proxy: "mockEndpoint:8105"
