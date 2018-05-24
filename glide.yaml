@@ -33,3 +33,6 @@ import:
   subpackages:
   - ext
   - log
+- package: github.com/stretchr/testify
+  subpackages:
+  - assert
