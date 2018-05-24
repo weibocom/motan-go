@@ -7,20 +7,33 @@ import (
 	"testing"
 )
 
+const (
+	serviceName  = "reverseProxyService"
+	confFilePath = "test.yaml"
+)
+
 func TestGetName(t *testing.T) {
-	mProvider := MotanProvider{gctx: &motan.Context{}}
-	mProvider.gctx.ConfigFile = "test.yaml"
-	mProvider.gctx.Initialize()
-	mProvider.url = &motan.URL{Host: "127.0.0.1", Port: 8104, Protocol: "motan2", Parameters: map[string]string{"conf-id": "reverseProxyService", "serialization": "simple"}}
+	//init context
+	mContext := motan.Context{}
+	mContext.ConfigFile = confFilePath
+	mContext.Initialize()
+
+	//init factory
 	factory := &motan.DefaultExtentionFactory{}
 	factory.Initialize()
 	serialize.RegistDefaultSerializations(factory)
 	endpoint.RegistDefaultEndpoint(factory)
-	mProvider.extFactory = factory
-	mProvider.Initialize()
+	RegistDefaultProvider(factory)
+
+	//init & call provider
+	pUrl := mContext.ServiceURLs[serviceName]
+	mProvider := factory.GetProvider(pUrl)
+	motan.Initialize(mProvider)
 	request := &motan.MotanRequest{}
 	res := mProvider.Call(request)
-	if res.GetValue().(string) != "ok" {
-		t.Errorf("Incorrect response! response:%+v", res.GetValue())
+	if res.GetValue() == nil || res.GetValue().(string) != "ok" {
+		if res.GetException().ErrMsg != "reverse proxy call err: motanProvider is unavailable" {
+			t.Errorf("Incorrect response! response:%+v", res)
+		}
 	}
 }

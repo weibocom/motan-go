@@ -17,7 +17,4 @@ motan-service:
     requestTimeout: 2000
     basicRefer: mybasicService
     export: "motan2:8104"
-    proxy.protocol: mockEndpoint
-    proxy.host: 127.0.0.1
-    proxy.port: 8105
-    proxy.serialization: simple
+    proxy: ""
