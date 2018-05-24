@@ -2,6 +2,8 @@ package serialize
 
 import (
 	"fmt"
+	motan "github.com/weibocom/motan-go/core"
+	"reflect"
 	"strconv"
 	"testing"
 )
@@ -231,23 +233,22 @@ func TestSerializeBaseType(t *testing.T) {
 	verifyBaseType(float64(0), simple, t)
 }
 
-func verifyBaseType(v interface{}, simple *SimpleSerialization, t *testing.T) {
-	bytes, err := simple.Serialize(v)
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
+func verifyBaseType(v interface{}, s motan.Serialization, t *testing.T) {
+	sv, err := s.Serialize(v)
+	if err != nil || len(sv) == 0 {
+		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(sv), err)
 	}
-	rv, err := simple.DeSerialize(bytes, nil)
-	if err != nil {
-		t.Errorf("serialize not correct. v:%v, rv:%v, err :%v\n", v, rv, err)
-	}
+	dv, err := s.DeSerialize(sv, reflect.TypeOf(v))
 	// int should cast to int64; uint should cast to uint64
 	if iv, ok := v.(int); ok {
 		v = int64(iv)
 	} else if uv, ok := v.(uint); ok {
 		v = uint64(uv)
 	}
-	if rv != v {
-		t.Errorf("serialize not correct. v:%v, rv:%v, err :%v\n", v, rv, err)
+	if err != nil {
+		t.Errorf("serialize fail. err:%v\n", err)
+	} else if v != dv {
+		t.Errorf("deserialize value not correct. result:%v, %v\n", v, dv)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"math"
-	"reflect"
 	"testing"
 )
 
@@ -75,55 +74,41 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	verifyMessage(s, t)
 
 	//type: bool
-	verifyBaseTypes(true, s, t)
+	verifyBaseType(true, s, t)
 
 	//type: int32
-	verifyBaseTypes(int32(66), s, t)
-	verifyBaseTypes(int32(-66), s, t)
-	verifyBaseTypes(int32(0), s, t)
+	verifyBaseType(int32(66), s, t)
+	verifyBaseType(int32(-66), s, t)
+	verifyBaseType(int32(0), s, t)
 
 	//type: uint32
-	verifyBaseTypes(uint32(66), s, t)
-	verifyBaseTypes(uint32(0), s, t)
+	verifyBaseType(uint32(66), s, t)
+	verifyBaseType(uint32(0), s, t)
 
 	//type: int, int64
-	verifyBaseTypes(int64(66), s, t)
-	verifyBaseTypes(int64(-66), s, t)
-	verifyBaseTypes(int64(0), s, t)
+	verifyBaseType(int64(66), s, t)
+	verifyBaseType(int64(-66), s, t)
+	verifyBaseType(int64(0), s, t)
 
 	//type: uint, uint64
-	verifyBaseTypes(uint64(66), s, t)
-	verifyBaseTypes(uint64(0), s, t)
+	verifyBaseType(uint64(66), s, t)
+	verifyBaseType(uint64(0), s, t)
 
 	//type: float32
-	verifyBaseTypes(float32(32.32), s, t)
-	verifyBaseTypes(float32(-32.32), s, t)
-	verifyBaseTypes(float32(0), s, t)
+	verifyBaseType(float32(32.32), s, t)
+	verifyBaseType(float32(-32.32), s, t)
+	verifyBaseType(float32(0), s, t)
 
 	//type: float64
-	verifyBaseTypes(float64(64.6464), s, t)
-	verifyBaseTypes(float64(-64.6464), s, t)
-	verifyBaseTypes(float64(0), s, t)
+	verifyBaseType(float64(64.6464), s, t)
+	verifyBaseType(float64(-64.6464), s, t)
+	verifyBaseType(float64(0), s, t)
 
 	//type: string
-	verifyBaseTypes("stringType", s, t)
+	verifyBaseType("stringType", s, t)
 
 	//type: []uint8
-	verifyBaseTypes('a', s, t)
-}
-
-func verifyBaseTypes(v interface{}, s motan.Serialization, t *testing.T) {
-	sv, err := s.Serialize(v)
-	if err != nil || len(sv) == 0 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(sv), err)
-	}
-	dv, err := s.DeSerialize(sv, reflect.TypeOf(v))
-	fmt.Printf("deserialize value not correct. result:%v, %v\n", v, dv)
-	if err != nil {
-		t.Errorf("serialize fail. err:%v\n", err)
-	} else if v != dv {
-		t.Errorf("deserialize value not correct. result:%v, %v\n", v, dv)
-	}
+	verifyBaseType('a', s, t)
 }
 
 func verifyMessage(s motan.Serialization, t *testing.T) {
@@ -145,34 +130,17 @@ func verifyMessage(s motan.Serialization, t *testing.T) {
 }
 
 func TestPbSerialization_SerializeMulti(t *testing.T) {
-	//type: message multi
 	s := &PbSerialization{}
-	v := []interface{}{&HelloRequest{Name: "ray"}}
+	i1, f1, u1, m1 := int64(123), float32(1.23), uint8('a'), HelloRequest{Name: "ray"}
+	v := []interface{}{i1, f1, u1, &m1}
 	b, err := s.SerializeMulti(v)
 	if err != nil || len(b) == 1 {
 		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(b), err)
 	}
-	var r2 HelloRequest
-	r, err := s.DeSerializeMulti(b, []interface{}{&r2})
-	if err != nil || len(r) != 1 || r2.Name != "ray" {
-		t.Errorf("deserialize multi value not correct. result:%v, r2:%v, err:%v,\n", r, r2, err)
-	}
-	if req, ok := r[0].(*HelloRequest); !ok {
-		t.Errorf("deserialize not correct. result:%v, err:%v,\n", r[0], err)
-	} else if req.Name != "ray" {
-		t.Errorf("deserialize value not correct. result:%v\n", r[0])
-	}
-
-	//type: base type multi
-	var0, var1, var2 := int64(123), float32(1.23), uint8('a')
-	vMulti := []interface{}{var0, var1, var2}
-	buffer, err := s.SerializeMulti(vMulti)
-	if err != nil || len(buffer) == 1 {
-		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(buffer), err)
-	}
-	rMulti, err := s.DeSerializeMulti(buffer, []interface{}{reflect.TypeOf(var0), reflect.TypeOf(var1), reflect.TypeOf(var2)})
-	if err != nil || len(rMulti) != 3 || vMulti[0].(int64) != rMulti[0].(int64) || vMulti[1].(float32) != rMulti[1].(float32) || vMulti[2].(uint8) != rMulti[2].(uint8) {
-		t.Errorf("deserialize multi value not correct. vMulti:%v, rMulti:%v, err:%v,\n", vMulti, rMulti, err)
+	m2, i2, f2, u2 := HelloRequest{}, int64(0), float32(0), uint8(0)
+	r, err := s.DeSerializeMulti(b, []interface{}{&i2, &f2, &u2, &m2})
+	if err != nil || i1 != i2 || f1 != f2 || u1 != u2 || m2.Name != m1.Name {
+		t.Errorf("deserialize multi value not correct. result:%v, r:%v, err:%v,\n", v, r, err)
 	}
 }
 

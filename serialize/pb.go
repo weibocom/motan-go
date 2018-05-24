@@ -2,11 +2,11 @@ package serialize
 
 import (
 	"errors"
-	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/weibocom/motan-go/log"
 	"math"
 	"reflect"
+	"strings"
 )
 
 // ------- grpc-pb --------
@@ -145,77 +145,72 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			err = buf.Unmarshal(message)
 			return message, err
 		}
-		var vStr string
-		if reflect.TypeOf(v).String() == string("*reflect.rtype") {
+		vStr := reflect.TypeOf(v).String()
+		if vStr == string("*reflect.rtype") {
 			vStr = v.(Stringer).String()
-		} else {
-			vStr = reflect.TypeOf(v).String()
 		}
-
-		//todo: test
-		fmt.Println(vStr)
-
-		switch vStr {
-		case "bool", "*bool":
+		switch strings.Replace(vStr, "*", "", 1) {
+		case "bool":
 			dcd, err := buf.DecodeVarint()
 			if err == nil {
+				sv, ok := v.(*bool)
 				if dcd == 1 {
-					if sv, ok := v.(*bool); ok {
+					if ok {
 						*sv = true
 					}
 					return true, err
 				} else {
-					if sv, ok := v.(*bool); ok {
+					if ok {
 						*sv = false
 					}
 					return false, err
 				}
 			}
-		case "int32", "int16", "*int32", "*int16":
+		case "int32", "int16":
 			dcd, err := buf.DecodeZigzag32()
 			if sv, ok := v.(*int32); ok {
 				*sv = int32(dcd)
 			}
 			return int32(dcd), err
-		case "uint32", "uint16", "*uint32", "*uint16":
+		case "uint32", "uint16":
 			dcd, err := buf.DecodeZigzag32()
 			if sv, ok := v.(*uint32); ok {
 				*sv = uint32(dcd)
 			}
 			return uint32(dcd), err
-		case "int", "int64", "*int", "*int64":
+		case "int", "int64":
 			dcd, err := buf.DecodeZigzag64()
 			if sv, ok := v.(*int64); ok {
 				*sv = int64(dcd)
 			}
 			return int64(dcd), err
-		case "uint", "uint64", "*uint", "*uint64":
+		case "uint", "uint64":
 			dcd, err := buf.DecodeZigzag64()
 			if sv, ok := v.(*uint64); ok {
 				*sv = uint64(dcd)
 			}
 			return uint64(dcd), err
-		case "float32", "*float32":
+		case "float32":
 			d, err := buf.DecodeFixed32()
 			dcd := math.Float32frombits(uint32(d))
 			if sv, ok := v.(*float32); ok {
 				*sv = float32(dcd)
 			}
 			return float32(dcd), err
-		case "float64", "*float64":
+		case "float64":
 			d, err := buf.DecodeFixed64()
 			dcd := math.Float64frombits(d)
 			if sv, ok := v.(*float64); ok {
 				*sv = float64(dcd)
 			}
 			return float64(dcd), err
-		case "string", "*string":
+		case "string":
 			dcd, err := buf.DecodeStringBytes()
 			if sv, ok := v.(*string); ok {
 				*sv = string(dcd)
 			}
 			return string(dcd), err
-		case "uint8", "*uint8":
+		case "uint8":
 			dcd, err := buf.DecodeVarint()
 			if sv, ok := v.(*uint8); ok {
 				*sv = uint8(dcd)
