@@ -60,6 +60,7 @@ func (z *ZkRegistry) Initialize() {
 	z.subscribeMap = make(map[string]map[string]motan.NotifyListener)
 	z.nodeRs = make(map[string]ServiceNode)
 	z.StartSnapshot(GetSanpshotConf())
+	z.watchSwitcherMap = make(map[string]chan bool)
 }
 
 func ToGroupPath(url *motan.URL) string {
