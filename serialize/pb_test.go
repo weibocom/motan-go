@@ -76,6 +76,15 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	//type: bool
 	verifyBaseType(true, s, t)
 
+	//type: int16
+	verifyBaseType(int16(66), s, t)
+	verifyBaseType(int16(-66), s, t)
+	verifyBaseType(int16(0), s, t)
+
+	//type: uint16
+	verifyBaseType(uint16(66), s, t)
+	verifyBaseType(uint16(0), s, t)
+
 	//type: int32
 	verifyBaseType(int32(66), s, t)
 	verifyBaseType(int32(-66), s, t)
@@ -85,12 +94,21 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	verifyBaseType(uint32(66), s, t)
 	verifyBaseType(uint32(0), s, t)
 
-	//type: int, int64
+	//type: int
+	verifyBaseType(int(66), s, t)
+	verifyBaseType(int(-66), s, t)
+	verifyBaseType(int(0), s, t)
+
+	//type: uint
+	verifyBaseType(uint(66), s, t)
+	verifyBaseType(uint(0), s, t)
+
+	//type: int64
 	verifyBaseType(int64(66), s, t)
 	verifyBaseType(int64(-66), s, t)
 	verifyBaseType(int64(0), s, t)
 
-	//type: uint, uint64
+	//type: uint64
 	verifyBaseType(uint64(66), s, t)
 	verifyBaseType(uint64(0), s, t)
 
@@ -107,7 +125,7 @@ func TestPbSerialization_Serialize(t *testing.T) {
 	//type: string
 	verifyBaseType("stringType", s, t)
 
-	//type: []uint8
+	//type: uint8
 	verifyBaseType('a', s, t)
 }
 

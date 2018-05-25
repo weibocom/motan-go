@@ -115,7 +115,11 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 	case reflect.Uint8:
 		err = buf.EncodeVarint(rv.Uint())
 	default:
-		err = errors.New("not support serialize type: " + rv.Type().String())
+		if pb, ok := rv.Interface().(proto.Message); ok {
+			buf.Marshal(pb)
+		} else {
+			err = errors.New("not support serialize type: " + rv.Type().String())
+		}
 	}
 	if err != nil {
 		vlog.Errorln(err)
@@ -131,11 +135,9 @@ func (p *PbSerialization) DeSerialize(b []byte, v interface{}) (interface{}, err
 
 type Stringer interface {
 	String() string
-	Kind() reflect.Kind
 }
 
 func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (interface{}, error) {
-	//var temp uint64
 	i, err := buf.DecodeVarint()
 	if err == nil {
 		if i == 1 {
@@ -146,77 +148,94 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			return message, err
 		}
 		vStr := reflect.TypeOf(v).String()
-		if vStr == string("*reflect.rtype") {
+		if vStr == "*reflect.rtype" {
 			vStr = v.(Stringer).String()
 		}
-		switch strings.Replace(vStr, "*", "", 1) {
+		vStr = strings.Replace(vStr, "*", "", -1)
+		switch vStr {
 		case "bool":
-			dcd, err := buf.DecodeVarint()
+			dv, err := buf.DecodeVarint()
 			if err == nil {
-				sv, ok := v.(*bool)
-				if dcd == 1 {
-					if ok {
-						*sv = true
-					}
-					return true, err
-				} else {
-					if ok {
-						*sv = false
-					}
-					return false, err
+				s := false
+				if dv == 1 {
+					s = true
 				}
+				if sv, ok := v.(*bool); ok {
+					*sv = s
+				}
+				return s, err
 			}
-		case "int32", "int16":
-			dcd, err := buf.DecodeZigzag32()
+		case "int16":
+			dv, err := buf.DecodeZigzag32()
+			if sv, ok := v.(*int16); ok {
+				*sv = int16(dv)
+			}
+			return int16(dv), err
+		case "uint16":
+			dv, err := buf.DecodeZigzag32()
+			if sv, ok := v.(*uint16); ok {
+				*sv = uint16(dv)
+			}
+			return uint16(dv), err
+		case "int32":
+			dv, err := buf.DecodeZigzag32()
 			if sv, ok := v.(*int32); ok {
-				*sv = int32(dcd)
+				*sv = int32(dv)
 			}
-			return int32(dcd), err
-		case "uint32", "uint16":
-			dcd, err := buf.DecodeZigzag32()
+			return int32(dv), err
+		case "uint32":
+			dv, err := buf.DecodeZigzag32()
 			if sv, ok := v.(*uint32); ok {
-				*sv = uint32(dcd)
+				*sv = uint32(dv)
 			}
-			return uint32(dcd), err
+			return uint32(dv), err
 		case "int", "int64":
-			dcd, err := buf.DecodeZigzag64()
+			dv, err := buf.DecodeZigzag64()
 			if sv, ok := v.(*int64); ok {
-				*sv = int64(dcd)
+				*sv = int64(dv)
 			}
-			return int64(dcd), err
+			return int64(dv), err
 		case "uint", "uint64":
-			dcd, err := buf.DecodeZigzag64()
+			dv, err := buf.DecodeZigzag64()
 			if sv, ok := v.(*uint64); ok {
-				*sv = uint64(dcd)
+				*sv = uint64(dv)
 			}
-			return uint64(dcd), err
+			return uint64(dv), err
 		case "float32":
 			d, err := buf.DecodeFixed32()
-			dcd := math.Float32frombits(uint32(d))
+			dv := math.Float32frombits(uint32(d))
 			if sv, ok := v.(*float32); ok {
-				*sv = float32(dcd)
+				*sv = float32(dv)
 			}
-			return float32(dcd), err
+			return float32(dv), err
 		case "float64":
 			d, err := buf.DecodeFixed64()
-			dcd := math.Float64frombits(d)
+			dv := math.Float64frombits(d)
 			if sv, ok := v.(*float64); ok {
-				*sv = float64(dcd)
+				*sv = float64(dv)
 			}
-			return float64(dcd), err
+			return float64(dv), err
 		case "string":
-			dcd, err := buf.DecodeStringBytes()
+			dv, err := buf.DecodeStringBytes()
 			if sv, ok := v.(*string); ok {
-				*sv = string(dcd)
+				*sv = string(dv)
 			}
-			return string(dcd), err
+			return string(dv), err
 		case "uint8":
-			dcd, err := buf.DecodeVarint()
+			dv, err := buf.DecodeVarint()
 			if sv, ok := v.(*uint8); ok {
-				*sv = uint8(dcd)
+				*sv = uint8(dv)
 			}
-			return uint8(dcd), err
+			return uint8(dv), err
 		default:
+			typ := proto.MessageType(vStr)
+			if typ != nil {
+				interf := reflect.New(typ.Elem()).Interface()
+				if pb, ok := interf.(proto.Message); ok {
+					err = buf.Unmarshal(pb)
+					return pb, err
+				}
+			}
 			return nil, errors.New("not support deserialize type: " + vStr)
 		}
 	}

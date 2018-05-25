@@ -248,7 +248,7 @@ func verifyBaseType(v interface{}, s motan.Serialization, t *testing.T) {
 	if err != nil {
 		t.Errorf("serialize fail. err:%v\n", err)
 	} else if v != dv {
-		t.Errorf("deserialize value not correct. result:%v, %v\n", v, dv)
+		t.Errorf("deserialize value not correct. result:%v(%v), %v(%v)\n", reflect.TypeOf(v), v, reflect.TypeOf(dv), dv)
 	}
 }
 
