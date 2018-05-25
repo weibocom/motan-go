@@ -24,7 +24,7 @@ type CallData struct {
 }
 
 // If this function is set, when a call is made, the function will be called
-var CustomRecordingFunc func(span *ot.Span, data CallData)
+var CustomTraceRecordingFunc func(span *ot.Span, data CallData)
 
 // TracingFilter is designed to support OpenTracing, so that we can make use of
 // tracing capability many tracing systems (such as zipkin, etc.)
@@ -128,8 +128,8 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 
 	var response = callNext(cf, caller, request)
 
-	if CustomRecordingFunc != nil {
-		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
+	if CustomTraceRecordingFunc != nil {
+		defer CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
 	}
 
 	if ex := response.GetException(); ex != nil {
@@ -161,8 +161,8 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	defer handleIfPanic(span, caller, request, IN_BOUND_CALL)
 
 	response := callNext(cf, caller, request)
-	if CustomRecordingFunc != nil {
-		defer CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
+	if CustomTraceRecordingFunc != nil {
+		defer CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
 	}
 
 	if ex := response.GetException(); ex != nil {
@@ -179,8 +179,8 @@ func handleIfPanic(span ot.Span, caller core.Caller, request core.Request, direc
 		span.SetTag(string(ext.Error), true)
 		span.LogFields(log.Int("error.kind", core.ServiceException))
 		span.LogFields(log.Object("error.object", r))
-		if CustomRecordingFunc != nil {
-			CustomRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
+		if CustomTraceRecordingFunc != nil {
+			CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
 		}
 		panic(r)
 	}
