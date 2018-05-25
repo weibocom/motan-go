@@ -2,13 +2,13 @@
 motan-client:
   mport: 8002 # client manage port
   log_dir: "./clientlogs" 
-  application: "ray-test" # client identify.  
+  application: "ray-test" # client identify.
 
 #config of registries
 motan-registry:
-  direct-registry: # registry id 
+  direct-registry: # registry id
     protocol: direct   # registry type. will get instance from extFactory.
-    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.    
+    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
 #    port: 9981 # use agent port
     port: 8100 # use server direct
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
@@ -18,8 +18,8 @@ motan-registry:
   #   host: 10.210.235.157
   #   port: 2181
   #   registrySessionTimeout: 10000
-  #   requestTimeout: 5000 
-  
+  #   requestTimeout: 5000
+
 #conf of basic refers
 motan-basicRefer:
   mybasicRefer: # basic refer id
@@ -38,10 +38,9 @@ motan-refer:
   mytest-motan2:
     path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
     registry: direct-registry
-    # registry: zk-registry    
+    # registry: zk-registry
     basicRefer: mybasicRefer # basic refer id
   mytest-demo:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
-    registry: direct-registry    
+    registry: direct-registry
     basicRefer: mybasicRefer # basic refer id
-
