@@ -47,7 +47,7 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		}
 	}()
 	t := time.Now().UnixNano()
-	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
+	resp := &motan.MotanResponse{Attachment: motan.NewConcurrentStringMap()}
 	toType := make([]interface{}, 1)
 	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)
@@ -69,9 +69,10 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		}
 	}
 
-	for k, v := range request.GetAttachments() {
+	request.GetAttachments().Range(func(k, v string) bool {
 		env["MOTAN_"+k] = v
-	}
+		return true
+	})
 
 	if env["REQUEST_METHOD"] == HTTPMethodGET {
 		if queryStr, err := buildQueryStr(request, c.url, nil); err == nil {

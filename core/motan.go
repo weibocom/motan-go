@@ -30,7 +30,7 @@ type WithURL interface {
 
 // Attachment : can get, set attachments.
 type Attachment interface {
-	GetAttachments() map[string]string
+	GetAttachments() *ConcurrentStringMap
 	GetAttachment(key string) string
 	SetAttachment(key string, value string)
 }
@@ -340,7 +340,7 @@ type MotanRequest struct {
 	Method      string
 	MethodDesc  string
 	Arguments   []interface{}
-	Attachment  map[string]string
+	Attachment  *ConcurrentStringMap
 	RPCContext  *RPCContext
 }
 
@@ -349,15 +349,15 @@ func (m *MotanRequest) GetAttachment(key string) string {
 	if m.Attachment == nil {
 		return ""
 	}
-	return m.Attachment[key]
+	return m.Attachment.LoadOrEmpty(key)
 }
 
 // SetAttachment : SetAttachment
 func (m *MotanRequest) SetAttachment(key string, value string) {
 	if m.Attachment == nil {
-		m.Attachment = make(map[string]string)
+		m.Attachment = NewConcurrentStringMap()
 	}
-	m.Attachment[key] = value
+	m.Attachment.Store(key, value)
 }
 
 // GetServiceName GetServiceName
@@ -386,7 +386,10 @@ func (m *MotanRequest) SetArguments(arguments []interface{}) {
 	m.Arguments = arguments
 }
 
-func (m *MotanRequest) GetAttachments() map[string]string {
+func (m *MotanRequest) GetAttachments() *ConcurrentStringMap {
+	if m.Attachment == nil {
+		m.Attachment = NewConcurrentStringMap()
+	}
 	return m.Attachment
 }
 
@@ -417,7 +420,7 @@ type MotanResponse struct {
 	Value       interface{}
 	Exception   *Exception
 	ProcessTime int64
-	Attachment  map[string]string
+	Attachment  *ConcurrentStringMap
 	RPCContext  *RPCContext
 }
 
@@ -425,14 +428,14 @@ func (m *MotanResponse) GetAttachment(key string) string {
 	if m.Attachment == nil {
 		return ""
 	}
-	return m.Attachment[key]
+	return m.Attachment.LoadOrEmpty(key)
 }
 
 func (m *MotanResponse) SetAttachment(key string, value string) {
 	if m.Attachment == nil {
-		m.Attachment = make(map[string]string)
+		m.Attachment = NewConcurrentStringMap()
 	}
-	m.Attachment[key] = value
+	m.Attachment.Store(key, value)
 }
 
 func (m *MotanResponse) GetValue() interface{} {
@@ -451,7 +454,10 @@ func (m *MotanResponse) GetProcessTime() int64 {
 	return m.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() map[string]string {
+func (m *MotanResponse) GetAttachments() *ConcurrentStringMap {
+	if m.Attachment == nil {
+		m.Attachment = NewConcurrentStringMap()
+	}
 	return m.Attachment
 }
 

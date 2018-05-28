@@ -6,11 +6,18 @@ import (
 
 // ext name
 const (
-	FailOver = "failover"
+	FailOver      = "failover"
+	BackupRequest = "backupRequest"
 )
 
 func RegistDefaultHa(extFactory motan.ExtentionFactory) {
 	extFactory.RegistExtHa(FailOver, func(url *motan.URL) motan.HaStrategy {
 		return &FailOverHA{url: url}
+	})
+	extFactory.RegistExtHa(BackupRequest, func(url *motan.URL) motan.HaStrategy {
+		ha := &BackupRequestHA{}
+		ha.SetURL(url)
+		ha.Initialize()
+		return ha
 	})
 }

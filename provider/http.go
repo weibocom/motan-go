@@ -102,7 +102,7 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 		}
 	}
 	// when motan request have a http method specific in attachment use this method
-	if motanRequestHTTPMethod, ok := request.GetAttachments()[MotanRequestHTTPMethodKey]; ok {
+	if motanRequestHTTPMethod, ok := request.GetAttachments().Load(MotanRequestHTTPMethodKey); ok {
 		httpReqMethod = motanRequestHTTPMethod
 	}
 	var httpReqURL string
@@ -137,7 +137,7 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 			if mixVars != nil {
 				for _, k := range mixVars {
 					if _, contains := params[k]; !contains {
-						if value, ok := request.GetAttachments()[k]; ok {
+						if value, ok := request.GetAttachments().Load(k); ok {
 							params[k] = value
 						}
 					}
@@ -166,7 +166,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 	}()
 	t := time.Now().UnixNano()
-	resp := &motan.MotanResponse{Attachment: make(map[string]string)}
+	resp := &motan.MotanResponse{Attachment: motan.NewConcurrentStringMap()}
 	toType := make([]interface{}, 1)
 	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)
@@ -201,13 +201,15 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		return resp
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded") //设置后，post参数才可正常传递
-	for k, v := range request.GetAttachments() {
+
+	request.GetAttachments().Range(func(k, v string) bool {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		req.Header.Add(k, v)
-	}
+		return true
+	})
 
 	ip := ""
-	if remoteIP, exist := request.GetAttachments()[motan.RemoteIPKey]; exist {
+	if remoteIP, exist := request.GetAttachments().Load(motan.RemoteIPKey); exist {
 		ip = remoteIP
 	} else {
 		ip = request.GetAttachment(motan.HostKey)
@@ -251,9 +253,10 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 		return resp
 	}
-	for k, v := range request.GetAttachments() {
+	request.GetAttachments().Range(func(k, v string) bool {
 		resp.SetAttachment(k, v)
-	}
+		return true
+	})
 	for k, v := range headers {
 		resp.SetAttachment(k, v[0])
 	}
