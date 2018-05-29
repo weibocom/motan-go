@@ -23,8 +23,42 @@ type CallData struct {
 	Direction uint32
 }
 
-// If this function is set, when a call is made, the function will be called
-var CustomTraceRecordingFunc func(span *ot.Span, data CallData)
+// The default TraceRecordingFunc.
+func DefaultTraceRecordingFunc(span *ot.Span, data CallData) {
+	(*span).SetTag("service.type", "motan")
+	(*span).SetTag("service.group", data.Caller.GetURL().Group)
+
+	if ex := data.Response.GetException(); ex != nil {
+		(*span).SetTag(string(ext.Error), true)
+		(*span).LogFields(log.Int("error.kind", ex.ErrType))
+		(*span).LogFields(log.String("message", ex.ErrMsg))
+	} else if data.Error != nil {
+		(*span).SetTag(string(ext.Error), true)
+		(*span).LogFields(log.Int("error.kind", core.ServiceException))
+		(*span).LogFields(log.Object("error.object", data.Error))
+	}
+
+	switch data.Direction {
+	case IN_BOUND_CALL:
+		(*span).SetTag(string(ext.PeerHostIPv4), data.Caller.GetURL().Host)
+		(*span).SetTag(string(ext.PeerPort), data.Caller.GetURL().Port)
+	case OUT_BOUND_CALL:
+		(*span).SetTag(string(ext.PeerHostIPv4), data.Request.GetAttachment(core.HostKey))
+	}
+}
+
+// The function to record tracing data, default is DefaultTraceRecordingFunc,
+// Users can rewrite it, and can embed the DefaultTraceRecordingFunc in the
+// Custom Recording Function.
+var TraceRecordingFunc func(span *ot.Span, data CallData)
+
+func tracingFunc() func(span *ot.Span, data CallData) {
+	if f := TraceRecordingFunc; f != nil {
+		return f
+	} else {
+		return DefaultTraceRecordingFunc
+	}
+}
 
 // TracingFilter is designed to support OpenTracing, so that we can make use of
 // tracing capability many tracing systems (such as zipkin, etc.)
@@ -117,26 +151,14 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	}
 	defer span.Finish()
 
-	span.SetTag(string(ext.PeerHostIPv4), caller.GetURL().Host)
-	span.SetTag(string(ext.PeerPort), caller.GetURL().Port)
-	span.SetTag("service.type", "motan")
-	span.SetTag("service.group", caller.GetURL().Group)
-
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer handleIfPanic(span, caller, request, OUT_BOUND_CALL)
 
 	var response = callNext(cf, caller, request)
 
-	if CustomTraceRecordingFunc != nil {
-		defer CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
-	}
-
-	if ex := response.GetException(); ex != nil {
-		span.SetTag(string(ext.Error), true)
-		span.LogFields(log.Int("error.kind", ex.ErrType))
-		span.LogFields(log.String("message", ex.ErrMsg))
-	}
+	tracing := tracingFunc()
+	tracing(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
 
 	return response
 }
@@ -150,38 +172,21 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 	span = ot.StartSpan(spanName(&request), ext.RPCServerOption(sc))
 	defer span.Finish()
 
-	if remoteHost := request.GetAttachment(core.HostKey); remoteHost != "" {
-		span.SetTag(string(ext.PeerHostIPv4), remoteHost)
-	}
-	span.SetTag("service.type", "motan")
-	span.SetTag("service.group", caller.GetURL().Group)
-
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
 	defer handleIfPanic(span, caller, request, IN_BOUND_CALL)
 
 	response := callNext(cf, caller, request)
-	if CustomTraceRecordingFunc != nil {
-		defer CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
-	}
-
-	if ex := response.GetException(); ex != nil {
-		span.SetTag(string(ext.Error), true)
-		span.LogFields(log.Int("error.kind", ex.ErrType))
-		span.LogFields(log.String("message", ex.ErrMsg))
-	}
+	tracing := tracingFunc()
+	tracing(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
 
 	return response
 }
 
 func handleIfPanic(span ot.Span, caller core.Caller, request core.Request, direction uint32) {
 	if r := recover(); r != nil {
-		span.SetTag(string(ext.Error), true)
-		span.LogFields(log.Int("error.kind", core.ServiceException))
-		span.LogFields(log.Object("error.object", r))
-		if CustomTraceRecordingFunc != nil {
-			CustomTraceRecordingFunc(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
-		}
+		tracing := tracingFunc()
+		tracing(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
 		panic(r)
 	}
 }
