@@ -116,7 +116,7 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
 		if err != nil {
-			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s, err:%s\n", request.Header.RequestID, request.Metadata[mpro.MPath], request.Metadata[mpro.MMethod], err.Error())
+			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata[mpro.MPath], request.Metadata[mpro.MMethod], err.Error())
 			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. err:" + err.Error() + " method:" + request.Metadata[mpro.MMethod], ErrType: motan.ServiceException}))
 		} else {
 			if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {

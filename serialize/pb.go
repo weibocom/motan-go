@@ -23,6 +23,11 @@ func (g *GrpcPbSerialization) Serialize(v interface{}) ([]byte, error) {
 	if message, ok := v.(proto.Message); ok {
 		return proto.Marshal(message)
 	}
+	if rv, ok := v.(reflect.Value); ok {
+		if message, ok := rv.Interface().(proto.Message); ok {
+			return proto.Marshal(message)
+		}
+	}
 	vlog.Errorf("param must be proto.Message in GrpcPbSerialization Serialize. param:%v\n", v)
 	return nil, errors.New("param must be proto.Message in GrpcPbSerialization Serialize")
 }
@@ -31,6 +36,15 @@ func (g *GrpcPbSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 	if message, ok := v.(proto.Message); ok {
 		err := proto.Unmarshal(b, message)
 		return message, err
+	}
+	vStr := strings.Replace(v.(Stringer).String(), "*", "", -1)
+	typ := proto.MessageType(vStr)
+	if typ != nil {
+		interf := reflect.New(typ.Elem()).Interface()
+		if message, ok := interf.(proto.Message); ok {
+			err := proto.Unmarshal(b, message)
+			return message, err
+		}
 	}
 	vlog.Errorf("param must be proto.Message in GrpcPbSerialization DeSerialize. param:%v\n", v)
 	return nil, errors.New("param must be proto.Message in GrpcPbSerialization DeSerialize")
