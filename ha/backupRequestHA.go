@@ -85,19 +85,21 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			vlog.Warningf("The permit is used up, request id: %d\n", request.GetRequestID())
 			break
 		}
-		// log backup request
+		// log & clone backup request
+		postRequest := request
 		if i > 0 {
 			vlog.Infof("[backup request ha] delay %s request id: %d, service: %s, method: %s\n", strconv.Itoa(delay), request.GetRequestID(), request.GetServiceName(), methodKey)
+			postRequest = request.Clone().(motan.Request)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
 		go func(endpoint motan.EndPoint, errorCh chan motan.Response) {
 			start := time.Now().UnixNano()
-			respnose := br.doCall(request, endpoint)
-			if respnose != nil && (respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException) {
-				successCh <- respnose
+			response := br.doCall(postRequest, endpoint)
+			if response != nil && (response.GetException() == nil || response.GetException().ErrType == motan.BizException) {
+				successCh <- response
 				histogram.Update((time.Now().UnixNano() - start) / 1e6)
 			} else {
-				errorCh <- respnose
+				errorCh <- response
 			}
 		}(ep, lastErrorCh)
 

@@ -256,6 +256,22 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	return buf
 }
 
+func (msg *Message) Clone() interface{} {
+	newMessage := &Message{
+		Header: msg.Header,
+		Body:   msg.Body,
+		Type:   msg.Type,
+	}
+	if msg.Metadata != nil {
+		newMessage.Metadata = motan.NewConcurrentStringMap()
+		msg.Metadata.Range(func(k, v string) bool {
+			newMessage.Metadata.Store(k, v)
+			return true
+		})
+	}
+	return newMessage
+}
+
 func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	temp := make([]byte, HeaderLength, HeaderLength)
 

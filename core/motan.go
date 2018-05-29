@@ -40,6 +40,11 @@ type Destroyable interface {
 	Destroy()
 }
 
+// Cloneable : can clone itself, the return type interface{} must be the type which implement this interface
+type Cloneable interface {
+	Clone() interface{}
+}
+
 // Caller : can process a motan request. the call maybe process from remote by endpoint, maybe process by some kinds of provider
 type Caller interface {
 	WithURL
@@ -51,6 +56,7 @@ type Caller interface {
 // Request : motan request
 type Request interface {
 	Attachment
+	Cloneable
 	GetServiceName() string // service name  e.g. request path.or interface name
 	GetMethod() string
 	GetMethodDesc() string
@@ -398,6 +404,45 @@ func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
 		m.RPCContext = &RPCContext{}
 	}
 	return m.RPCContext
+}
+
+func (m *MotanRequest) Clone() interface{} {
+	copy := &MotanRequest{
+		RequestID:   m.RequestID,
+		ServiceName: m.ServiceName,
+		Method:      m.Method,
+		MethodDesc:  m.MethodDesc,
+		Arguments:   m.Arguments,
+		Attachment:  NewConcurrentStringMap(),
+	}
+	if m.Attachment != nil {
+		m.Attachment.Range(func(k, v string) bool {
+			copy.Attachment.Store(k, v)
+			return true
+		})
+	}
+	if m.RPCContext != nil {
+		rpcContext := m.RPCContext
+		copy.RPCContext = &RPCContext{
+			ExtFactory:   rpcContext.ExtFactory,
+			Oneway:       rpcContext.Oneway,
+			Proxy:        rpcContext.Proxy,
+			GzipSize:     rpcContext.GzipSize,
+			SerializeNum: rpcContext.SerializeNum,
+			Serialized:   rpcContext.Serialized,
+			AsyncCall:    rpcContext.AsyncCall,
+			Result:       rpcContext.Result,
+			Reply:        rpcContext.Reply,
+		}
+		if rpcContext.OriginalMessage != nil {
+			if oldMessage, ok := rpcContext.OriginalMessage.(Cloneable); ok {
+				copy.RPCContext.OriginalMessage = oldMessage.Clone()
+			} else {
+				copy.RPCContext.OriginalMessage = oldMessage
+			}
+		}
+	}
+	return copy
 }
 
 // ProcessDeserializable : DeserializableValue to real params according toType

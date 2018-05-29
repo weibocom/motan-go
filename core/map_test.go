@@ -85,38 +85,3 @@ func BenchmarkConcurrentStringMapRead(b *testing.B) {
 		}
 	})
 }
-
-// Follow methods just can compiled with 1.9
-//func BenchmarkSyncMapRead(b *testing.B) {
-//	size := 100
-//	stringMap := sync.Map{}
-//	for i := 0; i < size; i++ {
-//		s := strconv.Itoa(i)
-//		stringMap.Store(s, s)
-//	}
-//	b.SetParallelism(3)
-//	b.N = 3
-//	b.RunParallel(func(pb *testing.PB) {
-//		for pb.Next() {
-//			stringMap.Range(func(_, _ interface{}) bool { return true })
-//		}
-//	})
-//}
-
-//func BenchmarkSyncMap(b *testing.B) {
-//	stringMap := &sync.Map{}
-//	for i := 0; i < b.N; i++ {
-//		s := strconv.Itoa(i)
-//		stringMap.Store(s, s)
-//	}
-//}
-
-//func BenchmarkSyncMapParallel(b *testing.B) {
-//	stringMap := &sync.Map{}
-//	b.RunParallel(func(pb *testing.PB) {
-//		for pb.Next() {
-//			s := strconv.Itoa(rand.Intn(10000) + 10000)
-//			stringMap.Store(s, s)
-//		}
-//	})
-//}

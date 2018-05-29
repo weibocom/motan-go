@@ -2,7 +2,7 @@ package core
 
 import "sync"
 
-// ConcurrentStringMap for attachment and metadata, this will just be used in few goroutines(generally one, or two)
+// ConcurrentStringMap for attachment and metadata, this will just be used in few goroutines(generally one or two)
 // so just use a simple implementation
 type ConcurrentStringMap struct {
 	lock     sync.RWMutex
