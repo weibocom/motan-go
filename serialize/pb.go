@@ -8,10 +8,9 @@ import (
 )
 
 var (
-	GrpcParamMultiErr      = errors.New("do not support multi param in GrpcPbSerialization ")
-	GrpcParamNilErr        = errors.New("param must not nil in GrpcPbSerialization")
-	GrpcParamNotMessageErr = errors.New("param must be proto.Message in GrpcPbSerialization")
-	PbParamNilErr          = errors.New("param must not nil in PbSerialization")
+	ErrMultiParam      = errors.New("do not support multi param in Serialization ")
+	ErrNilParam        = errors.New("param must not nil in Serialization")
+	ErrNotMessageParam = errors.New("param must be proto.Message in Serialization")
 )
 
 // ------- grpc-pb --------
@@ -23,17 +22,17 @@ func (g *GrpcPbSerialization) GetSerialNum() int {
 
 func (g *GrpcPbSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
 	if v == nil {
-		return nil, GrpcParamNilErr
+		return nil, ErrNilParam
 	}
 	if len(v) == 1 {
 		return g.Serialize(v[0])
 	}
-	return nil, GrpcParamMultiErr
+	return nil, ErrMultiParam
 }
 
 func (g *GrpcPbSerialization) Serialize(v interface{}) ([]byte, error) {
 	if v == nil {
-		return nil, GrpcParamNilErr
+		return nil, ErrNilParam
 	}
 	if message, ok := v.(proto.Message); ok {
 		return proto.Marshal(message)
@@ -43,12 +42,12 @@ func (g *GrpcPbSerialization) Serialize(v interface{}) ([]byte, error) {
 			return proto.Marshal(message)
 		}
 	}
-	return nil, GrpcParamNotMessageErr
+	return nil, ErrNotMessageParam
 }
 
 func (g *GrpcPbSerialization) DeSerializeMulti(b []byte, v []interface{}) ([]interface{}, error) {
 	if v == nil {
-		return nil, GrpcParamNilErr
+		return nil, ErrNilParam
 	}
 	if len(v) == 1 {
 		r, err := g.DeSerialize(b, v[0])
@@ -57,12 +56,12 @@ func (g *GrpcPbSerialization) DeSerializeMulti(b []byte, v []interface{}) ([]int
 		}
 		return []interface{}{r}, nil
 	}
-	return nil, GrpcParamMultiErr
+	return nil, ErrMultiParam
 }
 
 func (g *GrpcPbSerialization) DeSerialize(b []byte, v interface{}) (interface{}, error) {
 	if v == nil {
-		return nil, GrpcParamNilErr
+		return nil, ErrNilParam
 	}
 	if message, ok := v.(proto.Message); ok {
 		err := proto.Unmarshal(b, message)
@@ -70,16 +69,13 @@ func (g *GrpcPbSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 	}
 	if rt, ok := v.(reflect.Type); ok {
 		if rt.Kind() == reflect.Ptr {
-			rt = rt.Elem()
-		}
-		if rt.Kind() == reflect.Ptr {
 			if message, ok := reflect.New(rt.Elem()).Interface().(proto.Message); ok {
 				err := proto.Unmarshal(b, message)
 				return message, err
 			}
 		}
 	}
-	return nil, GrpcParamNotMessageErr
+	return nil, ErrNotMessageParam
 }
 
 // ------- pb --------
@@ -176,7 +172,7 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 		return nil, nil
 	}
 	if v == nil {
-		return nil, PbParamNilErr
+		return nil, ErrNilParam
 	}
 	rt, ok := v.(reflect.Type)
 	if !ok {
@@ -262,8 +258,8 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 		return uint8(dv), err
 	default:
 		message, ok := v.(proto.Message)
-		if !ok && rt.Kind() == reflect.Ptr {
-			message, ok = reflect.New(rt.Elem()).Interface().(proto.Message)
+		if !ok {
+			message, ok = reflect.New(rt).Interface().(proto.Message)
 		}
 		if ok {
 			err = buf.Unmarshal(message)
