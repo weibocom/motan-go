@@ -17,7 +17,7 @@ func TestBackupRequestHA_Call(t *testing.T) {
 		t.Error("Test Case failed.")
 	}
 	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-	request.Attachment = motan.NewConcurrentStringMap()
+	request.Attachment = motan.NewStringMap(0)
 	nlb := &lb.RoundrobinLB{}
 	ep1 := &motan.TestEndPoint{}
 	ep1.SetProcessTime(1) // third round

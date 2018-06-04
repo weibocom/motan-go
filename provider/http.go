@@ -166,7 +166,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 	}()
 	t := time.Now().UnixNano()
-	resp := &motan.MotanResponse{Attachment: motan.NewConcurrentStringMap()}
+	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	toType := make([]interface{}, 1)
 	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)

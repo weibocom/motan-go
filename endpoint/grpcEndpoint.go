@@ -60,7 +60,7 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 	err := grpc.Invoke(ctx, "/"+request.GetServiceName()+"/"+request.GetMethod(), in, out, g.grpcConn, grpc.Header(&header), grpc.Trailer(&trailer))
 	// type MD map[string][]string
-	resp := &motan.MotanResponse{Attachment: motan.NewConcurrentStringMap()}
+	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	resp.RequestID = request.GetRequestID()
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1000000)
 	rc := resp.GetRPCContext(true)

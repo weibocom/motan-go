@@ -14,6 +14,10 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
+const (
+	DefaultMetaSize = 16
+)
+
 //message type
 const (
 	Req = iota
@@ -49,7 +53,7 @@ type Header struct {
 
 type Message struct {
 	Header   *Header
-	Metadata *motan.ConcurrentStringMap
+	Metadata motan.StringMap
 	Body     []byte
 	Type     int
 }
@@ -99,7 +103,7 @@ func BuildResponseHeader(requestID uint64, msgStatus int) *Header {
 func BuildHeartbeat(requestID uint64, msgType int) *Message {
 	request := &Message{
 		Header:   BuildHeader(msgType, true, defaultSerialize, requestID, Normal),
-		Metadata: motan.NewConcurrentStringMap(),
+		Metadata: motan.NewStringMap(DefaultMetaSize),
 		Body:     make([]byte, 0),
 		Type:     msgType,
 	}
@@ -263,11 +267,7 @@ func (msg *Message) Clone() interface{} {
 		Type:   msg.Type,
 	}
 	if msg.Metadata != nil {
-		newMessage.Metadata = motan.NewConcurrentStringMap()
-		msg.Metadata.Range(func(k, v string) bool {
-			newMessage.Metadata.Store(k, v)
-			return true
-		})
+		newMessage.Metadata = msg.Metadata.Copy()
 	}
 	return newMessage
 }
@@ -297,7 +297,7 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 		return nil, err
 	}
 	metasize := int(binary.BigEndian.Uint32(temp[:4]))
-	metamap := motan.NewConcurrentStringMap()
+	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
 		metadata, err := readBytes(buf, metasize)
 		if err != nil {
@@ -435,7 +435,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 			return msg, nil
 		}
 	}
-	req := &Message{Metadata: motan.NewConcurrentStringMap()}
+	req := &Message{}
 	if rc.Serialized { // params already serialized
 		req.Header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
 	} else {
@@ -506,7 +506,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 		}
 	}
 
-	res := &Message{Metadata: motan.NewConcurrentStringMap()}
+	res := &Message{}
 	var msgType int
 	if response.GetException() != nil {
 		msgType = Exception
@@ -541,7 +541,6 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	}
 
 	res.Metadata = response.GetAttachments()
-
 	if rc.GzipSize > 0 && len(res.Body) > rc.GzipSize {
 		data, err := EncodeGzip(res.Body)
 		if err != nil {
@@ -576,8 +575,8 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 		mres.Value = dv
 	}
 	if response.Header.GetStatus() == Exception {
-		e, ok := response.Metadata.Load(MExceptionn)
-		if ok && e != "" {
+		e := response.Metadata.LoadOrEmpty(MExceptionn)
+		if e != "" {
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
 			if err != nil {
@@ -594,7 +593,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 
 func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
 	header := BuildHeader(Res, false, defaultSerialize, requestID, Exception)
-	msg := &Message{Header: header, Metadata: motan.NewConcurrentStringMap()}
+	msg := &Message{Header: header, Metadata: motan.NewStringMap(DefaultMetaSize)}
 	msg.Metadata.Store(MExceptionn, errmsg)
 	return msg
 }

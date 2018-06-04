@@ -24,8 +24,8 @@ func assertEqualBool(excepted, actual bool, t *testing.T) {
 	}
 }
 
-func TestConcurrentStringMap(t *testing.T) {
-	stringMap := NewConcurrentStringMap()
+func TestStringMap(t *testing.T) {
+	stringMap := NewStringMap(0)
 	assertEqualInt(0, stringMap.Len(), t)
 	stringMap.Store("key", "value")
 	assertEqualInt(1, stringMap.Len(), t)
@@ -52,16 +52,16 @@ func TestConcurrentStringMap(t *testing.T) {
 	})
 }
 
-func BenchmarkConcurrentStringMap(b *testing.B) {
-	stringMap := NewConcurrentStringMap()
+func BenchmarkStringMap(b *testing.B) {
+	stringMap := NewStringMap(0)
 	for i := 0; i < b.N; i++ {
 		s := strconv.Itoa(i)
 		stringMap.Store(s, s)
 	}
 }
 
-func BenchmarkConcurrentStringMapParallel(b *testing.B) {
-	stringMap := NewConcurrentStringMap()
+func BenchmarkStringMapParallel(b *testing.B) {
+	stringMap := NewStringMap(0)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			s := strconv.Itoa(rand.Intn(10000) + 10000)
@@ -70,9 +70,9 @@ func BenchmarkConcurrentStringMapParallel(b *testing.B) {
 	})
 }
 
-func BenchmarkConcurrentStringMapRead(b *testing.B) {
+func BenchmarkStringMapRead(b *testing.B) {
 	size := 100
-	stringMap := NewConcurrentStringMap()
+	stringMap := NewStringMap(0)
 	for i := 0; i < size; i++ {
 		s := strconv.Itoa(i)
 		stringMap.Store(s, s)

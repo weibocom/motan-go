@@ -10,6 +10,10 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
+const (
+	DefaultAttachmentSize = 16
+)
+
 //-----------interface-------------
 
 // Name is a interface can get and set name. especially for extension implements
@@ -30,7 +34,7 @@ type WithURL interface {
 
 // Attachment : can get, set attachments.
 type Attachment interface {
-	GetAttachments() *ConcurrentStringMap
+	GetAttachments() StringMap
 	GetAttachment(key string) string
 	SetAttachment(key string, value string)
 }
@@ -346,7 +350,7 @@ type MotanRequest struct {
 	Method      string
 	MethodDesc  string
 	Arguments   []interface{}
-	Attachment  *ConcurrentStringMap
+	Attachment  StringMap
 	RPCContext  *RPCContext
 }
 
@@ -361,7 +365,7 @@ func (m *MotanRequest) GetAttachment(key string) string {
 // SetAttachment : SetAttachment
 func (m *MotanRequest) SetAttachment(key string, value string) {
 	if m.Attachment == nil {
-		m.Attachment = NewConcurrentStringMap()
+		m.Attachment = NewStringMap(DefaultAttachmentSize)
 	}
 	m.Attachment.Store(key, value)
 }
@@ -392,9 +396,9 @@ func (m *MotanRequest) SetArguments(arguments []interface{}) {
 	m.Arguments = arguments
 }
 
-func (m *MotanRequest) GetAttachments() *ConcurrentStringMap {
+func (m *MotanRequest) GetAttachments() StringMap {
 	if m.Attachment == nil {
-		m.Attachment = NewConcurrentStringMap()
+		return EmptyStringMap
 	}
 	return m.Attachment
 }
@@ -407,42 +411,37 @@ func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
 }
 
 func (m *MotanRequest) Clone() interface{} {
-	copy := &MotanRequest{
+	newRequest := &MotanRequest{
 		RequestID:   m.RequestID,
 		ServiceName: m.ServiceName,
 		Method:      m.Method,
 		MethodDesc:  m.MethodDesc,
 		Arguments:   m.Arguments,
-		Attachment:  NewConcurrentStringMap(),
 	}
 	if m.Attachment != nil {
-		m.Attachment.Range(func(k, v string) bool {
-			copy.Attachment.Store(k, v)
-			return true
-		})
+		newRequest.Attachment = m.Attachment.Copy()
 	}
 	if m.RPCContext != nil {
-		rpcContext := m.RPCContext
-		copy.RPCContext = &RPCContext{
-			ExtFactory:   rpcContext.ExtFactory,
-			Oneway:       rpcContext.Oneway,
-			Proxy:        rpcContext.Proxy,
-			GzipSize:     rpcContext.GzipSize,
-			SerializeNum: rpcContext.SerializeNum,
-			Serialized:   rpcContext.Serialized,
-			AsyncCall:    rpcContext.AsyncCall,
-			Result:       rpcContext.Result,
-			Reply:        rpcContext.Reply,
+		newRequest.RPCContext = &RPCContext{
+			ExtFactory:   m.RPCContext.ExtFactory,
+			Oneway:       m.RPCContext.Oneway,
+			Proxy:        m.RPCContext.Proxy,
+			GzipSize:     m.RPCContext.GzipSize,
+			SerializeNum: m.RPCContext.SerializeNum,
+			Serialized:   m.RPCContext.Serialized,
+			AsyncCall:    m.RPCContext.AsyncCall,
+			Result:       m.RPCContext.Result,
+			Reply:        m.RPCContext.Reply,
 		}
-		if rpcContext.OriginalMessage != nil {
-			if oldMessage, ok := rpcContext.OriginalMessage.(Cloneable); ok {
-				copy.RPCContext.OriginalMessage = oldMessage.Clone()
+		if m.RPCContext.OriginalMessage != nil {
+			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
+				newRequest.RPCContext.OriginalMessage = oldMessage.Clone()
 			} else {
-				copy.RPCContext.OriginalMessage = oldMessage
+				newRequest.RPCContext.OriginalMessage = oldMessage
 			}
 		}
 	}
-	return copy
+	return newRequest
 }
 
 // ProcessDeserializable : DeserializableValue to real params according toType
@@ -465,7 +464,7 @@ type MotanResponse struct {
 	Value       interface{}
 	Exception   *Exception
 	ProcessTime int64
-	Attachment  *ConcurrentStringMap
+	Attachment  StringMap
 	RPCContext  *RPCContext
 }
 
@@ -478,7 +477,7 @@ func (m *MotanResponse) GetAttachment(key string) string {
 
 func (m *MotanResponse) SetAttachment(key string, value string) {
 	if m.Attachment == nil {
-		m.Attachment = NewConcurrentStringMap()
+		m.Attachment = NewStringMap(DefaultAttachmentSize)
 	}
 	m.Attachment.Store(key, value)
 }
@@ -499,9 +498,9 @@ func (m *MotanResponse) GetProcessTime() int64 {
 	return m.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() *ConcurrentStringMap {
+func (m *MotanResponse) GetAttachments() StringMap {
 	if m.Attachment == nil {
-		m.Attachment = NewConcurrentStringMap()
+		return EmptyStringMap
 	}
 	return m.Attachment
 }

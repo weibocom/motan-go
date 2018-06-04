@@ -130,7 +130,7 @@ func TestEncode(t *testing.T) {
 	h.SetRequest(true)
 	h.Magic = MotanMagic
 	h.RequestID = 2349789
-	meta := core.NewConcurrentStringMap()
+	meta := core.NewStringMap(0)
 	meta.Store("k1", "v1")
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}

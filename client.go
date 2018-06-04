@@ -73,7 +73,7 @@ func (c *Client) BaseGo(req motan.Request, reply interface{}, done chan *motan.A
 }
 
 func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
-	req := &motan.MotanRequest{Method: method, ServiceName: c.url.Path, Arguments: args, Attachment: motan.NewConcurrentStringMap()}
+	req := &motan.MotanRequest{Method: method, ServiceName: c.url.Path, Arguments: args, Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	version := c.url.GetParam(motan.VersionKey, "")
 	if version != "" {
 		req.SetAttachment(mpro.MVersion, version)

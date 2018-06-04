@@ -25,7 +25,7 @@ var (
 	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
 	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
 
-	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewConcurrentStringMap(), RPCContext: &motan.RPCContext{AsyncCall: true}}
+	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 )
 
 type MotanEndpoint struct {
@@ -202,7 +202,7 @@ func (m *MotanEndpoint) keepalive() {
 func (m *MotanEndpoint) defaultErrMotanResponse(request motan.Request, errMsg string) motan.Response {
 	response := &motan.MotanResponse{
 		RequestID:  request.GetRequestID(),
-		Attachment: motan.NewConcurrentStringMap(),
+		Attachment: motan.NewStringMap(motan.DefaultAttachmentSize),
 		Exception: &motan.Exception{
 			ErrCode: 400,
 			ErrMsg:  errMsg,

@@ -15,7 +15,7 @@ func TestGetName(t *testing.T) {
 		t.Error("Test Case failed.")
 	}
 	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-	request.Attachment = motan.NewConcurrentStringMap()
+	request.Attachment = motan.NewStringMap(0)
 	nlb := &motan.TestLoadBalance{}
 	res := ha.Call(request, nlb)
 	if res == nil {
