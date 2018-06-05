@@ -8,6 +8,8 @@ import (
 
 	"errors"
 	"github.com/weibocom/motan-go/log"
+	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -34,7 +36,7 @@ type WithURL interface {
 
 // Attachment : can get, set attachments.
 type Attachment interface {
-	GetAttachments() StringMap
+	GetAttachments() *StringMap
 	GetAttachment(key string) string
 	SetAttachment(key string, value string)
 }
@@ -350,8 +352,9 @@ type MotanRequest struct {
 	Method      string
 	MethodDesc  string
 	Arguments   []interface{}
-	Attachment  StringMap
+	Attachment  *StringMap
 	RPCContext  *RPCContext
+	mu          sync.Mutex
 }
 
 // GetAttachment GetAttachment
@@ -364,10 +367,7 @@ func (m *MotanRequest) GetAttachment(key string) string {
 
 // SetAttachment : SetAttachment
 func (m *MotanRequest) SetAttachment(key string, value string) {
-	if m.Attachment == nil {
-		m.Attachment = NewStringMap(DefaultAttachmentSize)
-	}
-	m.Attachment.Store(key, value)
+	m.GetAttachments().Store(key, value)
 }
 
 // GetServiceName GetServiceName
@@ -396,11 +396,20 @@ func (m *MotanRequest) SetArguments(arguments []interface{}) {
 	m.Arguments = arguments
 }
 
-func (m *MotanRequest) GetAttachments() StringMap {
-	if m.Attachment == nil {
-		return EmptyStringMap
+func (m *MotanRequest) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+	if attachment != nil {
+		return attachment
 	}
-	return m.Attachment
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Attachment == nil {
+		attachment = NewStringMap(DefaultAttachmentSize)
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+	} else {
+		attachment = m.Attachment
+	}
+	return attachment
 }
 
 func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
@@ -464,8 +473,9 @@ type MotanResponse struct {
 	Value       interface{}
 	Exception   *Exception
 	ProcessTime int64
-	Attachment  StringMap
+	Attachment  *StringMap
 	RPCContext  *RPCContext
+	mu          sync.Mutex
 }
 
 func (m *MotanResponse) GetAttachment(key string) string {
@@ -476,10 +486,7 @@ func (m *MotanResponse) GetAttachment(key string) string {
 }
 
 func (m *MotanResponse) SetAttachment(key string, value string) {
-	if m.Attachment == nil {
-		m.Attachment = NewStringMap(DefaultAttachmentSize)
-	}
-	m.Attachment.Store(key, value)
+	m.GetAttachments().Store(key, value)
 }
 
 func (m *MotanResponse) GetValue() interface{} {
@@ -498,11 +505,20 @@ func (m *MotanResponse) GetProcessTime() int64 {
 	return m.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() StringMap {
-	if m.Attachment == nil {
-		return EmptyStringMap
+func (m *MotanResponse) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+	if attachment != nil {
+		return attachment
 	}
-	return m.Attachment
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Attachment == nil {
+		attachment = NewStringMap(DefaultAttachmentSize)
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+	} else {
+		attachment = m.Attachment
+	}
+	return attachment
 }
 
 func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {

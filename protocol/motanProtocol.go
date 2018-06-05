@@ -53,7 +53,7 @@ type Header struct {
 
 type Message struct {
 	Header   *Header
-	Metadata motan.StringMap
+	Metadata *motan.StringMap
 	Body     []byte
 	Type     int
 }
