@@ -15,21 +15,20 @@ type MotanProvider struct {
 }
 
 const (
-	ProxyConfKey     = "proxy"
-	ProxyHostConfKey = "proxy.host"
-	DefaultHost      = "127.0.0.1"
+	ProxyHostKey = "proxy.host"
+	DefaultHost  = "127.0.0.1"
 )
 
 func (m *MotanProvider) Initialize() {
-	protocol, port, err := motan.ParseExportInfo(m.url.GetParam(ProxyConfKey, ""))
+	protocol, port, err := motan.ParseExportInfo(m.url.GetParam(motan.ProxyKey, ""))
 	if err != nil {
-		vlog.Errorf("reverse proxy service config in %s error!\n", ProxyConfKey)
+		vlog.Errorf("reverse proxy service config in %s error!\n", motan.ProxyKey)
 		return
 	} else if port <= 0 {
 		vlog.Errorln("reverse proxy service port config error!")
 		return
 	}
-	host := m.url.GetParam(ProxyHostConfKey, DefaultHost)
+	host := m.url.GetParam(ProxyHostKey, DefaultHost)
 	m.ep = m.extFactory.GetEndPoint(&motan.URL{Protocol: protocol, Host: host, Port: port})
 	if m.ep == nil {
 		vlog.Errorf("Can not find %s endpoint in ExtentionFactory!\n", protocol)

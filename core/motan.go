@@ -568,11 +568,18 @@ func (d *DefaultExtentionFactory) GetEndPoint(url *URL) EndPoint {
 }
 
 func (d *DefaultExtentionFactory) GetProvider(url *URL) Provider {
-	if newProviderFunc, ok := d.providerFactories[url.GetParam(ProviderKey, "default")]; ok {
-		provider := newProviderFunc(url)
-		return provider
+	pName := url.GetParam(ProviderKey, "")
+	if pName == "" {
+		if proxy := url.GetParam(ProxyKey, ""); proxy != "" {
+			pName, _, _ = ParseExportInfo(proxy)
+		} else {
+			pName = "default"
+		}
 	}
-	vlog.Errorf("provider(protocol) name %s is not found in DefaultExtentionFactory!\n", url.Protocol)
+	if newProviderFunc, ok := d.providerFactories[pName]; ok {
+		return newProviderFunc(url)
+	}
+	vlog.Errorf("provider name %s is not found in DefaultExtentionFactory!\n", pName)
 	return nil
 }
 
