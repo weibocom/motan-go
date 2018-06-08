@@ -139,7 +139,7 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		return buf.EncodeVarint(rv.Uint())
 	default:
 		if pb, ok := rv.Addr().Interface().(proto.Message); ok {
-			return buf.Marshal(pb)
+			return buf.EncodeMessage(pb)
 		}
 		return errors.New("not support serialize type in PbSerialization Serialize. type: " + rv.Type().String())
 	}
@@ -262,7 +262,7 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			message, ok = reflect.New(rt).Interface().(proto.Message)
 		}
 		if ok {
-			err = buf.Unmarshal(message)
+			err = buf.DecodeMessage(message)
 			return message, err
 		}
 		return nil, errors.New("not support deserialize type in PbSerialization. type: " + rt.String())

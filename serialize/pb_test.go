@@ -149,15 +149,15 @@ func verifyMessage(s motan.Serialization, t *testing.T) {
 
 func TestPbSerialization_SerializeMulti(t *testing.T) {
 	s := &PbSerialization{}
-	i1, f1, u1, m1 := int64(123), float32(1.23), uint8('a'), HelloRequest{Name: "ray"}
-	v := []interface{}{i1, f1, u1, &m1}
+	i1, f1, u1, m1, mm1 := int64(123), float32(1.23), uint8('a'), HelloRequest{Name: "ray"}, HelloRequest{Name: "zha"}
+	v := []interface{}{i1, f1, u1, &m1, &mm1}
 	b, err := s.SerializeMulti(v)
 	if err != nil || len(b) == 1 {
 		t.Errorf("serialize fail. byte size:%d, err:%v\n", len(b), err)
 	}
-	m2, i2, f2, u2 := HelloRequest{}, int64(0), float32(0), uint8(0)
-	r, err := s.DeSerializeMulti(b, []interface{}{&i2, &f2, &u2, &m2})
-	if err != nil || i1 != i2 || f1 != f2 || u1 != u2 || m2.Name != m1.Name {
+	m2, mm2, i2, f2, u2 := HelloRequest{}, HelloRequest{}, int64(0), float32(0), uint8(0)
+	r, err := s.DeSerializeMulti(b, []interface{}{&i2, &f2, &u2, &m2, &mm2})
+	if err != nil || i1 != i2 || f1 != f2 || u1 != u2 || m2.Name != m1.Name || mm2.Name != mm1.Name {
 		t.Errorf("deserialize multi value not correct. result:%v, r:%v, err:%v,\n", v, r, err)
 	}
 }
