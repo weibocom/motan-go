@@ -34,7 +34,7 @@ func TestGetName(t *testing.T) {
 	}
 
 	//call error
-	url.Parameters[ProxyConfKey] = "error"
+	url.Parameters[motan.ProxyKey] = "error"
 	providerErr := MotanProvider{url: url, extFactory: factory}
 	providerErr.Initialize()
 	responseErr := providerErr.Call(request)
