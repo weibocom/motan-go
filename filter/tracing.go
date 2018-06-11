@@ -24,35 +24,35 @@ type CallData struct {
 }
 
 // The default TraceRecordingFunc.
-func DefaultTraceRecordingFunc(span *ot.Span, data CallData) {
-	(*span).SetTag("service.type", "motan")
-	(*span).SetTag("service.group", data.Caller.GetURL().Group)
+func DefaultTraceRecordingFunc(span ot.Span, data *CallData) {
+	span.SetTag("service.type", "motan")
+	span.SetTag("service.group", data.Caller.GetURL().Group)
 
 	if ex := data.Response.GetException(); ex != nil {
-		(*span).SetTag(string(ext.Error), true)
-		(*span).LogFields(log.Int("error.kind", ex.ErrType))
-		(*span).LogFields(log.String("message", ex.ErrMsg))
+		span.SetTag(string(ext.Error), true)
+		span.LogFields(log.Int("error.kind", ex.ErrType))
+		span.LogFields(log.String("message", ex.ErrMsg))
 	} else if data.Error != nil {
-		(*span).SetTag(string(ext.Error), true)
-		(*span).LogFields(log.Int("error.kind", core.ServiceException))
-		(*span).LogFields(log.Object("error.object", data.Error))
+		span.SetTag(string(ext.Error), true)
+		span.LogFields(log.Int("error.kind", core.ServiceException))
+		span.LogFields(log.Object("error.object", data.Error))
 	}
 
 	switch data.Direction {
 	case IN_BOUND_CALL:
-		(*span).SetTag(string(ext.PeerHostIPv4), data.Caller.GetURL().Host)
-		(*span).SetTag(string(ext.PeerPort), data.Caller.GetURL().Port)
+		span.SetTag(string(ext.PeerHostIPv4), data.Caller.GetURL().Host)
+		span.SetTag(string(ext.PeerPort), data.Caller.GetURL().Port)
 	case OUT_BOUND_CALL:
-		(*span).SetTag(string(ext.PeerHostIPv4), data.Request.GetAttachment(core.HostKey))
+		span.SetTag(string(ext.PeerHostIPv4), data.Request.GetAttachment(core.HostKey))
 	}
 }
 
 // The function to record tracing data, default is DefaultTraceRecordingFunc,
 // Users can rewrite it, and can embed the DefaultTraceRecordingFunc in the
 // Custom Recording Function.
-var TraceRecordingFunc func(span *ot.Span, data CallData)
+var TraceRecordingFunc func(span ot.Span, data *CallData)
 
-func tracingFunc() func(span *ot.Span, data CallData) {
+func tracingFunc() func(span ot.Span, data *CallData) {
 	if f := TraceRecordingFunc; f != nil {
 		return f
 	} else {
@@ -158,7 +158,7 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 	var response = callNext(cf, caller, request)
 
 	tracing := tracingFunc()
-	tracing(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
+	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
 
 	return response
 }
@@ -178,7 +178,7 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	response := callNext(cf, caller, request)
 	tracing := tracingFunc()
-	tracing(&span, CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
+	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
 
 	return response
 }
@@ -186,7 +186,7 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 func handleIfPanic(span ot.Span, caller core.Caller, request core.Request, direction uint32) {
 	if r := recover(); r != nil {
 		tracing := tracingFunc()
-		tracing(&span, CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
+		tracing(span, &CallData{Caller: caller, Request: request, Response: nil, Error: r, Direction: direction})
 		panic(r)
 	}
 }
