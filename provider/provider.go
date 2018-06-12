@@ -85,8 +85,8 @@ func (d *DefaultProvider) Destroy() {}
 func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	m, exit := d.methods[motan.FirstUpper(request.GetMethod())]
 	if !exit {
-		vlog.Errorf("mehtod not found in provider. %s\n", motan.GetReqInfo(request))
-		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "mehtod " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
+		vlog.Errorf("method not found in provider. %s\n", motan.GetReqInfo(request))
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "method " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
 	}
 	defer func() {
 		if err := recover(); err != nil {
