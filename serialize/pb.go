@@ -138,8 +138,10 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 	case reflect.Uint8:
 		return buf.EncodeVarint(rv.Uint())
 	default:
-		if pb, ok := rv.Addr().Interface().(proto.Message); ok {
-			return buf.EncodeMessage(pb)
+		if rv.CanAddr() {
+			if pb, ok := rv.Addr().Interface().(proto.Message); ok {
+				return buf.EncodeMessage(pb)
+			}
 		}
 		return errors.New("not support serialize type in PbSerialization Serialize. type: " + rv.Type().String())
 	}
