@@ -12,6 +12,7 @@ import (
 const (
 	CGI     = "cgi"
 	HTTP    = "http"
+	MOTAN2  = "motan2"
 	Mock    = "mockProvider"
 	Default = "default"
 )
@@ -24,6 +25,10 @@ func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 
 	extFactory.RegistExtProvider(HTTP, func(url *motan.URL) motan.Provider {
 		return &HTTPProvider{url: url}
+	})
+
+	extFactory.RegistExtProvider(MOTAN2, func(url *motan.URL) motan.Provider {
+		return &MotanProvider{url: url, extFactory: extFactory}
 	})
 
 	extFactory.RegistExtProvider(Mock, func(url *motan.URL) motan.Provider {
@@ -99,8 +104,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	if inNum > 0 {
 		values := make([]interface{}, 0, inNum)
 		for i := 0; i < inNum; i++ {
-			// TODO how to reflect value pointer???
-			values = append(values, reflect.New(m.Type().In(i)).Type())
+			values = append(values, m.Type().In(i))
 		}
 		err := request.ProcessDeserializable(values)
 		if err != nil {
