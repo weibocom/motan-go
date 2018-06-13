@@ -13,7 +13,7 @@ before_install:
     - go get golang.org/x/tools/cmd/cover
     
 install:
-    - go get -d -v $(go list ./... | grep -v main)
+    - go get -d -v -t $(go list ./... | grep -v main)
 
 script:
     - go test -v $(go list ./... | grep -v main)
