@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/samuel/go-zookeeper/zk"
-	cluster "github.com/weibocom/motan-go/cluster"
+	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -21,10 +21,9 @@ const (
 )
 
 const (
-	ZkNodetypeServer            = "server"
-	ZkNodetypeUnavailableServer = "unavailableServer"
-	ZkNodetypeClient            = "client"
-	ZkNodetypeAgent             = "agent"
+	ZkNodetypeServer = "server"
+	ZkNodetypeClient = "client"
+	ZkNodetypeAgent  = "agent"
 )
 
 type ZkRegistry struct {
@@ -37,8 +36,6 @@ type ZkRegistry struct {
 	subscribeMap     map[string]map[string]motan.NotifyListener
 	subscribeLock    sync.Mutex
 	subscribeCmdLock sync.Mutex
-	registryLock     sync.Mutex
-
 	watchSwitcherMap map[string]chan bool
 }
 
@@ -101,18 +98,18 @@ func ToAgentCommandPath(url *motan.URL) string {
 
 func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 	var (
-		path string
-		err  error
+		nodePath string
+		err      error
 	)
 	if IsAgent(url) {
-		path = ToAgentNodePath(url)
+		nodePath = ToAgentNodePath(url)
 	} else {
-		path = ToNodePath(url, nodeType)
+		nodePath = ToNodePath(url, nodeType)
 	}
 
-	if isexist, stats, err := z.zkConn.Exists(path); err == nil {
+	if isexist, stats, err := z.zkConn.Exists(nodePath); err == nil {
 		if isexist {
-			if rmerr := z.zkConn.Delete(path, stats.Version); rmerr != nil {
+			if rmerr := z.zkConn.Delete(nodePath, stats.Version); rmerr != nil {
 				err = rmerr
 			}
 		}
@@ -124,27 +121,27 @@ func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 
 func (z *ZkRegistry) CreateNode(url *motan.URL, nodeType string) error {
 	var (
-		path     string
+		typePath string
 		nodePath string
 		errc     error
 	)
 	if IsAgent(url) {
-		path = ToAgentNodeTypePath(url)
+		typePath = ToAgentNodeTypePath(url)
 		nodePath = ToAgentNodePath(url)
 	} else {
-		path = ToNodeTypePath(url, nodeType)
+		typePath = ToNodeTypePath(url, nodeType)
 		nodePath = ToNodePath(url, nodeType)
 	}
-	if isexist, _, err := z.zkConn.Exists(path); err == nil {
+	if isexist, _, err := z.zkConn.Exists(typePath); err == nil {
 		if !isexist {
-			z.CreatePersistent(path, true)
+			z.CreatePersistent(typePath, true)
 		}
 		var data []byte
 		if _, errc := z.zkConn.Create(nodePath, data,
 			zk.FlagEphemeral, zk.WorldACL(zk.PermAll)); errc != nil {
-			vlog.Errorf("create node: %s, error, err:%s", nodePath, errc)
+			vlog.Errorf("create node: %s, error, err:%s\n", nodePath, errc)
 		} else {
-			vlog.Infof("create node: %s", nodePath)
+			vlog.Infof("create node: %s\n", nodePath)
 		}
 	} else {
 		errc = err
@@ -153,17 +150,17 @@ func (z *ZkRegistry) CreateNode(url *motan.URL, nodeType string) error {
 }
 
 func (z *ZkRegistry) CreatePersistent(path string, createParents bool) {
-	if _, err := z.zkConn.Create(path, nil, 0, zk.WorldACL(zk.PermAll)); err != nil {
+	if _, err := z.zkConn.Create(path, nil, 0, zk.WorldACL(zk.PermAll)); err == nil {
+		vlog.Infof("create Persistent node: %s\n", path)
+	} else if err == zk.ErrNoNode {
 		if createParents {
 			parts := strings.Split(path, "/")
 			parentPath := strings.Join(parts[:len(parts)-1], "/")
 			z.CreatePersistent(parentPath, createParents)
 			z.CreatePersistent(path, createParents)
-		} else {
-			vlog.Errorf("err create Persistent Path: %s", path)
 		}
 	} else {
-		vlog.Infof("create Persistent node: %s", path)
+		vlog.Errorf("err create Persistent. path: %s, err: %v\n", path, err)
 	}
 }
 
@@ -283,6 +280,8 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 }
 
 func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
+	z.subscribeCmdLock.Lock()
+	defer z.subscribeCmdLock.Unlock()
 	vlog.Infof("zookeeper subscribe command of %s\n", url.GetIdentity())
 	var commandPath string
 	if IsAgent(url) {
@@ -299,7 +298,10 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 		vlog.Errorf("check command exists error: %+v\n", err)
 	}
 	if _, _, ch, err := z.zkConn.GetW(commandPath); err == nil {
-		z.watchSwitcherMap[commandPath] = make(chan bool)
+		tempChan := z.watchSwitcherMap[commandPath]
+		if tempChan == nil {
+			z.watchSwitcherMap[commandPath] = make(chan bool)
+		}
 		vlog.Infof("start watch command %s\n", commandPath)
 		go func() {
 			watchData := true
@@ -312,17 +314,17 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 								ch = chx
 							} else {
 								// @TODO check this close if UnSubscribeCommand is still write sth
-								close(z.watchSwitcherMap[commandPath])
+								close(tempChan)
 								break
 							}
-							cmdInfo := string(data)
+							cmdInfo := tempFixZK(data)
 							listener.NotifyCommand(z.url, cluster.ServiceCmd, cmdInfo)
 							vlog.Infof("command changed, path:%s, data:%s\n", commandPath, cmdInfo)
 						} else {
 							vlog.Infof("command changed, get cmdInfo error, err: %+v\n", err)
 						}
 					}
-				case checkWatch := <-z.watchSwitcherMap[commandPath]:
+				case checkWatch := <-tempChan:
 					watchData = checkWatch
 				}
 			}
@@ -333,6 +335,8 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 }
 
 func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
+	z.subscribeCmdLock.Unlock()
+	defer z.subscribeCmdLock.Unlock()
 	var commandPath string
 	if IsAgent(url) {
 		commandPath = ToAgentCommandPath(url)
@@ -364,11 +368,18 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	}
 	if data, _, err := z.zkConn.Get(commandPath); err == nil {
 		vlog.Infof("zookeeper Discover command %s\n", commandPath)
-		res = string(data)
+		res = tempFixZK(data)
 	} else {
 		vlog.Warningf("zookeeper DiscoverCommand error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
 	}
 	return res
+}
+
+func tempFixZK(data []byte) string {
+	if len(data) > 7 && data[0] != '{' && data[7] == '{' {
+		return string(data[7:])
+	}
+	return string(data)
 }
 
 func (z *ZkRegistry) Available(url *motan.URL) {
