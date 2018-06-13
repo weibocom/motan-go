@@ -99,8 +99,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	if inNum > 0 {
 		values := make([]interface{}, 0, inNum)
 		for i := 0; i < inNum; i++ {
-			// TODO how to reflect value pointer???
-			values = append(values, reflect.New(m.Type().In(i)).Type())
+			values = append(values, m.Type().In(i))
 		}
 		err := request.ProcessDeserializable(values)
 		if err != nil {
