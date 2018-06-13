@@ -21,10 +21,9 @@ const (
 )
 
 const (
-	ZkNodetypeServer            = "server"
-	ZkNodetypeUnavailableServer = "unavailableServer"
-	ZkNodetypeClient            = "client"
-	ZkNodetypeAgent             = "agent"
+	ZkNodetypeServer = "server"
+	ZkNodetypeClient = "client"
+	ZkNodetypeAgent  = "agent"
 )
 
 type ZkRegistry struct {
@@ -318,7 +317,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 								close(tempChan)
 								break
 							}
-							cmdInfo := tempFixzk(data)
+							cmdInfo := tempFixZK(data)
 							listener.NotifyCommand(z.url, cluster.ServiceCmd, cmdInfo)
 							vlog.Infof("command changed, path:%s, data:%s\n", commandPath, cmdInfo)
 						} else {
@@ -369,15 +368,18 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	}
 	if data, _, err := z.zkConn.Get(commandPath); err == nil {
 		vlog.Infof("zookeeper Discover command %s\n", commandPath)
-		res = tempFixzk(data)
+		res = tempFixZK(data)
 	} else {
 		vlog.Warningf("zookeeper DiscoverCommand error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
 	}
 	return res
 }
 
-func tempFixzk(data []byte) string {
-	return string(data[7:])
+func tempFixZK(data []byte) string {
+	if len(data) > 7 && data[0] != '{' && data[7] == '{' {
+		return string(data[7:])
+	}
+	return string(data)
 }
 
 func (z *ZkRegistry) Available(url *motan.URL) {
