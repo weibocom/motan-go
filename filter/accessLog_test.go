@@ -24,9 +24,9 @@ func TestFilter(t *testing.T) {
 	ef.SetNext(motan.GetLastEndPointFilter())
 	caller := defaultExtFactory.GetEndPoint(url)
 	arguments := []interface{}{url, "xxx", 123, true}
-	attachments := make(map[string]string)
-	attachments["key1"] = "value1"
-	attachments["key2"] = "value2"
+	attachments := motan.NewStringMap(0)
+	attachments.Store("key1", "value1")
+	attachments.Store("key2", "value2")
 	request := &motan.MotanRequest{RequestID: 11234, ServiceName: "com.weibo.TestService", Method: "testMethod", Arguments: arguments, Attachment: attachments}
 	res := ef.Filter(caller, request)
 	fmt.Printf("res:%+v", res)

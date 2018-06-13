@@ -5,10 +5,10 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/weibocom/motan-go/core"
-);
+)
 
 const (
-	IN_BOUND_CALL  = iota
+	IN_BOUND_CALL = iota
 	OUT_BOUND_CALL
 )
 
@@ -230,19 +230,15 @@ type AttachmentReader struct {
 }
 
 func (a AttachmentReader) ForeachKey(handler func(key, val string) error) error {
-	att := a.attach.GetAttachments()
-	if att == nil {
-		return nil
-	}
-
-	for k, v := range att {
-		err := handler(k, v)
+	var err error
+	a.attach.GetAttachments().Range(func(k, v string) bool {
+		err = handler(k, v)
 		if err != nil {
-			return err
+			return false
 		}
-	}
-
-	return nil
+		return true
+	})
+	return err
 }
 
 type AttachmentWriter struct {

@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 //structs for test
 
@@ -80,7 +83,8 @@ func (t *TestEndPointFilter) GetType() int32 {
 }
 
 type TestEndPoint struct {
-	URL *URL
+	URL         *URL
+	processTime int64
 }
 
 func (t *TestEndPoint) GetURL() *URL {
@@ -92,9 +96,18 @@ func (t *TestEndPoint) SetURL(url *URL) {
 func (t *TestEndPoint) GetName() string {
 	return "testEndPoint"
 }
+func (t *TestEndPoint) SetProcessTime(processTime int64) {
+	t.processTime = processTime
+}
+func (t *TestEndPoint) GetProcessTime() int64 {
+	return t.processTime
+}
 func (t *TestEndPoint) Call(request Request) Response {
 	fmt.Println("mock rpc request..")
-	response := &MotanResponse{RequestID: request.GetRequestID(), Value: &TestObject{}, ProcessTime: 12}
+	if t.processTime != 0 {
+		time.Sleep(time.Duration(t.processTime) * time.Millisecond)
+	}
+	response := &MotanResponse{RequestID: request.GetRequestID(), Value: &TestObject{}, ProcessTime: t.processTime}
 	return response
 }
 
