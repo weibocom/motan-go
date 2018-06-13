@@ -9,7 +9,6 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
-	"strings"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -23,8 +22,9 @@ const (
 
 // message magic
 const (
-	MotanMagic   = 0xf1f1
-	HeaderLength = 13
+	MotanMagic      = 0xf1f1
+	HeaderLength    = 13
+	defaultProtocol = "motan2"
 )
 const (
 	MPath          = "M_p"
@@ -76,6 +76,17 @@ var (
 	defaultSerialize = Simple
 )
 
+// errors
+var (
+	ErrVersion        = errors.New("message version not correct")
+	ErrMagicNum       = errors.New("message magic number not correct")
+	ErrStatus         = errors.New("message status not correct")
+	ErrMetadata       = errors.New("decode meta data fail")
+	ErrSerializeNum   = errors.New("message serialize number not correct")
+	ErrSerializeNil   = errors.New("message serialize not found")
+	ErrSerializedData = errors.New("message serialized data not correct")
+)
+
 // BuildRequestHeader build a proxy request header
 func BuildRequestHeader(requestID uint64) *Header {
 	return BuildHeader(Req, true, defaultSerialize, requestID, Normal)
@@ -98,7 +109,7 @@ func BuildHeartbeat(requestID uint64, msgType int) *Message {
 
 func (h *Header) SetVersion(version int) error {
 	if version > 31 {
-		return errors.New("motan header: version should not great than 31")
+		return ErrVersion
 	}
 	h.VersionStatus = (h.VersionStatus & 0x07) | (uint8(version) << 3 & 0xf8)
 	return nil
@@ -169,7 +180,7 @@ func (h *Header) isRequest() bool {
 
 func (h *Header) SetStatus(status int) error {
 	if status > 7 {
-		return errors.New("motan header: status should not great than 7")
+		return ErrStatus
 	}
 	h.VersionStatus = (h.VersionStatus & 0xf8) | (uint8(status) & 0x07)
 	return nil
@@ -181,7 +192,7 @@ func (h *Header) GetStatus() int {
 
 func (h *Header) SetSerialize(serialize int) error {
 	if serialize > 31 {
-		return errors.New("motan header: serialize should not great than 31")
+		return ErrSerializeNum
 	}
 	h.Serialize = (h.Serialize & 0x07) | (uint8(serialize) << 3 & 0xf8)
 	return nil
@@ -212,93 +223,98 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 	return header
 }
 
-func (msg *Message) Encode() (buf *bytes.Buffer) {
-	buf = new(bytes.Buffer)
-	var metabuf bytes.Buffer
-	var meta map[string]string
-	meta = msg.Metadata
-	for k, v := range meta {
-		metabuf.WriteString(k)
-		metabuf.WriteString("\n")
-		metabuf.WriteString(v)
-		metabuf.WriteString("\n")
+func (msg *Message) Encode() (buf *motan.BytesBuffer) {
+	metabuf := motan.NewBytesBuffer(256)
+	for k, v := range msg.Metadata {
+		metabuf.Write([]byte(k))
+		metabuf.WriteByte('\n')
+		metabuf.Write([]byte(v))
+		metabuf.WriteByte('\n')
 	}
-	var metasize int32
-	if metabuf.Len() > 0 {
-		metasize = int32(metabuf.Len() - 1)
-	} else {
-		metasize = 0
-	}
+	metasize := metabuf.Len()
+	bodysize := len(msg.Body)
+	buf = motan.NewBytesBuffer(int(HeaderLength + bodysize + metasize + 8))
+	// encode header.
+	buf.WriteUint16(MotanMagic)
+	buf.WriteByte(msg.Header.MsgType)
+	buf.WriteByte(msg.Header.VersionStatus)
+	buf.WriteByte(msg.Header.Serialize)
+	buf.WriteUint64(msg.Header.RequestID)
 
-	body := msg.Body
-	bodysize := int32(len(body))
-	binary.Write(buf, binary.BigEndian, msg.Header)
-	binary.Write(buf, binary.BigEndian, metasize)
+	// encode meta
+	buf.WriteUint32(uint32(metasize))
 	if metasize > 0 {
-		binary.Write(buf, binary.BigEndian, metabuf.Bytes()[:metasize])
+		buf.Write(metabuf.Bytes())
 	}
 
-	binary.Write(buf, binary.BigEndian, bodysize)
+	// encode body
+	buf.WriteUint32(uint32(bodysize))
 	if bodysize > 0 {
-		binary.Write(buf, binary.BigEndian, body)
+		buf.Write(msg.Body)
 	}
 	return buf
 }
 
-// Decode decode one message from buffer
-func Decode(reqbuf *bytes.Buffer) *Message {
-	header := &Header{}
-	binary.Read(reqbuf, binary.BigEndian, header)
-	metasize := readInt32(reqbuf)
-	metamap := make(map[string]string)
-	if metasize > 0 {
-		metadata := string(reqbuf.Next(int(metasize)))
-		values := strings.Split(metadata, "\n")
-		for i := 0; i < len(values); i++ {
-			key := values[i]
-			i++
-			metamap[key] = values[i]
-		}
+func Decode(buf *bufio.Reader) (msg *Message, err error) {
+	temp := make([]byte, HeaderLength, HeaderLength)
 
-	}
-	bodysize := readInt32(reqbuf)
-	var body []byte
-	if bodysize > 0 {
-		body = reqbuf.Next(int(bodysize))
-	} else {
-		body = make([]byte, 0)
-	}
-	msg := &Message{header, metamap, body, Req}
-	return msg
-}
-
-// DecodeFromReader decode one message from reader
-func DecodeFromReader(buf *bufio.Reader) (msg *Message, err error) {
-	header := &Header{}
-	err = binary.Read(buf, binary.BigEndian, header)
+	// decode header
+	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
 	if err != nil {
 		return nil, err
 	}
+	mn := binary.BigEndian.Uint16(temp[:2])
+	if mn != MotanMagic {
+		vlog.Errorf("worng magic num:%d, err:%v\n", mn, err)
+		return nil, ErrMagicNum
+	}
+	header := &Header{Magic: MotanMagic}
+	header.MsgType = temp[2]
+	header.VersionStatus = temp[3]
+	header.Serialize = temp[4]
+	header.RequestID = binary.BigEndian.Uint64(temp[5:])
 
-	metasize := readInt32(buf)
+	// decode meta
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	if err != nil {
+		return nil, err
+	}
+	metasize := int(binary.BigEndian.Uint32(temp[:4]))
 	metamap := make(map[string]string)
 	if metasize > 0 {
-		metadata, err := readBytes(buf, int(metasize))
+		metadata, err := readBytes(buf, metasize)
 		if err != nil {
 			return nil, err
 		}
-		values := strings.Split(string(metadata), "\n")
-		for i := 0; i < len(values); i++ {
-			key := values[i]
-			i++
-			metamap[key] = values[i]
+		s, e := 0, 0
+		var k string
+		for i := 0; i <= metasize; i++ {
+			if i == metasize || metadata[i] == '\n' {
+				e = i
+				if k == "" {
+					k = string(metadata[s:e])
+				} else {
+					metamap[k] = string(metadata[s:e])
+					k = ""
+				}
+				s = i + 1
+			}
 		}
-
+		if k != "" {
+			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
+			return nil, ErrMetadata
+		}
 	}
-	bodysize := readInt32(buf)
+
+	//decode body
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	if err != nil {
+		return nil, err
+	}
+	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
 	var body []byte
 	if bodysize > 0 {
-		body, err = readBytes(buf, int(bodysize))
+		body, err = readBytes(buf, bodysize)
 	} else {
 		body = make([]byte, 0)
 	}
@@ -316,12 +332,6 @@ func DecodeGzipBody(body []byte) []byte {
 		return body
 	}
 	return ret
-}
-
-func readInt32(buf io.Reader) int32 {
-	var i int32
-	binary.Read(buf, binary.BigEndian, &i)
-	return i
 }
 
 func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
@@ -389,15 +399,11 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Body = DecodeGzipBody(request.Body)
 			request.Header.SetGzip(false)
 		}
-		if rc.Proxy { // put ungzip body to arguments if proxy
-			motanRequest.Arguments = []interface{}{request.Body}
-		} else { // put DeserializableValue to arguments if not proxy
-			if serialize == nil {
-				return nil, errors.New("serialization is nil")
-			}
-			dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
-			motanRequest.Arguments = []interface{}{dv}
+		if !rc.Proxy && serialize == nil {
+			return nil, ErrSerializeNil
 		}
+		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
+		motanRequest.Arguments = []interface{}{dv}
 	}
 
 	return motanRequest, nil
@@ -405,56 +411,65 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 
 // ConvertToReqMessage convert motan Request to protocol request
 func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (*Message, error) {
-	rc := request.GetRPCContext(false)
-	if rc != nil && rc.Proxy && rc.OriginalMessage != nil {
+	rc := request.GetRPCContext(true)
+	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
 			return msg, nil
 		}
 	}
-
-	var header *Header
-	if rc.Proxy {
-		header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
+	req := &Message{Metadata: make(map[string]string)}
+	if rc.Serialized { // params already serialized
+		req.Header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
 	} else {
 		if serialize == nil {
-			return nil, errors.New("serialization is nil")
+			return nil, ErrSerializeNil
 		}
-		header = BuildHeader(Req, false, serialize.GetSerialNum(), request.GetRequestID(), Normal)
+		req.Header = BuildHeader(Req, false, serialize.GetSerialNum(), request.GetRequestID(), Normal)
 	}
-	req := &Message{Header: header, Metadata: make(map[string]string)}
-
 	if len(request.GetArguments()) > 0 {
-
-		b, err := serialize.SerializeMulti(request.GetArguments())
-		if err != nil {
-			return nil, err
-		}
-		req.Body = b
-	}
-	req.Metadata = request.GetAttachments()
-	if rc != nil {
-		if rc.GzipSize > 0 && len(req.Body) > rc.GzipSize {
-			data, err := EncodeGzip(req.Body)
-			if err != nil {
-				vlog.Errorf("encode gzip fail! %s, err %s\n", motan.GetReqInfo(request), err.Error())
+		if rc.Serialized { // params already serialized
+			if len(request.GetArguments()) == 1 {
+				if b, ok := request.GetArguments()[0].([]byte); ok {
+					req.Body = b
+				} else {
+					vlog.Warningf("convert request value fail! serialized value not []byte. request:%+v\n", request)
+					return nil, ErrSerializedData
+				}
 			} else {
-				req.Header.SetGzip(true)
-				req.Body = data
+				vlog.Warningf("convert request value fail! serialized value size > 1. request:%+v\n", request)
+				return nil, ErrSerializedData
 			}
+		} else {
+			b, err := serialize.SerializeMulti(request.GetArguments())
+			if err != nil {
+				return nil, err
+			}
+			req.Body = b
 		}
-		if rc.Oneway {
-			req.Header.SetOneWay(true)
+	}
+
+	req.Metadata = request.GetAttachments()
+	if rc.GzipSize > 0 && len(req.Body) > rc.GzipSize {
+		data, err := EncodeGzip(req.Body)
+		if err != nil {
+			vlog.Errorf("encode gzip fail! %s, err %s\n", motan.GetReqInfo(request), err.Error())
+		} else {
+			req.Header.SetGzip(true)
+			req.Body = data
 		}
-		if rc.Proxy {
-			req.Header.SetProxy(true)
-		}
+	}
+	if rc.Oneway {
+		req.Header.SetOneWay(true)
+	}
+	if rc.Proxy {
+		req.Header.SetProxy(true)
 	}
 	req.Header.SetSerialize(serialize.GetSerialNum())
 	req.Metadata[MPath] = request.GetServiceName()
 	req.Metadata[MMethod] = request.GetMethod()
 	if request.GetAttachment(MProxyProtocol) == "" {
-		req.Metadata[MProxyProtocol] = "motan2"
+		req.Metadata[MProxyProtocol] = defaultProtocol
 	}
 
 	if request.GetMethodDesc() != "" {
@@ -466,9 +481,8 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 
 // ConvertToResMessage convert motan Response to protocol response
 func ConvertToResMessage(response motan.Response, serialize motan.Serialization) (*Message, error) {
-	rc := response.GetRPCContext(false)
-
-	if rc != nil && rc.Proxy && rc.OriginalMessage != nil {
+	rc := response.GetRPCContext(true)
+	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
 			return msg, nil
@@ -483,23 +497,24 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	} else {
 		msgType = Normal
 	}
-
-	if rc.Proxy {
+	if rc.Serialized {
 		res.Header = BuildHeader(Res, false, rc.SerializeNum, response.GetRequestID(), msgType)
-		res.Header.SetProxy(true)
-		if response.GetValue() != nil {
+	} else {
+		if serialize == nil {
+			return nil, ErrSerializeNil
+		}
+		res.Header = BuildHeader(Res, false, serialize.GetSerialNum(), response.GetRequestID(), msgType)
+	}
+
+	if response.GetValue() != nil {
+		if rc.Serialized {
 			if b, ok := response.GetValue().([]byte); ok {
 				res.Body = b
 			} else {
-				vlog.Warningf("convert response value fail in proxy type! value not []byte. v:%v\n", response.GetValue())
+				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v\n", response)
+				return nil, ErrSerializedData
 			}
-		}
-	} else {
-		if serialize == nil {
-			return nil, errors.New("serialization is nil")
-		}
-		res.Header = BuildHeader(Res, false, serialize.GetSerialNum(), response.GetRequestID(), msgType)
-		if response.GetValue() != nil {
+		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
 				return nil, err
@@ -510,16 +525,17 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 
 	res.Metadata = response.GetAttachments()
 
-	if rc != nil {
-		if rc.GzipSize > 0 && len(res.Body) > rc.GzipSize {
-			data, err := EncodeGzip(res.Body)
-			if err != nil {
-				vlog.Errorf("encode gzip fail! requestid:%d, err %s\n", response.GetRequestID(), err.Error())
-			} else {
-				res.Header.SetGzip(true)
-				res.Body = data
-			}
+	if rc.GzipSize > 0 && len(res.Body) > rc.GzipSize {
+		data, err := EncodeGzip(res.Body)
+		if err != nil {
+			vlog.Errorf("encode gzip fail! requestid:%d, err %s\n", response.GetRequestID(), err.Error())
+		} else {
+			res.Header.SetGzip(true)
+			res.Body = data
 		}
+	}
+	if rc.Proxy {
+		res.Header.SetProxy(true)
 	}
 
 	return res, nil
@@ -536,15 +552,11 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Body = DecodeGzipBody(response.Body)
 			response.Header.SetGzip(false)
 		}
-		if rc.Proxy {
-			mres.Value = response.Body
-		} else {
-			if serialize == nil {
-				return nil, errors.New("serialization is nil")
-			}
-			dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
-			mres.Value = dv
+		if !rc.Proxy && serialize == nil {
+			return nil, ErrSerializeNil
 		}
+		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
+		mres.Value = dv
 	}
 	if response.Header.GetStatus() == Exception && response.Metadata[MExceptionn] != "" {
 		var exception *motan.Exception

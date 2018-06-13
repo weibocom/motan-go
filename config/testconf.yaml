@@ -86,3 +86,9 @@ metrics:
       host: test.com
       port: 8333
   testbool: true
+
+testplaceholder:
+  aaa: "${aaa}"
+  sub:
+    bbb: "${bbb}"
+  ccc: "${ccc}"

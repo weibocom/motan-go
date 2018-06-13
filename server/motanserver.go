@@ -89,7 +89,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	}()
 	buf := bufio.NewReader(conn)
 	for {
-		request, err := mpro.DecodeFromReader(buf)
+		request, err := mpro.Decode(buf)
 		if err != nil {
 			if err.Error() != "EOF" {
 				vlog.Warningf("decode motan message fail! con:%s\n.", conn.RemoteAddr().String())
@@ -107,7 +107,7 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		}
 	}()
 	request.Header.SetProxy(m.proxy)
-
+	// TODO request , response reuse
 	var res *mpro.Message
 	if request.Header.IsHeartbeat() {
 		res = mpro.BuildHeartbeat(request.Header.RequestID, mpro.Res)
@@ -115,28 +115,28 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		var mres motan.Response
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
-
-		ip := getRemoteIP(conn.RemoteAddr().String())
-		req.SetAttachment(motan.HostKey, ip)
-
-		req.GetRPCContext(true).ExtFactory = m.extFactory
 		if err != nil {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata[mpro.MPath], request.Metadata[mpro.MMethod], err.Error())
-			mres = motan.BuildExceptionResponse(request.Header.RequestID, &motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. method:" + request.Metadata[mpro.MMethod], ErrType: motan.ServiceException})
+			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. err:" + err.Error() + " method:" + request.Metadata[mpro.MMethod], ErrType: motan.ServiceException}))
 		} else {
+			if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+				req.SetAttachment(motan.HostKey, ta.IP.String())
+			} else {
+				req.SetAttachment(motan.HostKey, getRemoteIP(conn.RemoteAddr().String()))
+			}
 			req.GetRPCContext(true).ExtFactory = m.extFactory
 			mres = m.handler.Call(req)
-			//TOOD oneway
-		}
-		if mres != nil {
-			mres.GetRPCContext(true).Proxy = m.proxy
-			res, err = mpro.ConvertToResMessage(mres, serialization)
-		} else {
-			err = errors.New("handler call return nil")
-		}
+			//TODO oneway
+			if mres != nil {
+				mres.GetRPCContext(true).Proxy = m.proxy
+				res, err = mpro.ConvertToResMessage(mres, serialization)
+			} else {
+				err = errors.New("handler call return nil")
+			}
 
-		if err != nil {
-			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "convert to response fail.", ErrType: motan.ServiceException}))
+			if err != nil {
+				res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "convert to response fail. err:" + err.Error(), ErrType: motan.ServiceException}))
+			}
 		}
 	}
 	resbuf := res.Encode()

@@ -41,3 +41,24 @@ func Test_Config(t *testing.T) {
 	}
 
 }
+
+func Test_ReplacePlaceHolder(t *testing.T) {
+	c, _ := NewConfigFromFile("./testconf.yaml")
+	m := make(map[string]interface{})
+	m["aaa"] = "testa"
+	m["bbb"] = "testb"
+	m["ccc"] = 2345 //test int
+	c.ReplacePlaceHolder(m)
+	s, _ := c.GetSection("testplaceholder")
+	if s["aaa"] != "testa" {
+		t.Errorf("value replace fail! aaa:%v\n", s["aaa"])
+	}
+	if s["ccc"] != 2345 {
+		t.Errorf("value replace fail! ccc:%v\n", s["ccc"])
+	}
+	sub, _ := s["sub"].(map[interface{}]interface{})
+	if sub["bbb"] != "testb" {
+		t.Errorf("value replace fail! bbb:%v\n", sub["bbb"])
+	}
+
+}

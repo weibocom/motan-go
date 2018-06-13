@@ -12,6 +12,7 @@ import (
 const (
 	CGI     = "cgi"
 	HTTP    = "http"
+	MOTAN2  = "motan2"
 	Mock    = "mockProvider"
 	Default = "default"
 )
@@ -24,6 +25,10 @@ func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
 
 	extFactory.RegistExtProvider(HTTP, func(url *motan.URL) motan.Provider {
 		return &HTTPProvider{url: url}
+	})
+
+	extFactory.RegistExtProvider(MOTAN2, func(url *motan.URL) motan.Provider {
+		return &MotanProvider{url: url, extFactory: extFactory}
 	})
 
 	extFactory.RegistExtProvider(Mock, func(url *motan.URL) motan.Provider {
@@ -85,8 +90,8 @@ func (d *DefaultProvider) Destroy() {}
 func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	m, exit := d.methods[motan.FirstUpper(request.GetMethod())]
 	if !exit {
-		vlog.Errorf("mehtod not found in provider. %s\n", motan.GetReqInfo(request))
-		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "mehtod " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
+		vlog.Errorf("method not found in provider. %s\n", motan.GetReqInfo(request))
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "method " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
 	}
 	defer func() {
 		if err := recover(); err != nil {
@@ -99,8 +104,7 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	if inNum > 0 {
 		values := make([]interface{}, 0, inNum)
 		for i := 0; i < inNum; i++ {
-			// TODO how to reflect value pointer???
-			values = append(values, reflect.New(m.Type().In(i)).Type())
+			values = append(values, m.Type().In(i))
 		}
 		err := request.ProcessDeserializable(values)
 		if err != nil {
@@ -116,9 +120,8 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	mres := &motan.MotanResponse{RequestID: request.GetRequestID()}
 	if len(ret) > 0 { // only use first return value.
 		mres.Value = ret[0]
-		res = mres
 	}
-	return res
+	return mres
 }
 
 type MockProvider struct {

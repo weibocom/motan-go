@@ -60,39 +60,39 @@ func genGraphiteMessages(localIP string, snap metrics.Registry) []string {
 
 	snap.Each(func(key string, i interface{}) {
 		var segment string
-		pni := strings.SplitN(key, ":", 4)
+		pni := strings.SplitN(key, ":", 5)
 
 		switch m := i.(type) {
 
 		case metrics.Counter:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s:%d|c\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], m.Count())
+			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
 		case metrics.Meter:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s:%d.00|c\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], m.Count())
+			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d.00|c\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
 		case metrics.Timer:
 			/*TODO
 			 */
 		case metrics.Gauge:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s:%d|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], m.Value())
-		//	case metrics.GaugeFloat64:
+			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Value())
+			//	case metrics.GaugeFloat64:
 		case metrics.Histogram:
 			ps := m.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999, 0.9999})
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p50", ps[0])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p75", ps[1])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p95", ps[2])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p99", ps[3])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p999", ps[4])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "p9999", ps[5])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%.2f|ms\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], "avg_time", m.Mean())
+			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p50", ps[0])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p75", ps[1])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p95", ps[2])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p99", ps[3])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p999", ps[4])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p9999", ps[5])
+			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
+				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "avg_time", m.Mean())
 
 		default:
 			return
