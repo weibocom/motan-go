@@ -36,6 +36,7 @@ const (
 	ModuleKey         = "module"
 	GroupKey          = "group"
 	ProviderKey       = "provider"
+	ProxyKey          = "proxy"
 	AddressKey        = "address"
 	GzipSizeKey       = "mingzSize"
 	HostKey           = "host"
