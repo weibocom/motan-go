@@ -154,6 +154,8 @@ func (z *ZkRegistry) CreatePersistent(path string, createParents bool) {
 }
 
 func (z *ZkRegistry) Register(url *motan.URL) {
+	z.registerLock.Lock()
+	defer z.registerLock.Unlock()
 	vlog.Infof("start zk register %s\n", url.GetIdentity())
 	if url.Group == "" || url.Path == "" || url.Host == "" {
 		vlog.Errorf("register fail.invalid url : %s\n", url.GetIdentity())
@@ -161,17 +163,15 @@ func (z *ZkRegistry) Register(url *motan.URL) {
 	if IsAgent(url) {
 		z.CreateNode(url)
 	} else {
-		z.registerLock.Lock()
 		z.registeredServices[url.GetIdentity()] = url
-		z.registerLock.Unlock()
 	}
 }
 
 func (z *ZkRegistry) UnRegister(url *motan.URL) {
-	z.RemoveNode(url)
 	z.registerLock.Lock()
+	defer z.registerLock.Unlock()
+	z.RemoveNode(url)
 	delete(z.registeredServices, url.GetIdentity())
-	z.registerLock.Unlock()
 }
 
 // @TODO extInfo from java Obj Pase
