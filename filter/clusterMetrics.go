@@ -55,7 +55,7 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 	response := c.GetNext().Filter(haStrategy, loadBalance, request)
 
 	mP := strings.Replace(request.GetAttachment("M_p"), ".", "_", -1)
-	key := fmt.Sprintf("%s:%s.cluster:%s:%s", request.GetAttachment("M_s"), request.GetAttachment("M_g"), mP, request.GetMethod())
+	key := fmt.Sprintf("motan-client-agent:%s:%s.cluster:%s:%s", request.GetAttachment("M_s"), request.GetAttachment("M_g"), mP, request.GetMethod())
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count
 
