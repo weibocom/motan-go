@@ -32,7 +32,7 @@ func TestWrite(t *testing.T) {
 	}
 
 	buf.SetWPos(3)
-	if buf.Cap() < 3 || buf.wpos != 3{
+	if buf.Cap() < 3 || buf.wpos != 3 {
 		t.Errorf("buf SetWPos expand buffer failed: %d", buf.Cap())
 	}
 

@@ -9,11 +9,12 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/weibocom/motan-go/log"
 	"gopkg.in/yaml.v2"
+	"reflect"
 	"regexp"
 )
 
 type Config struct {
-	conf         *map[string]interface{}
+	conf         map[string]interface{}
 	placeHolders map[string]interface{}
 	rex          *regexp.Regexp
 }
@@ -37,8 +38,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 		fmt.Printf("config unmarshal failed! file: %s, error: %s\n", filename, err)
 		return nil, errors.New("config unmarshal failed. " + err.Error())
 	}
-	rex, _ := regexp.Compile("^\\${([^}]+)}$") // for placeholder replace
-	return &Config{conf: &m, rex: rex}, nil
+	return &Config{conf: m}, nil
 }
 
 // ParseBool accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,
@@ -160,7 +160,7 @@ func (c *Config) getData(key string) (interface{}, error) {
 		return nil, errors.New("key is empty")
 	}
 
-	if v, ok := (*c.conf)[key]; ok {
+	if v, ok := c.conf[key]; ok {
 		return v, nil
 	}
 	return nil, fmt.Errorf("not exist key %q", key)
@@ -171,11 +171,11 @@ func (c *Config) ReplacePlaceHolder(placeHolders map[string]interface{}) {
 	if len(placeHolders) > 0 {
 		c.placeHolders = placeHolders
 		fmt.Printf("dynamic configs:%+v\n", placeHolders)
-		for k, v := range *c.conf {
+		for k, v := range c.conf {
 			if sv, ok := v.(string); ok {
 				nv := c.getPlaceholderValue(sv)
 				if nv != nil {
-					(*c.conf)[k] = nv
+					c.conf[k] = nv
 					vlog.Infof("config value '%s' is replaced by '%v'\n", sv, nv)
 					fmt.Printf("config value '%s' is replaced by '%v'\n", sv, nv)
 				}
@@ -204,6 +204,9 @@ func (c *Config) replace(configs *map[interface{}]interface{}) {
 
 func (c *Config) getPlaceholderValue(v string) interface{} {
 	var nv interface{}
+	if c.rex == nil {
+		c.rex, _ = regexp.Compile("^\\${([^}]+)}$")
+	}
 	result := c.rex.FindStringSubmatch(v)
 	if len(result) == 2 {
 		nv = c.placeHolders[result[1]]
@@ -213,5 +216,78 @@ func (c *Config) getPlaceholderValue(v string) interface{} {
 
 // GetOriginMap : get origin configs map
 func (c *Config) GetOriginMap() map[string]interface{} {
-	return *c.conf
+	return c.conf
+}
+
+func (c *Config) Merge(config *Config) {
+	if config != nil {
+		for k, v := range config.conf {
+			if v != nil {
+				if tv, ok := c.conf[k]; !ok || tv == nil {
+					c.conf[k] = v
+				} else {
+					tp := reflect.TypeOf(tv)
+					vtp := reflect.TypeOf(v)
+					if tp.Kind() == reflect.Map && vtp.Kind() == reflect.Map {
+						tvm, ok1 := tv.(map[interface{}]interface{})
+						vm, ok2 := v.(map[interface{}]interface{})
+						if ok1 && ok2 {
+							mergeMap(tvm, vm)
+						}
+					} else if tp.Kind() == reflect.Slice && vtp.Kind() == reflect.Slice {
+						tvs, ok1 := tv.([]interface{})
+						vs, ok2 := v.([]interface{})
+						if ok1 && ok2 {
+							mergeArray(&tvs, vs)
+						}
+					} else {
+						c.conf[k] = v
+					}
+				}
+			}
+		}
+	}
+}
+
+// t & o should not nil
+func mergeMap(t map[interface{}]interface{}, o map[interface{}]interface{}) {
+	for k, v := range o {
+		if v != nil {
+			if tv, ok := t[k]; !ok || tv == nil {
+				t[k] = v
+			} else {
+				tp := reflect.TypeOf(tv)
+				vtp := reflect.TypeOf(v)
+				if tp.Kind() == reflect.Map && vtp.Kind() == reflect.Map {
+					tvm, ok1 := tv.(map[interface{}]interface{})
+					vm, ok2 := v.(map[interface{}]interface{})
+					if ok1 && ok2 {
+						mergeMap(tvm, vm)
+					}
+				} else if tp.Kind() == reflect.Slice && vtp.Kind() == reflect.Slice {
+					tvs, ok1 := tv.([]interface{})
+					vs, ok2 := v.([]interface{})
+					if ok1 && ok2 {
+						mergeArray(&tvs, vs)
+					}
+				} else {
+					t[k] = v
+				}
+			}
+		}
+	}
+}
+
+// only append in slice type
+func mergeArray(t *[]interface{}, o []interface{}) {
+	for _, v := range o {
+		if v != nil {
+			*t = append(*t, v)
+		}
+	}
+}
+
+func NewConfig() *Config {
+	cfg := &Config{conf: make(map[string]interface{}, 16), placeHolders: make(map[string]interface{}, 16)}
+	return cfg
 }
