@@ -14,6 +14,10 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
+const (
+	DefaultMetaSize = 16
+)
+
 //message type
 const (
 	Req = iota
@@ -49,7 +53,7 @@ type Header struct {
 
 type Message struct {
 	Header   *Header
-	Metadata map[string]string
+	Metadata *motan.StringMap
 	Body     []byte
 	Type     int
 }
@@ -99,7 +103,7 @@ func BuildResponseHeader(requestID uint64, msgStatus int) *Header {
 func BuildHeartbeat(requestID uint64, msgType int) *Message {
 	request := &Message{
 		Header:   BuildHeader(msgType, true, defaultSerialize, requestID, Normal),
-		Metadata: make(map[string]string),
+		Metadata: motan.NewStringMap(DefaultMetaSize),
 		Body:     make([]byte, 0),
 		Type:     msgType,
 	}
@@ -225,12 +229,13 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 
 func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	metabuf := motan.NewBytesBuffer(256)
-	for k, v := range msg.Metadata {
+	msg.Metadata.Range(func(k, v string) bool {
 		metabuf.Write([]byte(k))
 		metabuf.WriteByte('\n')
 		metabuf.Write([]byte(v))
 		metabuf.WriteByte('\n')
-	}
+		return true
+	})
 	metasize := metabuf.Len()
 	bodysize := len(msg.Body)
 	buf = motan.NewBytesBuffer(int(HeaderLength + bodysize + metasize + 8))
@@ -253,6 +258,18 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 		buf.Write(msg.Body)
 	}
 	return buf
+}
+
+func (msg *Message) Clone() interface{} {
+	newMessage := &Message{
+		Header: msg.Header,
+		Body:   msg.Body,
+		Type:   msg.Type,
+	}
+	if msg.Metadata != nil {
+		newMessage.Metadata = msg.Metadata.Copy()
+	}
+	return newMessage
 }
 
 func Decode(buf *bufio.Reader) (msg *Message, err error) {
@@ -280,7 +297,7 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 		return nil, err
 	}
 	metasize := int(binary.BigEndian.Uint32(temp[:4]))
-	metamap := make(map[string]string)
+	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
 		metadata, err := readBytes(buf, metasize)
 		if err != nil {
@@ -294,7 +311,7 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 				if k == "" {
 					k = string(metadata[s:e])
 				} else {
-					metamap[k] = string(metadata[s:e])
+					metamap.Store(k, string(metadata[s:e]))
 					k = ""
 				}
 				s = i + 1
@@ -387,9 +404,9 @@ func DecodeGzip(data []byte) ([]byte, error) {
 func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Request, error) {
 	motanRequest := &motan.MotanRequest{Arguments: make([]interface{}, 0)}
 	motanRequest.RequestID = request.Header.RequestID
-	motanRequest.ServiceName = request.Metadata[MPath]
-	motanRequest.Method = request.Metadata[MMethod]
-	motanRequest.MethodDesc = request.Metadata[MMethodDesc]
+	motanRequest.ServiceName = request.Metadata.LoadOrEmpty(MPath)
+	motanRequest.Method = request.Metadata.LoadOrEmpty(MMethod)
+	motanRequest.MethodDesc = request.Metadata.LoadOrEmpty(MMethodDesc)
 	motanRequest.Attachment = request.Metadata
 	rc := motanRequest.GetRPCContext(true)
 	rc.OriginalMessage = request
@@ -418,7 +435,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 			return msg, nil
 		}
 	}
-	req := &Message{Metadata: make(map[string]string)}
+	req := &Message{}
 	if rc.Serialized { // params already serialized
 		req.Header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
 	} else {
@@ -466,14 +483,14 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 		req.Header.SetProxy(true)
 	}
 	req.Header.SetSerialize(serialize.GetSerialNum())
-	req.Metadata[MPath] = request.GetServiceName()
-	req.Metadata[MMethod] = request.GetMethod()
+	req.Metadata.Store(MPath, request.GetServiceName())
+	req.Metadata.Store(MMethod, request.GetMethod())
 	if request.GetAttachment(MProxyProtocol) == "" {
-		req.Metadata[MProxyProtocol] = defaultProtocol
+		req.Metadata.Store(MProxyProtocol, defaultProtocol)
 	}
 
 	if request.GetMethodDesc() != "" {
-		req.Metadata[MMethodDesc] = request.GetMethodDesc()
+		req.Metadata.Store(MMethodDesc, request.GetMethodDesc())
 	}
 	return req, nil
 
@@ -489,7 +506,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 		}
 	}
 
-	res := &Message{Metadata: make(map[string]string)}
+	res := &Message{}
 	var msgType int
 	if response.GetException() != nil {
 		msgType = Exception
@@ -524,7 +541,6 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	}
 
 	res.Metadata = response.GetAttachments()
-
 	if rc.GzipSize > 0 && len(res.Body) > rc.GzipSize {
 		data, err := EncodeGzip(res.Body)
 		if err != nil {
@@ -558,13 +574,16 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
 		mres.Value = dv
 	}
-	if response.Header.GetStatus() == Exception && response.Metadata[MExceptionn] != "" {
-		var exception *motan.Exception
-		err := json.Unmarshal([]byte(response.Metadata[MExceptionn]), &exception)
-		if err != nil {
-			return nil, err
+	if response.Header.GetStatus() == Exception {
+		e := response.Metadata.LoadOrEmpty(MExceptionn)
+		if e != "" {
+			var exception *motan.Exception
+			err := json.Unmarshal([]byte(e), &exception)
+			if err != nil {
+				return nil, err
+			}
+			mres.Exception = exception
 		}
-		mres.Exception = exception
 	}
 	mres.Attachment = response.Metadata
 	rc.OriginalMessage = response
@@ -574,8 +593,8 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 
 func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
 	header := BuildHeader(Res, false, defaultSerialize, requestID, Exception)
-	msg := &Message{Header: header, Metadata: make(map[string]string)}
-	msg.Metadata[MExceptionn] = errmsg
+	msg := &Message{Header: header, Metadata: motan.NewStringMap(DefaultMetaSize)}
+	msg.Metadata.Store(MExceptionn, errmsg)
 	return msg
 }
 

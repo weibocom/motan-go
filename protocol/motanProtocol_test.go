@@ -3,6 +3,7 @@ package protocol
 import (
 	"bufio"
 	"fmt"
+	"github.com/weibocom/motan-go/core"
 	"testing"
 )
 
@@ -129,8 +130,8 @@ func TestEncode(t *testing.T) {
 	h.SetRequest(true)
 	h.Magic = MotanMagic
 	h.RequestID = 2349789
-	meta := make(map[string]string)
-	meta["k1"] = "v1"
+	meta := core.NewStringMap(0)
+	meta.Store("k1", "v1")
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
 	ebytes := msg.Encode()
@@ -148,7 +149,7 @@ func TestEncode(t *testing.T) {
 	assertTrue(newMsg.Header.GetVersion() == 7, "version", t)
 	assertTrue(newMsg.Header.GetSerialize() == 5, "serialize", t)
 	assertTrue(newMsg.Header.GetStatus() == 6, "status", t)
-	assertTrue(newMsg.Metadata["k1"] == "v1", "meta", t)
+	assertTrue(newMsg.Metadata.LoadOrEmpty("k1") == "v1", "meta", t)
 	assertTrue(len(newMsg.Body) == len(msg.Body), "body", t)
 
 	msg.Header.SetProxy(false)

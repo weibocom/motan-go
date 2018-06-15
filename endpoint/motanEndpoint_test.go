@@ -25,7 +25,7 @@ func TestGetName(t *testing.T) {
 	ep.Initialize()
 	fmt.Printf("format\n")
 	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-	request.Attachment = make(map[string]string, 0)
+	request.Attachment = motan.NewStringMap(0)
 	res := ep.Call(request)
 	fmt.Printf("res:%+v\n", res)
 }

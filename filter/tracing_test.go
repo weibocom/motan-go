@@ -11,7 +11,7 @@ import (
 )
 
 func TestAttachmentReader_ForeachKey(t *testing.T) {
-	att := TestAttachment{}
+	att := core.MotanRequest{}
 	att.SetAttachment("k1", "v1")
 	att.SetAttachment("k2", "v2")
 
@@ -20,10 +20,15 @@ func TestAttachmentReader_ForeachKey(t *testing.T) {
 	n := 0
 	r.ForeachKey(func(key, val string) error {
 		defer func() { n++ }()
-		assert.Equal(t, att[key], val)
+		assert.Equal(t, att.GetAttachment(key), val)
 		return nil
 	})
-	assert.Equal(t, len(att), n)
+
+	err := r.ForeachKey(func(key, val string) error {
+		return fmt.Errorf("test")
+	})
+	assert.True(t, err != nil)
+	assert.Equal(t, att.GetAttachments().Len(), n)
 }
 
 func TestAttachmentWriter_Set(t *testing.T) {
@@ -37,30 +42,29 @@ func TestAttachmentWriter_Set(t *testing.T) {
 			{"e", "f"},
 		}
 
-	att := TestAttachment{}
+	att := core.MotanRequest{}
 
 	w := AttachmentWriter{attach: &att}
 
 	for _, e := range cases {
 		w.Set(e.K, e.V)
-		assert.Equal(t, e.V, att[e.K])
+		assert.Equal(t, e.V, att.GetAttachment(e.K))
 	}
 }
 
-func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
+func TestTracingFilter_FilterOutgoingRequest(t *testing.T) {
 	req := core.MotanRequest{
-		RequestID: 1,
-		Attachment: map[string]string{
-			"tid": "1",
-			"id":  "2",
-			"pid": "3",
-		},
+		RequestID:   1,
+		Attachment:  core.NewStringMap(3),
 		Method:      "foo",
 		ServiceName: "FooService",
 		Arguments:   []interface{}{},
 		MethodDesc:  "FooService.foo()",
 		RPCContext:  &core.RPCContext{},
 	}
+	req.SetAttachment("tid", "1")
+	req.SetAttachment("id", "2")
+	req.SetAttachment("pid", "3")
 
 	outgoing := func(caller core.Caller, request core.Request) core.Response {
 		assert.Equal(t, "1", request.GetAttachment("tid"))
@@ -101,18 +105,18 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 
 func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
 	req := core.MotanRequest{
-		RequestID: 1,
-		Attachment: map[string]string{
-			"tid": "1",
-			"id":  "2",
-			"pid": "3",
-		},
+		RequestID:   1,
+		Attachment:  core.NewStringMap(3),
 		Method:      "foo",
 		ServiceName: "FooService",
 		Arguments:   []interface{}{},
 		MethodDesc:  "FooService.foo()",
 		RPCContext:  &core.RPCContext{},
 	}
+
+	req.SetAttachment("tid", "1")
+	req.SetAttachment("id", "2")
+	req.SetAttachment("pid", "3")
 
 	outgoing := func(caller core.Caller, request core.Request) core.Response {
 		// check the request passed to next filter
@@ -336,7 +340,7 @@ func (*MockResponse) GetAttachment(key string) string {
 	panic("implement me")
 }
 
-func (*MockResponse) GetAttachments() map[string]string {
+func (*MockResponse) GetAttachments() *core.StringMap {
 	panic("implement me")
 }
 
@@ -490,18 +494,4 @@ func (r *Referrer) SetSerialization(s core.Serialization) {
 
 func (r *Referrer) SetProxy(proxy bool) {
 	// DO NOTHING
-}
-
-type TestAttachment map[string]string
-
-func (t *TestAttachment) GetAttachments() map[string]string {
-	return *t
-}
-
-func (t *TestAttachment) GetAttachment(key string) string {
-	return (*t)[key]
-}
-
-func (t *TestAttachment) SetAttachment(key string, value string) {
-	(*t)[key] = value
 }

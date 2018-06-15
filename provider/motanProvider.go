@@ -44,7 +44,7 @@ func (m *MotanProvider) Call(request motan.Request) motan.Response {
 		return m.ep.Call(request)
 	}
 	t := time.Now().UnixNano()
-	res := &motan.MotanResponse{Attachment: make(map[string]string)}
+	res := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	fillException(res, t, errors.New("reverse proxy call err: motanProvider is unavailable"))
 	return res
 }

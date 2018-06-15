@@ -8,6 +8,12 @@ import (
 
 	"errors"
 	"github.com/weibocom/motan-go/log"
+	"sync/atomic"
+	"unsafe"
+)
+
+const (
+	DefaultAttachmentSize = 16
 )
 
 //-----------interface-------------
@@ -30,7 +36,7 @@ type WithURL interface {
 
 // Attachment : can get, set attachments.
 type Attachment interface {
-	GetAttachments() map[string]string
+	GetAttachments() *StringMap
 	GetAttachment(key string) string
 	SetAttachment(key string, value string)
 }
@@ -38,6 +44,11 @@ type Attachment interface {
 // Destroyable : can destroy ....
 type Destroyable interface {
 	Destroy()
+}
+
+// Cloneable : can clone itself, the return type interface{} must be the type which implement this interface
+type Cloneable interface {
+	Clone() interface{}
 }
 
 // Caller : can process a motan request. the call maybe process from remote by endpoint, maybe process by some kinds of provider
@@ -51,6 +62,7 @@ type Caller interface {
 // Request : motan request
 type Request interface {
 	Attachment
+	Cloneable
 	GetServiceName() string // service name  e.g. request path.or interface name
 	GetMethod() string
 	GetMethodDesc() string
@@ -340,8 +352,9 @@ type MotanRequest struct {
 	Method      string
 	MethodDesc  string
 	Arguments   []interface{}
-	Attachment  map[string]string
+	Attachment  *StringMap
 	RPCContext  *RPCContext
+	mu          sync.Mutex
 }
 
 // GetAttachment GetAttachment
@@ -349,15 +362,12 @@ func (m *MotanRequest) GetAttachment(key string) string {
 	if m.Attachment == nil {
 		return ""
 	}
-	return m.Attachment[key]
+	return m.Attachment.LoadOrEmpty(key)
 }
 
 // SetAttachment : SetAttachment
 func (m *MotanRequest) SetAttachment(key string, value string) {
-	if m.Attachment == nil {
-		m.Attachment = make(map[string]string)
-	}
-	m.Attachment[key] = value
+	m.GetAttachments().Store(key, value)
 }
 
 // GetServiceName GetServiceName
@@ -386,8 +396,20 @@ func (m *MotanRequest) SetArguments(arguments []interface{}) {
 	m.Arguments = arguments
 }
 
-func (m *MotanRequest) GetAttachments() map[string]string {
-	return m.Attachment
+func (m *MotanRequest) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+	if attachment != nil {
+		return attachment
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Attachment == nil {
+		attachment = NewStringMap(DefaultAttachmentSize)
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+	} else {
+		attachment = m.Attachment
+	}
+	return attachment
 }
 
 func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
@@ -395,6 +417,40 @@ func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
 		m.RPCContext = &RPCContext{}
 	}
 	return m.RPCContext
+}
+
+func (m *MotanRequest) Clone() interface{} {
+	newRequest := &MotanRequest{
+		RequestID:   m.RequestID,
+		ServiceName: m.ServiceName,
+		Method:      m.Method,
+		MethodDesc:  m.MethodDesc,
+		Arguments:   m.Arguments,
+	}
+	if m.Attachment != nil {
+		newRequest.Attachment = m.Attachment.Copy()
+	}
+	if m.RPCContext != nil {
+		newRequest.RPCContext = &RPCContext{
+			ExtFactory:   m.RPCContext.ExtFactory,
+			Oneway:       m.RPCContext.Oneway,
+			Proxy:        m.RPCContext.Proxy,
+			GzipSize:     m.RPCContext.GzipSize,
+			SerializeNum: m.RPCContext.SerializeNum,
+			Serialized:   m.RPCContext.Serialized,
+			AsyncCall:    m.RPCContext.AsyncCall,
+			Result:       m.RPCContext.Result,
+			Reply:        m.RPCContext.Reply,
+		}
+		if m.RPCContext.OriginalMessage != nil {
+			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
+				newRequest.RPCContext.OriginalMessage = oldMessage.Clone()
+			} else {
+				newRequest.RPCContext.OriginalMessage = oldMessage
+			}
+		}
+	}
+	return newRequest
 }
 
 // ProcessDeserializable : DeserializableValue to real params according toType
@@ -417,22 +473,20 @@ type MotanResponse struct {
 	Value       interface{}
 	Exception   *Exception
 	ProcessTime int64
-	Attachment  map[string]string
+	Attachment  *StringMap
 	RPCContext  *RPCContext
+	mu          sync.Mutex
 }
 
 func (m *MotanResponse) GetAttachment(key string) string {
 	if m.Attachment == nil {
 		return ""
 	}
-	return m.Attachment[key]
+	return m.Attachment.LoadOrEmpty(key)
 }
 
 func (m *MotanResponse) SetAttachment(key string, value string) {
-	if m.Attachment == nil {
-		m.Attachment = make(map[string]string)
-	}
-	m.Attachment[key] = value
+	m.GetAttachments().Store(key, value)
 }
 
 func (m *MotanResponse) GetValue() interface{} {
@@ -451,8 +505,20 @@ func (m *MotanResponse) GetProcessTime() int64 {
 	return m.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() map[string]string {
-	return m.Attachment
+func (m *MotanResponse) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+	if attachment != nil {
+		return attachment
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Attachment == nil {
+		attachment = NewStringMap(DefaultAttachmentSize)
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+	} else {
+		attachment = m.Attachment
+	}
+	return attachment
 }
 
 func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
