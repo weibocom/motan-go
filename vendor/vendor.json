@@ -1,6 +1,6 @@
 {
-	"comment": "",
-	"ignore": "test",
-	"package": [],
-	"rootPath": "weibo-motan-go"
+  "comment": "",
+  "ignore": "test",
+  "package": [],
+  "rootPath": "weibo-motan-go"
 }
