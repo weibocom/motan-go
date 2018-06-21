@@ -295,7 +295,6 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 		}
 		vlog.Infof("start watch command %s\n", commandPath)
 		go func() {
-		ForEnd:
 			for {
 				select {
 				case evt := <-ch:
@@ -312,7 +311,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 				case checkWatch := <-tempChan:
 					if !checkWatch {
 						close(tempChan)
-						break ForEnd
+						return
 					}
 				}
 			}
