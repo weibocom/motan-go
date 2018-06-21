@@ -63,42 +63,6 @@ func (z *ZkRegistry) Initialize() {
 	z.registeredServices = make(map[string]*motan.URL)
 }
 
-func toGroupPath(url *motan.URL) string {
-	return ZkRegistryNamespace + ZkPathSeparator + url.Group
-}
-
-func toServicePath(url *motan.URL) string {
-	return toGroupPath(url) + ZkPathSeparator + url.Path
-}
-
-func toCommandPath(url *motan.URL) string {
-	return toGroupPath(url) + ZkRegistryCommand
-}
-
-func toNodeTypePath(url *motan.URL, nodeType string) string {
-	return toServicePath(url) + ZkPathSeparator + nodeType
-}
-
-func toNodePath(url *motan.URL, nodeType string) string {
-	return toNodeTypePath(url, nodeType) + ZkPathSeparator + url.GetAddressStr()
-}
-
-func toAgentPath(url *motan.URL) string {
-	return ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + url.Parameters[motan.ApplicationKey]
-}
-
-func toAgentNodeTypePath(url *motan.URL) string {
-	return toAgentPath(url) + ZkRegistryNode
-}
-
-func toAgentNodePath(url *motan.URL) string {
-	return toAgentNodeTypePath(url) + ZkPathSeparator + url.GetAddressStr()
-}
-
-func toAgentCommandPath(url *motan.URL) string {
-	return toAgentPath(url) + ZkRegistryCommand
-}
-
 func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 	nodePath := toNodePath(url, nodeType)
 	if IsAgent(url) {
@@ -420,4 +384,40 @@ func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
 			saveSnapshot(conf.SnapshotDir, z.nodeRs)
 		}
 	}(z)
+}
+
+func toGroupPath(url *motan.URL) string {
+	return ZkRegistryNamespace + ZkPathSeparator + url.Group
+}
+
+func toServicePath(url *motan.URL) string {
+	return toGroupPath(url) + ZkPathSeparator + url.Path
+}
+
+func toCommandPath(url *motan.URL) string {
+	return toGroupPath(url) + ZkRegistryCommand
+}
+
+func toNodeTypePath(url *motan.URL, nodeType string) string {
+	return toServicePath(url) + ZkPathSeparator + nodeType
+}
+
+func toNodePath(url *motan.URL, nodeType string) string {
+	return toNodeTypePath(url, nodeType) + ZkPathSeparator + url.GetAddressStr()
+}
+
+func toAgentPath(url *motan.URL) string {
+	return ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + url.Parameters[motan.ApplicationKey]
+}
+
+func toAgentNodeTypePath(url *motan.URL) string {
+	return toAgentPath(url) + ZkRegistryNode
+}
+
+func toAgentNodePath(url *motan.URL) string {
+	return toAgentNodeTypePath(url) + ZkPathSeparator + url.GetAddressStr()
+}
+
+func toAgentCommandPath(url *motan.URL) string {
+	return toAgentPath(url) + ZkRegistryCommand
 }
