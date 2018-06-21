@@ -5,6 +5,7 @@ import (
 	"testing"
 	"reflect"
 	"time"
+	"github.com/samuel/go-zookeeper/zk"
 )
 
 var (
@@ -34,18 +35,18 @@ func TestZkRegistryToPath(t *testing.T) {
 }
 
 func TestZkRegistryCreateNode(t *testing.T) {
-	zk := ZkRegistry{url: ZkUrl}
-	zk.Initialize()
-	zk.CreateNode(ZkUrl, ZkNodeTypeServer)
-	if isExist, _, err := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
+	z := ZkRegistry{url: ZkUrl}
+	z.Initialize()
+	z.CreateNode(ZkUrl, ZkNodeTypeServer)
+	if isExist, _, err := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
 		if !isExist {
 			t.Error("CreateNode fail.")
 		}
 	} else {
 		t.Error("CreateNode err:", err)
 	}
-	zk.RemoveNode(ZkUrl, ZkNodeTypeServer)
-	if isExist, _, err := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
+	z.RemoveNode(ZkUrl, ZkNodeTypeServer)
+	if isExist, _, err := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
 		if isExist {
 			t.Error("RemoveNode fail.")
 		}
@@ -55,19 +56,19 @@ func TestZkRegistryCreateNode(t *testing.T) {
 }
 
 func TestZkRegistryAvailable(t *testing.T) {
-	zk := ZkRegistry{url: ZkUrl}
-	zk.Initialize()
-	zk.Available(ZkUrl)
-	if isExist, _, err := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
+	z := ZkRegistry{url: ZkUrl}
+	z.Initialize()
+	z.Available(ZkUrl)
+	if isExist, _, err := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer)); err == nil {
 		if !isExist {
 			t.Error("Register fail.")
 		}
 	} else {
 		t.Error("Register err:", err)
 	}
-	zk.Unavailable(ZkUrl)
-	isExistUnAvail, _, errUnAvail := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer))
-	isExistAvail, _, errAvail := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer))
+	z.Unavailable(ZkUrl)
+	isExistUnAvail, _, errUnAvail := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer))
+	isExistAvail, _, errAvail := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer))
 	if errUnAvail == nil && errAvail == nil {
 		if !isExistUnAvail || isExistAvail {
 			t.Error("Unavailable fail.")
@@ -78,19 +79,19 @@ func TestZkRegistryAvailable(t *testing.T) {
 }
 
 func TestZkRegistryRegister(t *testing.T) {
-	zk := ZkRegistry{url: ZkUrl}
-	zk.Initialize()
-	zk.Register(ZkUrl)
-	if isExist, _, err := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer)); err == nil {
+	z := ZkRegistry{url: ZkUrl}
+	z.Initialize()
+	z.Register(ZkUrl)
+	if isExist, _, err := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer)); err == nil {
 		if !isExist {
 			t.Error("Register fail.")
 		}
 	} else {
 		t.Error("Register err:", err)
 	}
-	zk.UnRegister(ZkUrl)
-	isExistUnReg, _, errUnReg := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer))
-	isExistGeg, _, errReg := zk.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer))
+	z.UnRegister(ZkUrl)
+	isExistUnReg, _, errUnReg := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeUnavailbleServer))
+	isExistGeg, _, errReg := z.zkConn.Exists(toNodePath(ZkUrl, ZkNodeTypeServer))
 	if errUnReg == nil && errReg == nil {
 		if isExistUnReg || isExistGeg {
 			t.Error("UnRegister fail.")
@@ -101,29 +102,29 @@ func TestZkRegistryRegister(t *testing.T) {
 }
 
 func TestZkRegistryDiscover(t *testing.T) {
-	zk := ZkRegistry{url: ZkUrl}
-	zk.Initialize()
-	zk.CreateNode(ZkUrl, ZkNodeTypeServer)
+	z := ZkRegistry{url: ZkUrl}
+	z.Initialize()
+	z.CreateNode(ZkUrl, ZkNodeTypeServer)
 	ZkUrl.ClearCachedInfo()
-	if !reflect.DeepEqual(zk.Discover(ZkUrl)[0], ZkUrl) {
-		t.Error("Discover fail:", zk.Discover(ZkUrl)[0], ZkUrl)
+	if !reflect.DeepEqual(z.Discover(ZkUrl)[0], ZkUrl) {
+		t.Error("Discover fail:", z.Discover(ZkUrl)[0], ZkUrl)
 	}
-	zk.CreatePersistent(toCommandPath(ZkUrl), true)
+	z.CreatePersistent(toCommandPath(ZkUrl), true)
 	commandReq := "hello"
-	zk.zkConn.Set(toCommandPath(ZkUrl), []byte(commandReq), -1)
-	commandRes := zk.DiscoverCommand(ZkUrl)
+	z.zkConn.Set(toCommandPath(ZkUrl), []byte(commandReq), -1)
+	commandRes := z.DiscoverCommand(ZkUrl)
 	if !reflect.DeepEqual(commandReq, commandRes) {
 		t.Error("Discover command fail. commandReq:", commandReq, "commandRes:", commandRes)
 	}
 }
 
 func TestZkRegistrySubscribe(t *testing.T) {
-	zk := ZkRegistry{url: ZkUrl}
-	zk.Initialize()
+	z := ZkRegistry{url: ZkUrl}
+	z.Initialize()
 	lis := MockListener{}
-	zk.Register(ZkUrl)
-	zk.Subscribe(ZkUrl, &lis)
-	zk.Available(ZkUrl)
+	z.Register(ZkUrl)
+	z.Subscribe(ZkUrl, &lis)
+	z.Available(ZkUrl)
 	urlRes := &motan.URL{
 		Protocol:   "zookeeper",
 		Host:       "127.0.0.1",
@@ -137,25 +138,25 @@ func TestZkRegistrySubscribe(t *testing.T) {
 	if !reflect.DeepEqual(lis.registryURL, urlRes) {
 		t.Error("Subscribe fail. registryURL:", lis.registryURL)
 	}
-	zk.Unsubscribe(ZkUrl, &lis)
+	z.Unsubscribe(ZkUrl, &lis)
 	subKey := GetSubKey(ZkUrl)
 	idt := lis.GetIdentity()
 	time.Sleep(500 * time.Millisecond)
-	if listeners, ok := zk.subscribeMap[subKey]; ok {
+	if listeners, ok := z.subscribeMap[subKey]; ok {
 		if _, ok := listeners[idt]; ok {
 			t.Error("UnSubscribe fail. registryURL:", lis.registryURL)
 		}
 	}
-	zk.SubscribeCommand(ZkUrl, &lis)
+	z.SubscribeCommand(ZkUrl, &lis)
 	commandReq := "hello"
-	zk.zkConn.Set(toCommandPath(ZkUrl), []byte(commandReq), -1)
+	z.zkConn.Set(toCommandPath(ZkUrl), []byte(commandReq), -1)
 	time.Sleep(500 * time.Millisecond)
 	if !reflect.DeepEqual(commandReq, lis.command) {
 		t.Error("Subscribe command fail. commandReq:", commandReq, "lis.command:", lis.command)
 	}
-	zk.UnSubscribeCommand(ZkUrl, &lis)
+	z.UnSubscribeCommand(ZkUrl, &lis)
 	time.Sleep(500 * time.Millisecond)
-	if _, ok := <-zk.watchSwitcherMap[toCommandPath(ZkUrl)]; ok {
+	if _, ok := <-z.watchSwitcherMap[toCommandPath(ZkUrl)]; ok {
 		t.Error("Subscribe command fail.")
 	}
 }
@@ -178,4 +179,50 @@ func (m *MockListener) NotifyCommand(registryURL *motan.URL, commandType int, co
 
 func (m *MockListener) GetIdentity() string {
 	return "mocklistener"
+}
+
+type ZkConn interface {
+	Exists(path string) (bool, *zk.Stat, error)
+	Create(path string, data []byte, flags int32, acl []zk.ACL) (string, error)
+	Delete(path string, version int32) error
+	Children(path string) ([]string, *zk.Stat, error)
+	ChildrenW(path string) ([]string, *zk.Stat, <-chan zk.Event, error)
+	Get(path string) ([]byte, *zk.Stat, error)
+	Set(path string, data []byte, version int32) (*zk.Stat, error)
+	GetW(path string) ([]byte, *zk.Stat, <-chan zk.Event, error)
+}
+
+type MockConn struct {
+}
+
+func (c *MockConn) Exists(path string) (bool, *zk.Stat, error) {
+	return false, nil, nil
+}
+
+func (c *MockConn) Create(path string, data []byte, flags int32, acl []zk.ACL) (string, error) {
+	return "", nil
+}
+
+func (c *MockConn) Delete(path string, version int32) error {
+	return nil
+}
+
+func (c *MockConn) Children(path string) ([]string, *zk.Stat, error) {
+	return nil, nil, nil
+}
+
+func (c *MockConn) ChildrenW(path string) ([]string, *zk.Stat, <-chan zk.Event, error) {
+	return nil, nil, nil, nil
+}
+
+func (c *MockConn) Get(path string) ([]byte, *zk.Stat, error) {
+	return nil, nil, nil
+}
+
+func (c *MockConn) Set(path string, data []byte, version int32) (*zk.Stat, error) {
+	return nil, nil
+}
+
+func (c *MockConn) GetW(path string) ([]byte, *zk.Stat, <-chan zk.Event, error) {
+	return nil, nil, nil, nil
 }
