@@ -179,10 +179,10 @@ func (z *ZkRegistry) UnRegister(url *motan.URL) {
 func buildURL4Nodes(nodes []string, url *motan.URL) []*motan.URL {
 	result := make([]*motan.URL, 0, len(nodes))
 	for _, node := range nodes {
-		nodeinfo := strings.Split(node, ":")
-		port, _ := strconv.Atoi(nodeinfo[1])
+		nodeInfo := strings.Split(node, ":")
+		port, _ := strconv.Atoi(nodeInfo[1])
 		refURL := url.Copy()
-		refURL.Host = nodeinfo[0]
+		refURL.Host = nodeInfo[0]
 		refURL.Port = port
 		result = append(result, refURL)
 	}
