@@ -20,6 +20,9 @@ const (
 	serverSection        = "motan-server"
 	// URLConfKey add confid to url params
 	URLConfKey = "conf-id"
+
+	basicReferKey   = "basicRefer"
+	basicServiceKey = "basicService"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -153,51 +156,55 @@ func (c *Context) parseRegistrys() {
 	c.RegistryURLs = c.confToURLs(registrysSection)
 }
 
-func (c *Context) basicConfToURLs(basicsection, section string) map[string]*URL {
-	urls := map[string]*URL{}
-	Refs := c.confToURLs(section)
+func (c *Context) basicConfToURLs(basicKey string, section string) map[string]*URL {
+	newURLs := map[string]*URL{}
+	urls := c.confToURLs(section)
 	var BasicInfo map[string]*URL
 	if section == servicesSection {
 		BasicInfo = c.BasicServiceURLs
 	} else if section == refersSection {
 		BasicInfo = c.BasicRefers
 	}
-	for key, ref := range Refs {
+	for key, url := range urls {
 		var newURL *URL
-		if basicConfKey, ok := ref.Parameters["basicRefer"]; ok {
-			if basicRef, ok := BasicInfo[basicConfKey]; ok {
-				newURL = basicRef.Copy()
-				if ref.Protocol != "" {
-					newURL.Protocol = ref.Protocol
+		basicConfName, ok := url.Parameters[basicReferKey]
+		if !ok {
+			basicConfName, ok = url.Parameters[basicServiceKey]
+		}
+		if ok {
+			if basicInfo, ok := BasicInfo[basicConfName]; ok {
+				newURL = basicInfo.Copy()
+				if url.Protocol != "" {
+					newURL.Protocol = url.Protocol
 				}
-				if ref.Host != "" {
-					newURL.Host = ref.Host
+				if url.Host != "" {
+					newURL.Host = url.Host
 				}
-				if ref.Port != 0 {
-					newURL.Port = ref.Port
+				if url.Port != 0 {
+					newURL.Port = url.Port
 				}
-				if ref.Group != "" {
-					newURL.Group = ref.Group
+				if url.Group != "" {
+					newURL.Group = url.Group
 				}
-				if ref.Path != "" {
-					newURL.Path = ref.Path
+				if url.Path != "" {
+					newURL.Path = url.Path
 				}
-				newURL.MergeParams(ref.Parameters)
+				newURL.MergeParams(url.Parameters)
 			} else {
-				newURL = ref
-				vlog.Warningf("can not found basicRefer: %s. ref %s\n", basicConfKey, ref.GetIdentity())
+				newURL = url
+				vlog.Warningf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
 			}
 
 		} else {
-			newURL = ref
+			newURL = url
 		}
-		urls[key] = newURL
+		newURLs[key] = newURL
 	}
-	return urls
+	return newURLs
 }
 
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(basicRefersSection, refersSection)
+	c.RefersURLs = c.basicConfToURLs(basicReferKey, refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
@@ -205,7 +212,7 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(basicServicesSection, servicesSection)
+	c.ServiceURLs = c.basicConfToURLs(basicServiceKey, servicesSection)
 }
 
 func (c *Context) parserBasicServices() {
