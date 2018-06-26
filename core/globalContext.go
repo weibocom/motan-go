@@ -2,11 +2,9 @@ package core
 
 import (
 	"flag"
-	"reflect"
-
 	"fmt"
 	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
+	"reflect"
 	"strings"
 )
 
@@ -23,20 +21,21 @@ const (
 	importSection        = "import-refer"
 	dynamicSection       = "dynamic-param"
 
-	// URLConfKey add confid to url params
-	URLConfKey = "conf-id"
+	// URL Keys
+	URLConfKey      = "conf-id"
+	basicReferKey   = "basicRefer"
+	basicServiceKey = "basicService"
 
 	// default config file and path
 	configFile = "./motan.yaml"
 	configPath = "./"
 	fileSuffix = ".yaml"
 
-	// path in application pool
-	basicConfig     = "basic.yaml"
-	servicePath     = "services/"
-	applicationPath = "applications/"
-	poolPath        = "pools/"
-
+	// const for application pool
+	basicConfig       = "basic.yaml"
+	servicePath       = "services/"
+	applicationPath   = "applications/"
+	poolPath          = "pools/"
 	poolNameSaperator = "-"
 )
 
@@ -134,7 +133,7 @@ func (c *Context) Initialize() {
 		}
 		cfgRs, err = parsePool(c.ConfigFile, *Pool)
 		if err != nil {
-			vlog.Errorf("parse config fail. err:%s\n", err.Error())
+			fmt.Printf("parse config fail. err:%s\n", err.Error())
 			return
 		}
 	} else { // parse single config file and dynamic file
@@ -266,51 +265,54 @@ func (c *Context) parseRegistrys() {
 	c.RegistryURLs = c.confToURLs(registrysSection)
 }
 
-func (c *Context) basicConfToURLs(basicsection, section string) map[string]*URL {
-	urls := map[string]*URL{}
-	Refs := c.confToURLs(section)
-	var BasicInfo map[string]*URL
+func (c *Context) basicConfToURLs(section string) map[string]*URL {
+	newURLs := map[string]*URL{}
+	urls := c.confToURLs(section)
+	var basicURLs map[string]*URL
+	var basicKey string
 	if section == servicesSection {
-		BasicInfo = c.BasicServiceURLs
+		basicURLs = c.BasicServiceURLs
+		basicKey = basicServiceKey
 	} else if section == refersSection {
-		BasicInfo = c.BasicRefers
+		basicURLs = c.BasicRefers
+		basicKey = basicReferKey
 	}
-	for key, ref := range Refs {
+	for key, url := range urls {
 		var newURL *URL
-		if basicConfKey, ok := ref.Parameters["basicRefer"]; ok {
-			if basicRef, ok := BasicInfo[basicConfKey]; ok {
-				newURL = basicRef.Copy()
-				if ref.Protocol != "" {
-					newURL.Protocol = ref.Protocol
+		if basicConfName := url.GetParam(basicKey, ""); basicConfName != "" {
+			if basicURL, ok := basicURLs[basicConfName]; ok {
+				newURL = basicURL.Copy()
+				if url.Protocol != "" {
+					newURL.Protocol = url.Protocol
 				}
-				if ref.Host != "" {
-					newURL.Host = ref.Host
+				if url.Host != "" {
+					newURL.Host = url.Host
 				}
-				if ref.Port != 0 {
-					newURL.Port = ref.Port
+				if url.Port != 0 {
+					newURL.Port = url.Port
 				}
-				if ref.Group != "" {
-					newURL.Group = ref.Group
+				if url.Group != "" {
+					newURL.Group = url.Group
 				}
-				if ref.Path != "" {
-					newURL.Path = ref.Path
+				if url.Path != "" {
+					newURL.Path = url.Path
 				}
-				newURL.MergeParams(ref.Parameters)
+				newURL.MergeParams(url.Parameters)
+				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, url.GetIdentity())
 			} else {
-				newURL = ref
-				vlog.Warningf("can not found basicRefer: %s. ref %s\n", basicConfKey, ref.GetIdentity())
+				newURL = url
+				fmt.Printf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
 			}
-
 		} else {
-			newURL = ref
+			newURL = url
 		}
-		urls[key] = newURL
+		newURLs[key] = newURL
 	}
-	return urls
+	return newURLs
 }
 
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(basicRefersSection, refersSection)
+	c.RefersURLs = c.basicConfToURLs(refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
@@ -318,7 +320,7 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(basicServicesSection, servicesSection)
+	c.ServiceURLs = c.basicConfToURLs(servicesSection)
 }
 
 func (c *Context) parserBasicServices() {
