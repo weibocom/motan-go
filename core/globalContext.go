@@ -37,7 +37,7 @@ const (
 	servicePath       = "services/"
 	applicationPath   = "applications/"
 	poolPath          = "pools/"
-	poolNameSaperator = "-"
+	poolNameSeparator = "-"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -196,7 +196,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 	}
 
 	// application
-	poolPart := strings.Split(pool, poolNameSaperator)
+	poolPart := strings.Split(pool, poolNameSeparator)
 	var appconfig *cfg.Config
 	application := *Application
 	if application == "" && len(poolPart) > 0 { // the first part be the application name
@@ -232,7 +232,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 			if err == nil && tempcfg != nil {
 				c.Merge(tempcfg)
 			}
-			base = base + poolNameSaperator
+			base = base + poolNameSeparator
 		}
 	}
 
