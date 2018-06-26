@@ -335,7 +335,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 }
 
 func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
-	z.subscribeCmdLock.Unlock()
+	z.subscribeCmdLock.Lock()
 	defer z.subscribeCmdLock.Unlock()
 	var commandPath string
 	if IsAgent(url) {
