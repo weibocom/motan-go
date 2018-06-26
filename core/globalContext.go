@@ -5,8 +5,8 @@ import (
 	"reflect"
 
 	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
 	"strings"
+	"fmt"
 )
 
 const (
@@ -156,24 +156,23 @@ func (c *Context) parseRegistrys() {
 	c.RegistryURLs = c.confToURLs(registrysSection)
 }
 
-func (c *Context) basicConfToURLs(basicKey string, section string) map[string]*URL {
+func (c *Context) basicConfToURLs(section string) map[string]*URL {
 	newURLs := map[string]*URL{}
 	urls := c.confToURLs(section)
-	var BasicInfo map[string]*URL
+	var basicURLs map[string]*URL
+	var basicKey string
 	if section == servicesSection {
-		BasicInfo = c.BasicServiceURLs
+		basicURLs = c.BasicServiceURLs
+		basicKey = basicServiceKey
 	} else if section == refersSection {
-		BasicInfo = c.BasicRefers
+		basicURLs = c.BasicRefers
+		basicKey = basicReferKey
 	}
 	for key, url := range urls {
 		var newURL *URL
-		basicConfName, ok := url.Parameters[basicReferKey]
-		if !ok {
-			basicConfName, ok = url.Parameters[basicServiceKey]
-		}
-		if ok {
-			if basicInfo, ok := BasicInfo[basicConfName]; ok {
-				newURL = basicInfo.Copy()
+		if basicConfName := url.GetParam(basicKey, ""); basicConfName != "" {
+			if basicURL, ok := basicURLs[basicConfName]; ok {
+				newURL = basicURL.Copy()
 				if url.Protocol != "" {
 					newURL.Protocol = url.Protocol
 				}
@@ -190,11 +189,11 @@ func (c *Context) basicConfToURLs(basicKey string, section string) map[string]*U
 					newURL.Path = url.Path
 				}
 				newURL.MergeParams(url.Parameters)
+				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, url.GetIdentity())
 			} else {
 				newURL = url
-				vlog.Warningf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
+				fmt.Printf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
 			}
-
 		} else {
 			newURL = url
 		}
@@ -204,7 +203,7 @@ func (c *Context) basicConfToURLs(basicKey string, section string) map[string]*U
 }
 
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(basicReferKey, refersSection)
+	c.RefersURLs = c.basicConfToURLs(refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
@@ -212,7 +211,7 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(basicServiceKey, servicesSection)
+	c.ServiceURLs = c.basicConfToURLs(servicesSection)
 }
 
 func (c *Context) parserBasicServices() {
