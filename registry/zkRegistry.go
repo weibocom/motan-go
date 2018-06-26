@@ -30,7 +30,6 @@ const (
 type ZkRegistry struct {
 	zkConn             *zk.Conn
 	url                *motan.URL
-	timeout            time.Duration
 	sessionTimeout     time.Duration
 	subscribeCmdLock   sync.Mutex
 	registerLock       sync.Mutex
@@ -44,17 +43,11 @@ type ZkRegistry struct {
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
 		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
-	z.timeout = time.Duration(z.url.GetPositiveIntValue(motan.TimeOutKey, DefaultTimeout)) * time.Millisecond
-	var addrs []string
-	if z.url.Host != "" {
-		addrs = []string{z.url.GetAddressStr()}
-	} else {
-		addrs = strings.Split(z.url.GetParam(motan.AddressKey, ""), ",")
-	}
+	addrs := strings.Split(z.url.GetAddressStr(), ",")
 	if c, _, err := zk.Connect(addrs, z.sessionTimeout); err == nil {
 		z.zkConn = c
 	} else {
-		vlog.Errorf("zk connect error:%+v\n", err)
+		vlog.Errorf("zk connect error:%v\n", err)
 	}
 	z.subscribeMap = make(map[string]map[string]motan.NotifyListener)
 	z.nodeRs = make(map[string]ServiceNode)
@@ -71,11 +64,11 @@ func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 	isExist, stats, err := z.zkConn.Exists(nodePath)
 	if err == nil && isExist {
 		if err = z.zkConn.Delete(nodePath, stats.Version); err == nil {
-			vlog.Infof("remove node success. node: %s\n", nodePath)
+			vlog.Infof("remove node success. node:%s\n", nodePath)
 			return nil
 		}
 	}
-	vlog.Infof("remove node error. err: %v, nodeIsExist: %v\n", err, isExist)
+	vlog.Infof("remove node error. err:%v, nodeIsExist:%v\n", err, isExist)
 	return err
 }
 
@@ -93,17 +86,17 @@ func (z *ZkRegistry) CreateNode(url *motan.URL, nodeType string) error {
 			z.CreatePersistent(typePath, true)
 		}
 		if _, err = z.zkConn.Create(nodePath, []byte{}, zk.FlagEphemeral, zk.WorldACL(zk.PermAll)); err == nil {
-			vlog.Infof("create node success. node: %s\n", nodePath)
+			vlog.Infof("create node success. node:%s\n", nodePath)
 			return nil
 		}
 	}
-	vlog.Errorf("create node error. node: %s, err: %v\n", nodePath, err)
+	vlog.Errorf("create node error. node:%s, err:%v\n", nodePath, err)
 	return err
 }
 
 func (z *ZkRegistry) CreatePersistent(path string, createParents bool) {
 	if _, err := z.zkConn.Create(path, nil, 0, zk.WorldACL(zk.PermAll)); err == nil {
-		vlog.Infof("create Persistent node: %s\n", path)
+		vlog.Infof("create Persistent node:%s\n", path)
 	} else if err == zk.ErrNoNode {
 		if createParents {
 			parts := strings.Split(path, "/")
@@ -112,7 +105,7 @@ func (z *ZkRegistry) CreatePersistent(path string, createParents bool) {
 			z.CreatePersistent(path, createParents)
 		}
 	} else {
-		vlog.Errorf("err create Persistent. path: %s, err: %v\n", path, err)
+		vlog.Errorf("CreatePersistent error. path:%s, err:%v\n", path, err)
 	}
 }
 
@@ -121,7 +114,7 @@ func (z *ZkRegistry) Register(url *motan.URL) {
 	defer z.registerLock.Unlock()
 	vlog.Infof("start zk register %s\n", url.GetIdentity())
 	if url.Group == "" || url.Path == "" || url.Host == "" {
-		vlog.Errorf("register fail.invalid url : %s\n", url.GetIdentity())
+		vlog.Errorf("register fail. invalid url:%s\n", url.GetIdentity())
 	}
 	if IsAgent(url) {
 		z.CreateNode(url, ZkNodeTypeAgent)
@@ -195,7 +188,7 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 				}
 			}()
 		} else {
-			vlog.Infof("zk Subscribe err %+v\n", err)
+			vlog.Infof("zk Subscribe err %v\n", err)
 		}
 	}
 }
@@ -231,7 +224,7 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 		z.buildNodes(nodes, url)
 		return buildURL4Nodes(nodes, url)
 	}
-	vlog.Errorf("zookeeper registry discover fail! discover url:%s, err:%s\n", url.GetIdentity(), err.Error())
+	vlog.Errorf("zookeeper registry discover fail! discover url:%s, err:%v\n", url.GetIdentity(), err)
 	return nil
 }
 
@@ -249,7 +242,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 			return
 		}
 	} else {
-		vlog.Errorf("check command exists error: %+v\n", err)
+		vlog.Errorf("check command exists error:%v\n", err)
 	}
 	if _, _, ch, err := z.zkConn.GetW(commandPath); err == nil {
 		tempChan := z.watchSwitcherMap[commandPath]
@@ -269,7 +262,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 							listener.NotifyCommand(z.url, cluster.ServiceCmd, cmdInfo)
 							vlog.Infof("command changed, path:%s, data:%s\n", commandPath, cmdInfo)
 						} else {
-							vlog.Infof("command changed, get cmdInfo error, err: %+v\n", err)
+							vlog.Infof("command changed, get cmdInfo error, err:%v\n", err)
 						}
 					}
 				case checkWatch := <-tempChan:
@@ -281,7 +274,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 			}
 		}()
 	} else {
-		vlog.Warningf("zookeeper subscribe command fail. url:%s, err:%s, zk_path:%s, urlx:%+v\n", url.GetIdentity(), err.Error(), commandPath, url)
+		vlog.Warningf("zookeeper subscribe command error. err:%v, commandPath:%s, url:%v\n", err, commandPath, url)
 	}
 }
 
@@ -308,7 +301,7 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 			return res
 		}
 	} else {
-		vlog.Infof("zookeeper command check err: %+v\n", err)
+		vlog.Infof("zookeeper command check err:%v\n", err)
 		return res
 	}
 	if data, _, err := z.zkConn.Get(commandPath); err == nil {
@@ -353,6 +346,8 @@ func (z *ZkRegistry) Unavailable(url *motan.URL) {
 }
 
 func (z *ZkRegistry) GetRegisteredServices() []*motan.URL {
+	z.registerLock.Lock()
+	defer z.registerLock.Unlock()
 	urls := make([]*motan.URL, 0, len(z.registeredServices))
 	for _, u := range z.registeredServices {
 		urls = append(urls, u)
