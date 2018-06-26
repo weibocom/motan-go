@@ -4,6 +4,7 @@ import (
 	"flag"
 	"reflect"
 
+	"fmt"
 	cfg "github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/log"
 	"strings"
@@ -142,7 +143,7 @@ func (c *Context) Initialize() {
 		}
 		cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile)
 		if err != nil {
-			vlog.Errorf("parse config fail. err:%s\n", err.Error())
+			fmt.Printf("parse config fail. err:%s\n", err.Error())
 			return
 		}
 		var dynamicFile string
@@ -165,7 +166,9 @@ func (c *Context) Initialize() {
 				if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
 					continue
 				}
-				dconfs[k] = v
+				if ks, ok := k.(string); ok {
+					dconfs[ks] = v
+				}
 			}
 			cfgRs.ReplacePlaceHolder(dconfs)
 		}
