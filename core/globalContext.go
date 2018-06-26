@@ -21,7 +21,8 @@ const (
 	importSection        = "import-refer"
 	dynamicSection       = "dynamic-param"
 
-	// URL Keys
+	// URLConfKey is config id
+	// config Keys
 	URLConfKey      = "conf-id"
 	basicReferKey   = "basicRefer"
 	basicServiceKey = "basicService"

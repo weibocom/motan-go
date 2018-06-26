@@ -23,7 +23,7 @@ type CallData struct {
 	Direction uint32
 }
 
-// The default TraceRecordingFunc.
+// DefaultTraceRecordingFunc is the default TraceRecordingFunc.
 func DefaultTraceRecordingFunc(span ot.Span, data *CallData) {
 	span.SetTag("service.type", "motan")
 	span.SetTag("service.group", data.Caller.GetURL().Group)
@@ -47,7 +47,7 @@ func DefaultTraceRecordingFunc(span ot.Span, data *CallData) {
 	}
 }
 
-// The function to record tracing data, default is DefaultTraceRecordingFunc,
+// TraceRecordingFunc record tracing data, default is DefaultTraceRecordingFunc,
 // Users can rewrite it, and can embed the DefaultTraceRecordingFunc in the
 // Custom Recording Function.
 var TraceRecordingFunc func(span ot.Span, data *CallData)
