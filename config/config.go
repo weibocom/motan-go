@@ -32,6 +32,7 @@ func NewConfigFromFile(path string) (*Config, error) {
 	m := make(map[interface{}]interface{})
 	err = yaml.Unmarshal([]byte(data), &m)
 	if err != nil {
+		fmt.Printf("config unmarshal failed. " + err.Error())
 		return nil, errors.New("config unmarshal failed. " + err.Error())
 	}
 	return &Config{conf: m}, nil
