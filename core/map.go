@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// StringMap: goroutine safe string map, this will just be used in few goroutines
+// StringMap goroutine safe string map, this will just be used in few goroutines
 // so just use a simple implementation
 type StringMap struct {
 	mu       sync.RWMutex
@@ -43,6 +43,8 @@ func (m *StringMap) LoadOrEmpty(key string) string {
 	return v
 }
 
+// Range calls f sequentially for each key and value present in the map
+// If f returns false, range stops the iteration
 func (m *StringMap) Range(f func(k, v string) bool) {
 	m.mu.RLock()
 	keys := make([]string, 0, len(m.innerMap))
