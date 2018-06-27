@@ -58,7 +58,7 @@ func (z *ZkRegistry) Initialize() {
 
 func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 	nodePath := toNodePath(url, nodeType)
-	if IsAgent(url) {
+	if nodeType == ZkNodeTypeAgent {
 		nodePath = toAgentNodePath(url)
 	}
 	isExist, stats, err := z.zkConn.Exists(nodePath)
@@ -75,7 +75,7 @@ func (z *ZkRegistry) RemoveNode(url *motan.URL, nodeType string) error {
 func (z *ZkRegistry) CreateNode(url *motan.URL, nodeType string) error {
 	typePath := toNodeTypePath(url, nodeType)
 	nodePath := toNodePath(url, nodeType)
-	if IsAgent(url) {
+	if nodeType == ZkNodeTypeAgent {
 		typePath = toAgentNodeTypePath(url)
 		nodePath = toAgentNodePath(url)
 	}
