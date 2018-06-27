@@ -13,7 +13,7 @@ var (
 	ErrNotMessageParam = errors.New("param must be proto.Message in Serialization")
 )
 
-// ------- grpc-pb --------
+// GrpcPbSerialization can serialize & deserialize only single pb message.
 type GrpcPbSerialization struct{}
 
 func (g *GrpcPbSerialization) GetSerialNum() int {
@@ -78,7 +78,7 @@ func (g *GrpcPbSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 	return nil, ErrNotMessageParam
 }
 
-// ------- pb --------
+// PbSerialization can serialize & deserialize multi message of pb, primtive type such as int32, bool etc.
 type PbSerialization struct{}
 
 func (p *PbSerialization) GetSerialNum() int {

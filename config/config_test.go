@@ -15,9 +15,10 @@ type graphite struct {
 
 func Test_Config(t *testing.T) {
 	//TODO
-	c, _ := NewConfigFromFile("./testconf.yaml")
+	c, err := NewConfigFromFile("./testconf.yaml")
 
 	//getStruct
+
 	var result []graphite
 	v, err := c.DIY("metrics")
 	if err != nil {
@@ -59,6 +60,50 @@ func Test_ReplacePlaceHolder(t *testing.T) {
 	sub, _ := s["sub"].(map[interface{}]interface{})
 	if sub["bbb"] != "testb" {
 		t.Errorf("value replace fail! bbb:%v\n", sub["bbb"])
+	}
+
+}
+
+func Test_Merge(t *testing.T) {
+	c, _ := NewConfigFromFile("./testconf.yaml")
+
+	newcfg := NewConfig()
+	tm := make(map[interface{}]interface{})
+	tm["port"] = 1234
+	tm["registry"] = "replaced"
+
+	tm2 := make(map[interface{}]interface{})
+	tm2["mybasicRefer"] = tm
+	newcfg.conf["motan-agent"] = tm
+	newcfg.conf["motan-basicRefer"] = tm2
+
+	a := make([]interface{}, 0, 16)
+	a = append(a, "ss")
+	a = append(a, "xxx")
+
+	tm3 := make(map[interface{}]interface{})
+	tm3["ddd"] = a
+
+	newcfg.conf["testplaceholder"] = tm3
+
+	c.Merge(newcfg)
+
+	//fmt.Printf("%+v\n", c.conf["motan-basicRefer"])
+
+	rm := c.conf["motan-agent"].(map[interface{}]interface{})
+	if 1234 != rm["port"] {
+		t.Errorf("value merge fail! result:%v\n", rm)
+	}
+	if "replaced" != rm["registry"] {
+		t.Errorf("value merge fail! result:%v\n", rm)
+	}
+
+	rm = (c.conf["motan-basicRefer"].(map[interface{}]interface{}))["mybasicRefer"].(map[interface{}]interface{})
+	if 1234 != rm["port"] {
+		t.Errorf("value merge fail! result:%v\n", rm)
+	}
+	if "replaced" != rm["registry"] {
+		t.Errorf("value merge fail! result:%v\n", rm)
 	}
 
 }

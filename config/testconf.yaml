@@ -92,3 +92,7 @@ testplaceholder:
   sub:
     bbb: "${bbb}"
   ccc: "${ccc}"
+  ddd:
+    - "xxx"
+    - "ddd"
+    - "xx"
