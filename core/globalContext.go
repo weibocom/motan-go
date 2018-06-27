@@ -6,6 +6,7 @@ import (
 	cfg "github.com/weibocom/motan-go/config"
 	"reflect"
 	"strings"
+	"errors"
 )
 
 const (
@@ -132,17 +133,15 @@ func (c *Context) Initialize() {
 		if !strings.HasSuffix(c.ConfigFile, "/") {
 			c.ConfigFile = c.ConfigFile + "/"
 		}
-		cfgRs, err = parsePool(c.ConfigFile, *Pool)
-		if err != nil {
-			fmt.Printf("parse config fail. err:%s\n", err.Error())
+		if cfgRs, err = parsePool(c.ConfigFile, *Pool); err != nil {
+			fmt.Printf("parse configs fail. err:%s\n", err.Error())
 			return
 		}
 	} else { // parse single config file and dynamic file
 		if c.ConfigFile == "" {
 			c.ConfigFile = configFile
 		}
-		cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile)
-		if err != nil {
+		if cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile); err != nil {
 			fmt.Printf("parse config fail. err:%s\n", err.Error())
 			return
 		}
@@ -248,6 +247,9 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		c.ReplacePlaceHolder(ph)
 	}
 
+	if len(c.GetOriginMap()) == 0 {
+		return nil, errors.New("parse " + pool + " pool fail.")
+	}
 	return c, nil
 
 }

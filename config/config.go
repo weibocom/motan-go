@@ -126,7 +126,7 @@ func (c *Config) String(key string) string {
 // GetSection returns map for the given key
 func (c *Config) GetSection(key string) (map[interface{}]interface{}, error) {
 	if v, err := c.getData(key); err != nil {
-		return nil, errors.New("not exist setction")
+		return nil, err
 	} else if vv, ok := v.(map[interface{}]interface{}); ok {
 		return vv, nil
 	}
@@ -152,11 +152,9 @@ func (c *Config) DIY(key string) (v interface{}, err error) {
 }
 
 func (c *Config) getData(key string) (interface{}, error) {
-
 	if len(key) == 0 {
 		return nil, errors.New("key is empty")
 	}
-
 	if v, ok := c.conf[key]; ok {
 		return v, nil
 	}
