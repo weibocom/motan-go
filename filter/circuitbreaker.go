@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/afex/hystrix-go/hystrix"
-	"github.com/pkg/errors"
+	"errors"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )

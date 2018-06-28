@@ -10,11 +10,11 @@ import (
 	"strconv"
 	"time"
 
-	cluster "github.com/weibocom/motan-go/cluster"
+	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
-	registry "github.com/weibocom/motan-go/registry"
+	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
 )
 
@@ -68,7 +68,13 @@ func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
-	a.initContext()
+	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
+	a.Context.Initialize()
+	if a.Context.Config == nil {
+		fmt.Println("init agent context fail. ConfigFile:", a.Context.ConfigFile)
+		return
+	}
+	fmt.Println("init agent context success.")
 	a.initParam()
 	a.SetSanpshotConf()
 	a.initAgentURL()
@@ -130,12 +136,6 @@ func (a *Agent) initParam() {
 	a.port = port
 	a.mport = mport
 	a.pidfile = pidfile
-}
-
-func (a *Agent) initContext() {
-	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
-	a.Context.Initialize()
-	vlog.Infoln("init agent context success.")
 }
 
 func (a *Agent) initClusters() {
