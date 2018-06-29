@@ -2,14 +2,15 @@ package core
 
 import (
 	"flag"
-	"reflect"
-
+	"fmt"
 	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
+	"reflect"
 	"strings"
+	"errors"
 )
 
 const (
+	// all default sections
 	registrysSection     = "motan-registry"
 	basicRefersSection   = "motan-basicRefer"
 	refersSection        = "motan-refer"
@@ -18,8 +19,26 @@ const (
 	agentSection         = "motan-agent"
 	clientSection        = "motan-client"
 	serverSection        = "motan-server"
-	// URLConfKey add confid to url params
-	URLConfKey = "conf-id"
+	importSection        = "import-refer"
+	dynamicSection       = "dynamic-param"
+
+	// URLConfKey is config id
+	// config Keys
+	URLConfKey      = "conf-id"
+	basicReferKey   = "basicRefer"
+	basicServiceKey = "basicService"
+
+	// default config file and path
+	configFile = "./motan.yaml"
+	configPath = "./"
+	fileSuffix = ".yaml"
+
+	// const for application pool
+	basicConfig       = "basic.yaml"
+	servicePath       = "services/"
+	applicationPath   = "applications/"
+	poolPath          = "pools/"
+	poolNameSeparator = "-"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -45,10 +64,12 @@ var (
 	Port         = flag.Int("port", 0, "agent listen port")
 	Mport        = flag.Int("mport", 0, "agent manage port")
 	Pidfile      = flag.String("pidfile", "", "agent manage port")
-	CfgFile      = flag.String("c", "./motan.yaml", "motan run conf")
+	CfgFile      = flag.String("c", "", "motan run conf")
 	LocalIP      = flag.String("localIP", "", "local ip for motan register")
 	IDC          = flag.String("idc", "", "the idc info for agent or client.")
 	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
+	Pool         = flag.String("pool", "", "application pool config. like 'application-idc-level'")
+	Application  = flag.String("application", "", "assist for application pool config.")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
@@ -103,31 +124,53 @@ func (c *Context) Initialize() {
 	if c.ConfigFile == "" { // use flag as default config file name
 		c.ConfigFile = *CfgFile
 	}
-
-	cfgRs, _ := cfg.NewConfigFromFile(c.ConfigFile)
-	var dynamicFile string
-	if *DynamicConfs != "" {
-		dynamicFile = *DynamicConfs
-	}
-	if dynamicFile == "" && *IDC != "" {
-		suffix := *IDC + ".yaml"
-		idx := strings.LastIndex(c.ConfigFile, "/")
-		if idx > -1 {
-			dynamicFile = c.ConfigFile[0:idx+1] + suffix
-		} else {
-			dynamicFile = suffix
+	var cfgRs *cfg.Config
+	var err error
+	if *Pool != "" { // parse application pool configs
+		if c.ConfigFile == "" {
+			c.ConfigFile = configPath
 		}
-	}
-	if dynamicFile != "" {
-		dc, _ := cfg.NewConfigFromFile(dynamicFile)
-		dconfs := make(map[string]interface{})
-		for k, v := range dc.GetOriginMap() {
-			if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
-				continue
+		if !strings.HasSuffix(c.ConfigFile, "/") {
+			c.ConfigFile = c.ConfigFile + "/"
+		}
+		if cfgRs, err = parsePool(c.ConfigFile, *Pool); err != nil {
+			fmt.Printf("parse configs fail. err:%s\n", err.Error())
+			return
+		}
+	} else { // parse single config file and dynamic file
+		if c.ConfigFile == "" {
+			c.ConfigFile = configFile
+		}
+		if cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile); err != nil {
+			fmt.Printf("parse config fail. err:%s\n", err.Error())
+			return
+		}
+		var dynamicFile string
+		if *DynamicConfs != "" {
+			dynamicFile = *DynamicConfs
+		}
+		if dynamicFile == "" && *IDC != "" {
+			suffix := *IDC + ".yaml"
+			idx := strings.LastIndex(c.ConfigFile, "/")
+			if idx > -1 {
+				dynamicFile = c.ConfigFile[0:idx+1] + suffix
+			} else {
+				dynamicFile = suffix
 			}
-			dconfs[k] = v
 		}
-		cfgRs.ReplacePlaceHolder(dconfs)
+		if dynamicFile != "" {
+			dc, _ := cfg.NewConfigFromFile(dynamicFile)
+			dconfs := make(map[string]interface{})
+			for k, v := range dc.GetOriginMap() {
+				if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
+					continue
+				}
+				if ks, ok := k.(string); ok {
+					dconfs[ks] = v
+				}
+			}
+			cfgRs.ReplacePlaceHolder(dconfs)
+		}
 	}
 
 	c.Config = cfgRs
@@ -137,6 +180,78 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHostURL()
+}
+
+// pool config priority ： pool > application > service > basic
+func parsePool(path string, pool string) (*cfg.Config, error) {
+	c := cfg.NewConfig()
+	var tempcfg *cfg.Config
+	var err error
+
+	// basic config
+	tempcfg, err = cfg.NewConfigFromFile(path + basicConfig)
+	if err == nil && tempcfg != nil {
+		c.Merge(tempcfg)
+	}
+
+	// application
+	poolPart := strings.Split(pool, poolNameSeparator)
+	var appconfig *cfg.Config
+	application := *Application
+	if application == "" && len(poolPart) > 0 { // the first part be the application name
+		application = poolPart[0]
+	}
+	application = path + applicationPath + application + fileSuffix
+	if application != "" {
+		appconfig, err = cfg.NewConfigFromFile(application)
+		if err == nil && appconfig != nil {
+			// import-refer
+			is, err := appconfig.DIY(importSection)
+			if err == nil && is != nil {
+				if li, ok := is.([]interface{}); ok {
+					for _, r := range li {
+						tempcfg, err = cfg.NewConfigFromFile(path + servicePath + r.(string) + fileSuffix)
+						if err == nil && tempcfg != nil {
+							c.Merge(tempcfg)
+						}
+					}
+
+				}
+			}
+			c.Merge(appconfig) // application config > service default config
+		}
+	}
+
+	// pool
+	if len(poolPart) > 0 { // step loading
+		base := ""
+		for _, v := range poolPart {
+			base = base + v
+			tempcfg, err = cfg.NewConfigFromFile(path + poolPath + base + fileSuffix)
+			if err == nil && tempcfg != nil {
+				c.Merge(tempcfg)
+			}
+			base = base + poolNameSeparator
+		}
+	}
+
+	// replace dynamic param
+	dp, err := c.GetSection(dynamicSection)
+	if err == nil && len(dp) > 0 {
+		ph := make(map[string]interface{}, len(dp))
+		for k, v := range dp {
+			if sk, ok := k.(string); ok {
+				ph[sk] = v
+			}
+		}
+		c.ReplacePlaceHolder(ph)
+	}
+
+	if len(c.GetOriginMap()) == 0 {
+		return nil, errors.New("parse " + pool + " pool fail.")
+	}
+	return c, nil
+
 }
 
 // parse host url including agenturl, clienturl, serverurl
@@ -153,51 +268,54 @@ func (c *Context) parseRegistrys() {
 	c.RegistryURLs = c.confToURLs(registrysSection)
 }
 
-func (c *Context) basicConfToURLs(basicsection, section string) map[string]*URL {
-	urls := map[string]*URL{}
-	Refs := c.confToURLs(section)
-	var BasicInfo map[string]*URL
+func (c *Context) basicConfToURLs(section string) map[string]*URL {
+	newURLs := map[string]*URL{}
+	urls := c.confToURLs(section)
+	var basicURLs map[string]*URL
+	var basicKey string
 	if section == servicesSection {
-		BasicInfo = c.BasicServiceURLs
+		basicURLs = c.BasicServiceURLs
+		basicKey = basicServiceKey
 	} else if section == refersSection {
-		BasicInfo = c.BasicRefers
+		basicURLs = c.BasicRefers
+		basicKey = basicReferKey
 	}
-	for key, ref := range Refs {
+	for key, url := range urls {
 		var newURL *URL
-		if basicConfKey, ok := ref.Parameters["basicRefer"]; ok {
-			if basicRef, ok := BasicInfo[basicConfKey]; ok {
-				newURL = basicRef.Copy()
-				if ref.Protocol != "" {
-					newURL.Protocol = ref.Protocol
+		if basicConfName := url.GetParam(basicKey, ""); basicConfName != "" {
+			if basicURL, ok := basicURLs[basicConfName]; ok {
+				newURL = basicURL.Copy()
+				if url.Protocol != "" {
+					newURL.Protocol = url.Protocol
 				}
-				if ref.Host != "" {
-					newURL.Host = ref.Host
+				if url.Host != "" {
+					newURL.Host = url.Host
 				}
-				if ref.Port != 0 {
-					newURL.Port = ref.Port
+				if url.Port != 0 {
+					newURL.Port = url.Port
 				}
-				if ref.Group != "" {
-					newURL.Group = ref.Group
+				if url.Group != "" {
+					newURL.Group = url.Group
 				}
-				if ref.Path != "" {
-					newURL.Path = ref.Path
+				if url.Path != "" {
+					newURL.Path = url.Path
 				}
-				newURL.MergeParams(ref.Parameters)
+				newURL.MergeParams(url.Parameters)
+				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, url.GetIdentity())
 			} else {
-				newURL = ref
-				vlog.Warningf("can not found basicRefer: %s. ref %s\n", basicConfKey, ref.GetIdentity())
+				newURL = url
+				fmt.Printf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
 			}
-
 		} else {
-			newURL = ref
+			newURL = url
 		}
-		urls[key] = newURL
+		newURLs[key] = newURL
 	}
-	return urls
+	return newURLs
 }
 
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(basicRefersSection, refersSection)
+	c.RefersURLs = c.basicConfToURLs(refersSection)
 }
 
 func (c *Context) parseBasicRefers() {
@@ -205,7 +323,7 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(basicServicesSection, servicesSection)
+	c.ServiceURLs = c.basicConfToURLs(servicesSection)
 }
 
 func (c *Context) parserBasicServices() {

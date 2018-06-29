@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/afex/hystrix-go/hystrix"
-	"github.com/pkg/errors"
+	"errors"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -66,7 +66,7 @@ func (t *CircuitBreakerEndPointFilter) Filter(caller motan.Caller, request motan
 		}, func(err error) error {
 			response = &motan.MotanResponse{
 				RequestID:   request.GetRequestID(),
-				Attachment:  make(map[string]string),
+				Attachment:  motan.NewStringMap(motan.DefaultAttachmentSize),
 				ProcessTime: 0,
 				// todo exception 后续统一规划
 				Exception: &motan.Exception{ErrCode: 400, ErrMsg: err.Error(), ErrType: motan.ServiceException},

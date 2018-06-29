@@ -11,7 +11,7 @@ import (
 )
 
 func TestAttachmentReader_ForeachKey(t *testing.T) {
-	att := TestAttachment{}
+	att := core.MotanRequest{}
 	att.SetAttachment("k1", "v1")
 	att.SetAttachment("k2", "v2")
 
@@ -20,10 +20,15 @@ func TestAttachmentReader_ForeachKey(t *testing.T) {
 	n := 0
 	r.ForeachKey(func(key, val string) error {
 		defer func() { n++ }()
-		assert.Equal(t, att[key], val)
+		assert.Equal(t, att.GetAttachment(key), val)
 		return nil
 	})
-	assert.Equal(t, len(att), n)
+
+	err := r.ForeachKey(func(key, val string) error {
+		return fmt.Errorf("test")
+	})
+	assert.True(t, err != nil)
+	assert.Equal(t, att.GetAttachments().Len(), n)
 }
 
 func TestAttachmentWriter_Set(t *testing.T) {
@@ -37,30 +42,29 @@ func TestAttachmentWriter_Set(t *testing.T) {
 			{"e", "f"},
 		}
 
-	att := TestAttachment{}
+	att := core.MotanRequest{}
 
 	w := AttachmentWriter{attach: &att}
 
 	for _, e := range cases {
 		w.Set(e.K, e.V)
-		assert.Equal(t, e.V, att[e.K])
+		assert.Equal(t, e.V, att.GetAttachment(e.K))
 	}
 }
 
-func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
+func TestTracingFilter_FilterOutgoingRequest(t *testing.T) {
 	req := core.MotanRequest{
-		RequestID: 1,
-		Attachment: map[string]string{
-			"tid": "1",
-			"id":  "2",
-			"pid": "3",
-		},
+		RequestID:   1,
+		Attachment:  core.NewStringMap(3),
 		Method:      "foo",
 		ServiceName: "FooService",
 		Arguments:   []interface{}{},
 		MethodDesc:  "FooService.foo()",
 		RPCContext:  &core.RPCContext{},
 	}
+	req.SetAttachment("tid", "1")
+	req.SetAttachment("id", "2")
+	req.SetAttachment("pid", "3")
 
 	outgoing := func(caller core.Caller, request core.Request) core.Response {
 		assert.Equal(t, "1", request.GetAttachment("tid"))
@@ -91,8 +95,8 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 	assert.Equal(t, previous+1, current)
 
 	if span, ok := tracer.spans[current-1].(*MockSpan); ok {
-		assert.Equal(t, "1", span.context.traceId)
-		assert.Equal(t, "2", span.context.parentId)
+		assert.Equal(t, "1", span.context.traceID)
+		assert.Equal(t, "2", span.context.parentID)
 		assert.Equal(t, "a", span.context.id)
 		assert.Equal(t, ext.SpanKindRPCClientEnum, span.tags[string(ext.SpanKind)])
 		assert.True(t, span.finished)
@@ -101,18 +105,18 @@ func TestTracingFilter_FilterOutgoingRequst(t *testing.T) {
 
 func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
 	req := core.MotanRequest{
-		RequestID: 1,
-		Attachment: map[string]string{
-			"tid": "1",
-			"id":  "2",
-			"pid": "3",
-		},
+		RequestID:   1,
+		Attachment:  core.NewStringMap(3),
 		Method:      "foo",
 		ServiceName: "FooService",
 		Arguments:   []interface{}{},
 		MethodDesc:  "FooService.foo()",
 		RPCContext:  &core.RPCContext{},
 	}
+
+	req.SetAttachment("tid", "1")
+	req.SetAttachment("id", "2")
+	req.SetAttachment("pid", "3")
 
 	outgoing := func(caller core.Caller, request core.Request) core.Response {
 		// check the request passed to next filter
@@ -143,9 +147,9 @@ func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
 
 	if span, ok := tracer.spans[current-1].(*MockSpan); ok {
 		// check recorded span
-		assert.Equal(t, "1", span.context.traceId)
+		assert.Equal(t, "1", span.context.traceID)
 		assert.Equal(t, "2", span.context.id)
-		assert.Equal(t, "3", span.context.parentId)
+		assert.Equal(t, "3", span.context.parentID)
 		assert.Contains(t, span.tags, string(ext.SpanKind))
 		assert.Equal(t, ext.SpanKindRPCServerEnum, span.tags[string(ext.SpanKind)])
 		assert.True(t, span.finished)
@@ -153,25 +157,24 @@ func TestTracingFilter_FilterIncomingRequst(t *testing.T) {
 }
 
 type SpanContext struct {
-	traceId, id, parentId string
+	traceID, id, parentID string
 }
 
 func (c SpanContext) isParentFor(ctx *SpanContext) bool {
 	if ctx == nil {
 		return false
-	} else if ctx.traceId != c.traceId {
+	} else if ctx.traceID != c.traceID {
 		return false
-	} else if ctx.parentId != c.id {
+	} else if ctx.parentID != c.id {
 		return false
-	} else {
-		return true
 	}
+	return true
 }
 
 func (c *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
-	handler("tid", c.traceId)
+	handler("tid", c.traceID)
 	handler("id", c.id)
-	handler("pid", c.parentId)
+	handler("pid", c.parentID)
 }
 
 type MockSpan struct {
@@ -273,16 +276,16 @@ func (t *MockTracer) StartSpan(operationName string, opts ...opentracing.StartSp
 
 		if c, ok := ref.(*SpanContext); ok {
 			if options.Tags[string(ext.SpanKind)] == ext.SpanKindRPCServerEnum {
-				ctxt = &SpanContext{traceId: c.traceId, parentId: c.parentId, id: c.id}
+				ctxt = &SpanContext{traceID: c.traceID, parentID: c.parentID, id: c.id}
 			} else {
 				id := fmt.Sprintf("%x", t.id())
-				ctxt = &SpanContext{traceId: c.traceId, parentId: c.id, id: id}
+				ctxt = &SpanContext{traceID: c.traceID, parentID: c.id, id: id}
 			}
 		}
 	}
 	if ctxt == nil {
 		id := fmt.Sprintf("%x", t.id())
-		ctxt = &SpanContext{traceId: id, id: id}
+		ctxt = &SpanContext{traceID: id, id: id}
 	}
 
 	span := &MockSpan{context: *ctxt, name: operationName, tracer: t, tags: options.Tags, finished: false}
@@ -311,19 +314,19 @@ func (*MockTracer) Extract(format interface{}, carrier interface{}) (opentracing
 	switch format {
 	case opentracing.TextMap:
 		if r, ok := (carrier).(opentracing.TextMapReader); ok {
-			var id, traceId, parentId string
+			var id, traceID, parentID string
 			r.ForeachKey(func(key, val string) error {
 				switch key {
 				case "tid":
-					traceId = val
+					traceID = val
 				case "id":
 					id = val
 				case "pid":
-					parentId = val
+					parentID = val
 				}
 				return nil
 			})
-			return &SpanContext{traceId: traceId, id: id, parentId: parentId}, nil
+			return &SpanContext{traceID: traceID, id: id, parentID: parentID}, nil
 		}
 	}
 	return nil, nil
@@ -336,7 +339,7 @@ func (*MockResponse) GetAttachment(key string) string {
 	panic("implement me")
 }
 
-func (*MockResponse) GetAttachments() map[string]string {
+func (*MockResponse) GetAttachments() *core.StringMap {
 	panic("implement me")
 }
 
@@ -387,9 +390,8 @@ func (*MockFilter) GetNext() core.EndPointFilter {
 func (f *MockFilter) Filter(caller core.Caller, request core.Request) core.Response {
 	if f.filter != nil {
 		return f.filter(caller, request)
-	} else {
-		panic("mock func 'filter' not set")
 	}
+	panic("mock func 'filter' not set")
 }
 
 func (*MockFilter) GetName() string {
@@ -475,9 +477,8 @@ func (r *Referrer) IsAvailable() bool {
 func (r *Referrer) Call(request core.Request) core.Response {
 	if r.call != nil {
 		return r.call(nil, request)
-	} else {
-		panic("call method not found")
 	}
+	panic("call method not found")
 }
 
 func (r *Referrer) Destroy() {
@@ -490,18 +491,4 @@ func (r *Referrer) SetSerialization(s core.Serialization) {
 
 func (r *Referrer) SetProxy(proxy bool) {
 	// DO NOTHING
-}
-
-type TestAttachment map[string]string
-
-func (t *TestAttachment) GetAttachments() map[string]string {
-	return *t
-}
-
-func (t *TestAttachment) GetAttachment(key string) string {
-	return (*t)[key]
-}
-
-func (t *TestAttachment) SetAttachment(key string, value string) {
-	(*t)[key] = value
 }

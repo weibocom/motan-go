@@ -72,14 +72,14 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 				return '_'
 			}
 			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, application, request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
+		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, application, request.GetAttachment("M_g"), request.GetAttachment("M_p"), request.GetMethod()))
 	} else {
 		key = strings.Map(func(r rune) rune {
 			if metrics.Charmap[r] {
 				return '_'
 			}
 			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, request.GetAttachments()["M_s"], request.GetAttachments()["M_g"], request.GetAttachments()["M_p"], request.GetMethod()))
+		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, request.GetAttachment("M_s"), request.GetAttachment("M_g"), request.GetAttachment("M_p"), request.GetMethod()))
 	}
 	keyCount := key + ".total_count"
 	metrics.AddCounter(keyCount, 1) //total_count
@@ -97,7 +97,7 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 
 	end := time.Now()
 	cost := end.Sub(start).Nanoseconds() / 1e6
-	metrics.AddCounter((key + "." + metrics.ElapseTimeString(cost)), 1)
+	metrics.AddCounter(key+"."+metrics.ElapseTimeString(cost), 1)
 
 	if cost > 200 {
 		metrics.AddCounter(key+".slow_count", 1)

@@ -14,8 +14,6 @@ import:
 - package: github.com/mitchellh/mapstructure
 - package: github.com/montanaflynn/stats
   version: 0.2.0
-- package: github.com/pkg/errors
-  version: v0.8.0
 - package: github.com/rcrowley/go-metrics
 - package: github.com/smallnest/rpcx
   version: "2.0"

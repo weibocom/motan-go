@@ -5,11 +5,11 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/weibocom/motan-go/core"
-);
+)
 
 const (
-	IN_BOUND_CALL  = iota
-	OUT_BOUND_CALL
+	InBoundCall = iota
+	OutBoundCall
 )
 
 type CallData struct {
@@ -19,11 +19,11 @@ type CallData struct {
 
 	// If any error occurred during this call, response not get
 	Error interface{}
-	// the call direction, please refer to IN_BOUND_CALL and OUT_BOUND_CALL
+	// the call direction, please refer to InBoundCall and OutBoundCall
 	Direction uint32
 }
 
-// The default TraceRecordingFunc.
+// DefaultTraceRecordingFunc is the default TraceRecordingFunc.
 func DefaultTraceRecordingFunc(span ot.Span, data *CallData) {
 	span.SetTag("service.type", "motan")
 	span.SetTag("service.group", data.Caller.GetURL().Group)
@@ -39,15 +39,15 @@ func DefaultTraceRecordingFunc(span ot.Span, data *CallData) {
 	}
 
 	switch data.Direction {
-	case IN_BOUND_CALL:
+	case InBoundCall:
 		span.SetTag(string(ext.PeerHostIPv4), data.Caller.GetURL().Host)
 		span.SetTag(string(ext.PeerPort), data.Caller.GetURL().Port)
-	case OUT_BOUND_CALL:
+	case OutBoundCall:
 		span.SetTag(string(ext.PeerHostIPv4), data.Request.GetAttachment(core.HostKey))
 	}
 }
 
-// The function to record tracing data, default is DefaultTraceRecordingFunc,
+// TraceRecordingFunc record tracing data, default is DefaultTraceRecordingFunc,
 // Users can rewrite it, and can embed the DefaultTraceRecordingFunc in the
 // Custom Recording Function.
 var TraceRecordingFunc func(span ot.Span, data *CallData)
@@ -55,9 +55,8 @@ var TraceRecordingFunc func(span ot.Span, data *CallData)
 func tracingFunc() func(span ot.Span, data *CallData) {
 	if f := TraceRecordingFunc; f != nil {
 		return f
-	} else {
-		return DefaultTraceRecordingFunc
 	}
+	return DefaultTraceRecordingFunc
 }
 
 // TracingFilter is designed to support OpenTracing, so that we can make use of
@@ -128,18 +127,18 @@ func (t *TracingFilter) GetNext() core.EndPointFilter {
 	return t.next
 }
 
-func (cf *TracingFilter) Filter(caller core.Caller, request core.Request) core.Response {
+func (t *TracingFilter) Filter(caller core.Caller, request core.Request) core.Response {
 	switch caller.(type) {
 	case core.Provider:
-		return cf.filterForProvider(caller.(core.Provider), request)
+		return t.filterForProvider(caller.(core.Provider), request)
 	case core.EndPoint:
-		return cf.filterForClient(caller.(core.EndPoint), request)
+		return t.filterForClient(caller.(core.EndPoint), request)
 	default:
 		return caller.Call(request)
 	}
 }
 
-func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Request) core.Response {
+func (t *TracingFilter) filterForClient(caller core.EndPoint, request core.Request) core.Response {
 	sc, err := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	if err == ot.ErrSpanContextNotFound {
@@ -153,17 +152,17 @@ func (cf *TracingFilter) filterForClient(caller core.EndPoint, request core.Requ
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer handleIfPanic(span, caller, request, OUT_BOUND_CALL)
+	defer handleIfPanic(span, caller, request, OutBoundCall)
 
-	var response = callNext(cf, caller, request)
+	var response = callNext(t, caller, request)
 
 	tracing := tracingFunc()
-	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OUT_BOUND_CALL})
+	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: OutBoundCall})
 
 	return response
 }
 
-func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
+func (t *TracingFilter) filterForProvider(caller core.Provider, request core.Request) core.Response {
 	sc, _ := ot.GlobalTracer().Extract(ot.TextMap, AttachmentReader{attach: request})
 	var span ot.Span
 	// If there is no span information in the request,
@@ -174,11 +173,11 @@ func (cf *TracingFilter) filterForProvider(caller core.Provider, request core.Re
 
 	ot.GlobalTracer().Inject(span.Context(), ot.TextMap, AttachmentWriter{attach: request})
 
-	defer handleIfPanic(span, caller, request, IN_BOUND_CALL)
+	defer handleIfPanic(span, caller, request, InBoundCall)
 
-	response := callNext(cf, caller, request)
+	response := callNext(t, caller, request)
 	tracing := tracingFunc()
-	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: IN_BOUND_CALL})
+	tracing(span, &CallData{Caller: caller, Request: request, Response: response, Error: nil, Direction: InBoundCall})
 
 	return response
 }
@@ -230,19 +229,15 @@ type AttachmentReader struct {
 }
 
 func (a AttachmentReader) ForeachKey(handler func(key, val string) error) error {
-	att := a.attach.GetAttachments()
-	if att == nil {
-		return nil
-	}
-
-	for k, v := range att {
-		err := handler(k, v)
+	var err error
+	a.attach.GetAttachments().Range(func(k, v string) bool {
+		err = handler(k, v)
 		if err != nil {
-			return err
+			return false
 		}
-	}
-
-	return nil
+		return true
+	})
+	return err
 }
 
 type AttachmentWriter struct {
