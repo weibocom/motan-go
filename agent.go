@@ -243,7 +243,16 @@ type agentMessageHandler struct {
 
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	if request.GetAttachment(mpro.MSource) == "" {
-		application := a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+		application := ""
+		referName := request.GetServiceName()
+		for referID, referURL := range a.agent.Context.RefersURLs {
+			if referURL.Path == referName {
+				application = a.agent.Context.RefersURLs[referID].GetParam(motan.ApplicationKey, "")
+			}
+		}
+		if application == "" {
+			application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+		}
 		request.SetAttachment(mpro.MSource, application)
 	}
 	version := "0.1"

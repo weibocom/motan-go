@@ -47,7 +47,7 @@ type Context struct {
 	Config           *cfg.Config
 	RegistryURLs     map[string]*URL
 	RefersURLs       map[string]*URL
-	BasicRefers      map[string]*URL
+	BasicReferURLs   map[string]*URL
 	ServiceURLs      map[string]*URL
 	BasicServiceURLs map[string]*URL
 	AgentURL         *URL
@@ -118,7 +118,7 @@ func confToURL(urlInfo map[interface{}]interface{}) *URL {
 func (c *Context) Initialize() {
 	c.RegistryURLs = make(map[string]*URL)
 	c.RefersURLs = make(map[string]*URL)
-	c.BasicRefers = make(map[string]*URL)
+	c.BasicReferURLs = make(map[string]*URL)
 	c.ServiceURLs = make(map[string]*URL)
 	c.BasicServiceURLs = make(map[string]*URL)
 	if c.ConfigFile == "" { // use flag as default config file name
@@ -277,7 +277,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		basicURLs = c.BasicServiceURLs
 		basicKey = basicServiceKey
 	} else if section == refersSection {
-		basicURLs = c.BasicRefers
+		basicURLs = c.BasicReferURLs
 		basicKey = basicReferKey
 	}
 	for key, url := range urls {
@@ -319,7 +319,7 @@ func (c *Context) parseRefers() {
 }
 
 func (c *Context) parseBasicRefers() {
-	c.BasicRefers = c.confToURLs(basicRefersSection)
+	c.BasicReferURLs = c.confToURLs(basicRefersSection)
 }
 
 func (c *Context) parseServices() {

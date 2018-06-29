@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	cluster "github.com/weibocom/motan-go/cluster"
+	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	mpro "github.com/weibocom/motan-go/protocol"
 )
@@ -83,9 +83,10 @@ func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 		req.SetAttachment(mpro.MModule, module)
 	}
 	application := c.url.GetParam(motan.ApplicationKey, "")
-	if application != "" {
-		req.SetAttachment(mpro.MSource, application)
+	if application == "" {
+		application = c.cluster.Context.ClientURL.GetParam(motan.ApplicationKey, "")
 	}
+	req.SetAttachment(mpro.MSource, application)
 	req.SetAttachment(mpro.MGroup, c.url.Group)
 
 	return req
