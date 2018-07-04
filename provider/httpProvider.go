@@ -160,11 +160,6 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 
 // Call for do a motan call through this provider
 func (h *HTTPProvider) Call(request motan.Request) motan.Response {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorln("http provider call error! ", err)
-		}
-	}()
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	toType := make([]interface{}, 1)

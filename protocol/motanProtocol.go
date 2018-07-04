@@ -12,6 +12,7 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"strings"
 )
 
 const (
@@ -230,12 +231,23 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	metabuf := motan.NewBytesBuffer(256)
 	msg.Metadata.Range(func(k, v string) bool {
+		if k == "" || v == "" {
+			return true
+		}
+		if strings.Contains(k, "\n") || strings.Contains(v, "\n") {
+			vlog.Errorf("metadata not correct.k:%s, v:%s\n", k, v)
+			return true
+		}
 		metabuf.Write([]byte(k))
 		metabuf.WriteByte('\n')
 		metabuf.Write([]byte(v))
 		metabuf.WriteByte('\n')
 		return true
 	})
+
+	if metabuf.Len() > 0 {
+		metabuf.SetWPos(metabuf.GetWPos() - 1)
+	}
 	metasize := metabuf.Len()
 	bodysize := len(msg.Body)
 	buf = motan.NewBytesBuffer(int(HeaderLength + bodysize + metasize + 8))

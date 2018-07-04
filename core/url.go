@@ -154,9 +154,9 @@ func (u *URL) ToExtInfo() string {
 }
 
 func FromExtInfo(extinfo string) *URL {
-	defer func() {
+	defer func() { // if extinfo format not correct, just return nil URL
 		if err := recover(); err != nil {
-			vlog.Errorf("parse url from extinfo fail! err: %v, extinfo: %s", err, extinfo)
+			vlog.Warningf("from ext to url fail. extinfo:%s, err:%v\n", extinfo, err)
 		}
 	}()
 	arr := strings.Split(extinfo, "?")
