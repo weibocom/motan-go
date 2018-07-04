@@ -3,8 +3,8 @@ package filter
 import (
 	"strconv"
 
-	"github.com/afex/hystrix-go/hystrix"
 	"errors"
+	"github.com/afex/hystrix-go/hystrix"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -97,7 +97,7 @@ func (t *CircuitBreakerEndPointFilter) GetType() int32 {
 
 func buildComandConfig(url *motan.URL) (bool, *hystrix.CommandConfig) {
 	var circuitBreakerEnable bool
-	var commandConfig *hystrix.CommandConfig = &hystrix.CommandConfig{}
+	commandConfig := &hystrix.CommandConfig{}
 	if v, ok := url.Parameters[CircuitBreakerEnable]; ok {
 		circuitBreakerEnable, _ = strconv.ParseBool(v)
 	}

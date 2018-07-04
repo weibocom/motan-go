@@ -47,12 +47,16 @@ func (m *MotanCluster) GetURL() *motan.URL {
 func (m *MotanCluster) SetURL(url *motan.URL) {
 	m.url = url
 }
-func (m *MotanCluster) Call(request motan.Request) motan.Response {
+func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
+	defer motan.HandlePanic(func() {
+		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster call panic", ErrType: motan.ServiceException})
+		vlog.Errorf("cluster call panic. req:%s\n", motan.GetReqInfo(request))
+	})
 	if m.available {
 		return m.clusterFilter.Filter(m.HaStrategy, m.LoadBalance, request)
 	}
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "service cluster not available. maybe caused by degrade.", ErrType: motan.ServiceException})
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster not available, maybe caused by degrade", ErrType: motan.ServiceException})
 }
 func (m *MotanCluster) InitCluster() bool {
 	m.registryRefers = make(map[string][]motan.EndPoint)
