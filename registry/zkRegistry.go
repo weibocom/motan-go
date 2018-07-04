@@ -220,6 +220,7 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 			}
 			z.Register(url) // register as rpc client
 			go func() {
+				defer motan.HandlePanic(nil)
 				for {
 					select {
 					case evt := <-ch:
@@ -304,6 +305,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 		}
 		vlog.Infof("start watch command %s\n", commandPath)
 		go func() {
+			defer motan.HandlePanic(nil)
 			watchData := true
 			for {
 				select {
@@ -413,6 +415,7 @@ func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
 		}
 	}
 	go func(z *ZkRegistry) {
+		defer motan.HandlePanic(nil)
 		ticker := time.NewTicker(conf.SnapshotInterval)
 		for range ticker.C {
 			saveSnapshot(conf.SnapshotDir, z.nodeRs)

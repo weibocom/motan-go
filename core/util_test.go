@@ -59,3 +59,19 @@ func TestFisrtUpper(t *testing.T) {
 		t.Errorf("first upper fail. %s", ns)
 	}
 }
+
+func TestHandlePanic(t *testing.T) {
+	b := false
+	defer func() {
+		if !b {
+			t.Errorf("test HandlePanic fail")
+		} else {
+			fmt.Println("test HandlePanic success")
+		}
+	}()
+
+	defer HandlePanic(func() {
+		b = true
+	})
+	panic("test panic")
+}

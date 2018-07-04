@@ -506,7 +506,7 @@ func (l *loggingT) createFiles(sev severity) error {
 var FlushInterval = 5 * time.Second
 
 func (l *loggingT) flushDaemon() {
-	for _ = range time.NewTicker(FlushInterval).C {
+	for range time.NewTicker(FlushInterval).C {
 		l.lockAndFlushAll()
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/weibocom/motan-go/log"
+	"runtime/debug"
 )
 
 var localIPs = make([]string, 0)
@@ -102,13 +103,25 @@ func FirstUpper(s string) string {
 }
 
 func GetReqInfo(request Request) string {
-	var buffer bytes.Buffer
-	buffer.WriteString("req{")
-	buffer.WriteString(strconv.FormatUint(request.GetRequestID(), 10))
-	buffer.WriteString(",")
-	buffer.WriteString(request.GetServiceName())
-	buffer.WriteString(",")
-	buffer.WriteString(request.GetMethod())
-	buffer.WriteString("}")
-	return buffer.String()
+	if request != nil {
+		var buffer bytes.Buffer
+		buffer.WriteString("req{")
+		buffer.WriteString(strconv.FormatUint(request.GetRequestID(), 10))
+		buffer.WriteString(",")
+		buffer.WriteString(request.GetServiceName())
+		buffer.WriteString(",")
+		buffer.WriteString(request.GetMethod())
+		buffer.WriteString("}")
+		return buffer.String()
+	}
+	return ""
+}
+
+func HandlePanic(f func()) {
+	if err := recover(); err != nil {
+		vlog.Errorf("recover panic. error:%v, stack: %s\n", err, debug.Stack())
+		if f != nil {
+			f()
+		}
+	}
 }
