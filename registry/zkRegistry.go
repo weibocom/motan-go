@@ -44,20 +44,19 @@ type ZkRegistry struct {
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
 		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
-	addrs := strings.Split(z.url.GetAddressStr(), ",")
-	if c, _, err := zk.Connect(addrs, z.sessionTimeout); err == nil {
-		z.zkConn = c
-	} else {
-		vlog.Errorf("zk connect error:%v\n", err)
-		z.available = false
-		return
-	}
 	z.subscribeMap = make(map[string]map[string]motan.NotifyListener)
 	z.nodeRs = make(map[string]ServiceNode)
 	z.StartSnapshot(GetSanpshotConf())
 	z.watchSwitcherMap = make(map[string]chan bool)
 	z.registeredServices = make(map[string]*motan.URL)
-	z.available = true
+	addrs := strings.Split(z.url.GetAddressStr(), ",")
+	if c, _, err := zk.Connect(addrs, z.sessionTimeout); err == nil {
+		z.zkConn = c
+	} else {
+		vlog.Errorf("zk connect error:%v\n", err)
+		return
+	}
+	z.setAvailable(true)
 }
 
 func (z *ZkRegistry) Register(url *motan.URL) {
@@ -83,21 +82,10 @@ func (z *ZkRegistry) UnRegister(url *motan.URL) {
 	delete(z.registeredServices, url.GetIdentity())
 }
 
-// @TODO extInfo from java Obj Pase
-func buildURL4Nodes(nodes []string, url *motan.URL) []*motan.URL {
-	result := make([]*motan.URL, 0, len(nodes))
-	for _, node := range nodes {
-		nodeInfo := strings.Split(node, ":")
-		port, _ := strconv.Atoi(nodeInfo[1])
-		refURL := url.Copy()
-		refURL.Host = nodeInfo[0]
-		refURL.Port = port
-		result = append(result, refURL)
-	}
-	return result
-}
-
 func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
+	if !z.IsAvailable() {
+		return
+	}
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
 	vlog.Infof("start subscribe service. url:%s\n", url.GetIdentity())
@@ -120,6 +108,7 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 			}
 			z.createNode(url, ZkNodeTypeClient) // register as rpc client
 			go func() {
+				defer motan.HandlePanic(nil)
 				for {
 					select {
 					case evt := <-ch:
@@ -144,20 +133,6 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	}
 }
 
-func (z *ZkRegistry) buildNodes(nodes []string, url *motan.URL) {
-	serviceNode := &ServiceNode{
-		Group: url.Group,
-		Path:  url.Path,
-	}
-	nodeInfos := []SnapShotNodeInfo{}
-	for _, addr := range nodes {
-		info := &SnapShotNodeInfo{Addr: addr}
-		nodeInfos = append(nodeInfos, *info)
-	}
-	serviceNode.Nodes = nodeInfos
-	z.nodeRs[getNodeKey(url)] = *serviceNode
-}
-
 func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
@@ -169,6 +144,9 @@ func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) 
 }
 
 func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
+	if !z.IsAvailable() {
+		return nil
+	}
 	nodePath := toNodeTypePath(url, ZkNodeTypeServer) // discover server nodes
 	nodes, _, err := z.zkConn.Children(nodePath)
 	if err == nil {
@@ -180,6 +158,9 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 }
 
 func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
+	if !z.IsAvailable() {
+		return
+	}
 	z.subscribeCmdLock.Lock()
 	defer z.subscribeCmdLock.Unlock()
 	vlog.Infof("zookeeper subscribe command of %s\n", url.GetIdentity())
@@ -241,6 +222,9 @@ func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNo
 }
 
 func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
+	if !z.IsAvailable() {
+		return ""
+	}
 	vlog.Infof("zookeeper Discover command of %s\n", url.GetIdentity())
 	var res string
 	commandPath := toCommandPath(url)
@@ -323,6 +307,10 @@ func (z *ZkRegistry) IsAvailable() bool {
 	return z.available
 }
 
+func (z *ZkRegistry) setAvailable(available bool) {
+	z.available = available
+}
+
 func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
 	if _, err := os.Stat(conf.SnapshotDir); os.IsNotExist(err) {
 		if err := os.Mkdir(conf.SnapshotDir, 0774); err != nil {
@@ -338,7 +326,10 @@ func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
 	}(z)
 }
 
-func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) error {
+func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
+	if !z.IsAvailable() {
+		return
+	}
 	nodePath := toNodePath(url, nodeType)
 	if nodeType == ZkNodeTypeAgent {
 		nodePath = toAgentNodePath(url)
@@ -347,14 +338,17 @@ func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) error {
 	if err == nil && isExist {
 		if err = z.zkConn.Delete(nodePath, stats.Version); err == nil {
 			vlog.Infof("remove node success. node:%s\n", nodePath)
-			return nil
+			return
 		}
 	}
 	vlog.Infof("remove node error. err:%v, nodeIsExist:%v\n", err, isExist)
-	return err
+	return
 }
 
-func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) error {
+func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) {
+	if !z.IsAvailable() {
+		return
+	}
 	typePath := toNodeTypePath(url, nodeType)
 	nodePath := toNodePath(url, nodeType)
 	if nodeType == ZkNodeTypeAgent {
@@ -369,11 +363,11 @@ func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) error {
 		}
 		if _, err = z.zkConn.Create(nodePath, []byte{}, zk.FlagEphemeral, zk.WorldACL(zk.PermAll)); err == nil {
 			vlog.Infof("create node success. node:%s\n", nodePath)
-			return nil
+			return
 		}
 	}
 	vlog.Errorf("create node error. node:%s, err:%v\n", nodePath, err)
-	return err
+	return
 }
 
 func (z *ZkRegistry) createPersistent(path string, createParents bool) {
@@ -389,6 +383,34 @@ func (z *ZkRegistry) createPersistent(path string, createParents bool) {
 	} else {
 		vlog.Errorf("create persistent error. path:%s, err:%v\n", path, err)
 	}
+}
+
+func (z *ZkRegistry) buildNodes(nodes []string, url *motan.URL) {
+	serviceNode := &ServiceNode{
+		Group: url.Group,
+		Path:  url.Path,
+	}
+	nodeInfos := []SnapShotNodeInfo{}
+	for _, addr := range nodes {
+		info := &SnapShotNodeInfo{Addr: addr}
+		nodeInfos = append(nodeInfos, *info)
+	}
+	serviceNode.Nodes = nodeInfos
+	z.nodeRs[getNodeKey(url)] = *serviceNode
+}
+
+// @TODO extInfo from java Obj Pase
+func buildURL4Nodes(nodes []string, url *motan.URL) []*motan.URL {
+	result := make([]*motan.URL, 0, len(nodes))
+	for _, node := range nodes {
+		nodeInfo := strings.Split(node, ":")
+		port, _ := strconv.Atoi(nodeInfo[1])
+		refURL := url.Copy()
+		refURL.Host = nodeInfo[0]
+		refURL.Port = port
+		result = append(result, refURL)
+	}
+	return result
 }
 
 func toGroupPath(url *motan.URL) string {
