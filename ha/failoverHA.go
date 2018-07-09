@@ -25,11 +25,6 @@ func (f *FailOverHA) SetURL(url *motan.URL) {
 	f.url = url
 }
 func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Warningf("FailOverHA call encount panic! url:%s, err:%v\n", f.url.GetIdentity(), err)
-		}
-	}()
 	retries := f.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", defaultRetries)
 	var lastErr *motan.Exception
 	for i := 0; i <= int(retries); i++ {

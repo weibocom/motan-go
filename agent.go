@@ -343,6 +343,10 @@ func (sa *serverAgentMessageHandler) Initialize() {
 }
 
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
+	defer motan.HandlePanic(func() {
+		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
+		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
+	})
 	p := sa.providers[request.GetServiceName()]
 	if p != nil {
 		res = p.Call(request)

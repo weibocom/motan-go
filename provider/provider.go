@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"fmt"
 	"reflect"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -93,12 +92,6 @@ func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 		vlog.Errorf("method not found in provider. %s\n", motan.GetReqInfo(request))
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "method " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
 	}
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorf("provider call fail! e: %v, %s\n", err, motan.GetReqInfo(request))
-			res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: fmt.Sprintf("request process fail in provider. e:%v", err), ErrType: motan.ServiceException})
-		}
-	}()
 
 	inNum := m.Type().NumIn()
 	if inNum > 0 {

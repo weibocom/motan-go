@@ -40,12 +40,8 @@ func (c *CgiProvider) SetSerialization(s motan.Serialization) {}
 func (c *CgiProvider) SetProxy(proxy bool) {}
 
 func (c *CgiProvider) Call(request motan.Request) motan.Response {
-	defer func() {
-		// @TODO if cgi server die, should let server node unavailable
-		if err := recover(); err != nil {
-			vlog.Errorln("cgi provider call error! ", err)
-		}
-	}()
+	// @TODO if cgi server die, should let server node unavailable
+
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	toType := make([]interface{}, 1)

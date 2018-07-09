@@ -128,6 +128,10 @@ func (d *DefaultMessageHandler) GetProvider(serviceName string) motan.Provider {
 }
 
 func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response) {
+	defer motan.HandlePanic(func() {
+		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
+		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
+	})
 	p := d.providers[request.GetServiceName()]
 	if p != nil {
 		res = p.Call(request)

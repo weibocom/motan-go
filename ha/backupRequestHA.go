@@ -93,6 +93,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 		}
 		lastErrorCh = make(chan motan.Response, 1)
 		go func(postRequest motan.Request, endpoint motan.EndPoint, errorCh chan motan.Response) {
+			defer motan.HandlePanic(nil)
 			start := time.Now().UnixNano()
 			response := br.doCall(postRequest, endpoint)
 			if response != nil && (response.GetException() == nil || response.GetException().ErrType == motan.BizException) {
@@ -127,11 +128,6 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 }
 
 func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint) motan.Response {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Warningf("BackupRequestHA call encount panic! url:%s, err:%v\n", br.url.GetIdentity(), err)
-		}
-	}()
 	respnose := endpoint.Call(request)
 	if respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException {
 		return respnose

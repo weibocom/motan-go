@@ -1,12 +1,12 @@
 package core
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	cfg "github.com/weibocom/motan-go/config"
 	"reflect"
 	"strings"
-	"errors"
 )
 
 const (
@@ -301,7 +301,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 					newURL.Path = url.Path
 				}
 				newURL.MergeParams(url.Parameters)
-				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, url.GetIdentity())
+				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, newURL.GetIdentity())
 			} else {
 				newURL = url
 				fmt.Printf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())

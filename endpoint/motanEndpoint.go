@@ -65,6 +65,7 @@ func (m *MotanEndpoint) Initialize() {
 		vlog.Errorf("Channel pool init failed. err:%s\n", err.Error())
 		// retry connect
 		go func() {
+			defer motan.HandlePanic(nil)
 			ticker := time.NewTicker(60 * time.Second)
 			defer ticker.Stop()
 			for {
@@ -176,6 +177,7 @@ func (m *MotanEndpoint) resetErr() {
 }
 
 func (m *MotanEndpoint) keepalive() {
+	defer motan.HandlePanic(nil)
 	ticker := time.NewTicker(defaultKeepaliveInterval)
 	defer ticker.Stop()
 	for {
@@ -422,6 +424,7 @@ func (c *Channel) IsClosed() bool {
 }
 
 func (c *Channel) recv() {
+	defer motan.HandlePanic(nil)
 	if err := c.recvLoop(); err != nil {
 		c.closeOnErr(err)
 	}
@@ -447,6 +450,7 @@ func (c *Channel) recvLoop() error {
 }
 
 func (c *Channel) send() {
+	defer motan.HandlePanic(nil)
 	for {
 		select {
 		case ready := <-c.sendCh:
