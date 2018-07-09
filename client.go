@@ -75,20 +75,15 @@ func (c *Client) BaseGo(req motan.Request, reply interface{}, done chan *motan.A
 func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 	req := &motan.MotanRequest{Method: method, ServiceName: c.url.Path, Arguments: args, Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	version := c.url.GetParam(motan.VersionKey, "")
-	if version != "" {
-		req.SetAttachment(mpro.MVersion, version)
-	}
+	req.SetAttachment(mpro.MVersion, version)
 	module := c.url.GetParam(motan.ModuleKey, "")
-	if module != "" {
-		req.SetAttachment(mpro.MModule, module)
-	}
+	req.SetAttachment(mpro.MModule, module)
 	application := c.url.GetParam(motan.ApplicationKey, "")
 	if application == "" {
 		application = c.cluster.Context.ClientURL.GetParam(motan.ApplicationKey, "")
 	}
 	req.SetAttachment(mpro.MSource, application)
 	req.SetAttachment(mpro.MGroup, c.url.Group)
-
 	return req
 }
 
