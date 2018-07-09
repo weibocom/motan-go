@@ -81,18 +81,15 @@ func (m *MotanServer) run() {
 }
 
 func (m *MotanServer) handleConn(conn net.Conn) {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorln("connection encount error! ", err)
-		}
+	defer motan.HandlePanic(func() {
 		conn.Close()
-	}()
+	})
 	buf := bufio.NewReader(conn)
 	for {
 		request, err := mpro.Decode(buf)
 		if err != nil {
 			if err.Error() != "EOF" {
-				vlog.Warningf("decode motan message fail! con:%s\n.", conn.RemoteAddr().String())
+				vlog.Warningf("decode motan message fail! con:%s, err:%s\n.", conn.RemoteAddr().String(), err.Error())
 			}
 			break
 		}
@@ -101,11 +98,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 }
 
 func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorln("Motanserver processReq error! ", err)
-		}
-	}()
+	defer motan.HandlePanic(nil)
 	request.Header.SetProxy(m.proxy)
 	// TODO request , response reuse
 	var res *mpro.Message
@@ -145,7 +138,7 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 
 func getRemoteIP(address string) string {
 	var ip string
-	var index int = strings.Index(address, ":")
+	index := strings.Index(address, ":")
 	if index > 0 {
 		ip = string(address[:index])
 	} else {

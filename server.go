@@ -12,7 +12,6 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mserver "github.com/weibocom/motan-go/server"
-	"runtime/debug"
 )
 
 // MSContext is Motan Server Context
@@ -85,12 +84,7 @@ func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
 }
 
 func (m *MSContext) export(url *motan.URL) {
-	defer func() {
-		if err := recover(); err != nil {
-			debug.PrintStack()
-			vlog.Errorf("MSContext export fail! url: %v, err:%+v\n", url, err)
-		}
-	}()
+	defer motan.HandlePanic(nil)
 	service := m.serviceImpls[url.Parameters[motan.RefKey]]
 	if service != nil {
 		//TODO multi protocol support. convert to multi url
@@ -225,11 +219,7 @@ func canShareChannel(u1 motan.URL, u2 motan.URL) bool {
 }
 
 func availableService(registries map[string]motan.Registry) {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorf("availableService got a panic!err:%+v\n", err)
-		}
-	}()
+	defer motan.HandlePanic(nil)
 	if registries != nil {
 		for _, r := range registries {
 			r.Available(nil)
@@ -238,11 +228,7 @@ func availableService(registries map[string]motan.Registry) {
 }
 
 func unavailableService(registries map[string]motan.Registry) {
-	defer func() {
-		if err := recover(); err != nil {
-			vlog.Errorf("unavailableService got a panic!err:%+v\n", err)
-		}
-	}()
+	defer motan.HandlePanic(nil)
 	if registries != nil {
 		for _, r := range registries {
 			r.Unavailable(nil)

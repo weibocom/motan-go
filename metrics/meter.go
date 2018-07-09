@@ -2,6 +2,7 @@ package metrics
 
 import (
 	metrics "github.com/rcrowley/go-metrics"
+	motan "github.com/weibocom/motan-go/core"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -167,6 +168,7 @@ var arbiter = meterArbiter{ticker: time.NewTicker(meterDuration)}
 
 // Ticks meters on the scheduled interval
 func (ma *meterArbiter) tick() {
+	defer motan.HandlePanic(nil)
 	for range ma.ticker.C {
 		ma.tickMeters()
 	}

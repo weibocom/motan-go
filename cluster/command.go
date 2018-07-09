@@ -205,7 +205,7 @@ func (c *CommandRegistryWarper) clear() {
 func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.URL {
 	c.mux.Lock()
 	defer c.mux.Unlock()
-	var result []*motan.URL = make([]*motan.URL, 0)
+	result := make([]*motan.URL, 0)
 	if c.tcCommand != nil {
 		vlog.Infof("%s get result with tc command.%+v\n", c.cluster.GetIdentity(), c.tcCommand)
 		var buffer bytes.Buffer

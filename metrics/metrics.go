@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/weibocom/motan-go/config"
+	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 
 	"github.com/rcrowley/go-metrics"
@@ -113,7 +114,7 @@ func getWriter(g *graphite) (statWriter, error) {
 }
 
 func (r *reporter) eventLoop() {
-
+	defer motan.HandlePanic(nil)
 	if atomic.LoadInt32(&r.stopping) == 1 {
 		return
 	}
