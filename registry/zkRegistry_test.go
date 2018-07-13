@@ -24,7 +24,7 @@ var (
 	//serverPath = "/motan/zkTestGroup/zkTestPath/server/127.0.0.1:1234"
 	serverPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkPathSeparator + testURL.Path + ZkPathSeparator + ZkNodeTypeServer + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//unavailableServerPath = "/motan/zkTestGroup/zkTestPath/unavailableServer/127.0.0.1:1234"
-	unavailableServerPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkPathSeparator + testURL.Path + ZkPathSeparator + ZkNodeTypeUnavailbleServer + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
+	unavailableServerPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkPathSeparator + testURL.Path + ZkPathSeparator + ZkNodeTypeUnavailableServer + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//agentPath = "/motan/agent/zkTestApp/node/127.0.0.1:1234"
 	agentPath = ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + testURL.GetParam(motan.ApplicationKey, "") + ZkRegistryNode + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//commandPath = "/motan/zkTestGroup/command"
@@ -205,10 +205,10 @@ func TestZkRegistryRegister(t *testing.T) {
 		lis = MockListener{}
 		z.Unsubscribe(testURL, &lis)
 		subKey := GetSubKey(testURL)
-		idt := lis.GetIdentity()
+		//idt := lis.GetIdentity()
 		time.Sleep(10 * time.Millisecond)
-		if listeners, ok := z.subscribeMap[subKey]; ok {
-			if _, ok := listeners[idt]; ok {
+		if listeners, ok := z.subscribedServiceMap[subKey]; ok {
+			if _, ok := listeners[zkURL]; ok {
 				t.Error("UnSubscribe fail. registryURL:", lis.registryURL)
 			}
 		}
