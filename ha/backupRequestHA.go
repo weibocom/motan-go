@@ -74,6 +74,10 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	if delay < 10 {
 		delay = 10 // min 10ms
 	}
+
+	gTimer := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
+	defer gTimer.Stop()
+	
 	var lastErrorCh chan motan.Response
 
 	for i := 0; i <= int(retries) && i < len(epList); i++ {
@@ -104,23 +108,24 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 		timer := time.NewTimer(time.Duration(delay) * time.Millisecond)
 		defer timer.Stop()
 		select {
-		case resp = <-successCh:
-			return resp
-		case <-lastErrorCh:
-		case <-timer.C:
+			case resp = <-successCh:
+				return resp
+			case <-lastErrorCh:
+			case <-timer.C:
+			case <-gTimer.C:
+				return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "global timeout"))
 		}
 	}
 
-	timer := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
-	defer timer.Stop()
+	// 没有最终超时的时候，再使用剩下的时间进行等待，取最快的那个返回
 	select {
-	case resp = <-successCh:
-		return resp
-	case resp = <-lastErrorCh:
-	case <-timer.C:
+		case resp = <-successCh:
+			return resp
+		case resp = <-lastErrorCh:
+		case <-gTimer.C:
 	}
 
-	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "timeout"))
+	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "last timeout"))
 
 }
 
