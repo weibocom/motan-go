@@ -36,12 +36,12 @@ motan-service:
     registry: direct-registry
     # registry: zk-registry
     
-    basicRefer: mybasicService    
+    basicService: mybasicService    
     ref : "main.Motan2TestService"
     export: "motan2:8100"
   mytest-demo:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
     registry: direct-registry    
-    basicRefer: mybasicService # basic refer id
+    basicService: mybasicService # basic refer id
     ref : "main.MotanDemoService"
     export: "motan2:8100"
