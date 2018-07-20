@@ -77,7 +77,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 
 	gTimer := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
 	defer gTimer.Stop()
-	
+
 	var lastErrorCh chan motan.Response
 
 	for i := 0; i <= int(retries) && i < len(epList); i++ {
@@ -113,6 +113,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			case <-lastErrorCh:
 			case <-timer.C:
 			case <-gTimer.C:
+				vlog.Warningf("call backup request fail: %s", "global timeout")
 				return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "global timeout"))
 		}
 	}
@@ -124,6 +125,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 		case resp = <-lastErrorCh:
 		case <-gTimer.C:
 	}
+	vlog.Warningf("call backup request fail: %s", "last timeout")
 
 	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "last timeout"))
 
