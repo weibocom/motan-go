@@ -113,7 +113,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			case <-lastErrorCh:
 			case <-timer.C:
 			case <-gTimer.C:
-				vlog.Warningf("call backup request fail: %s", "global timeout")
+				vlog.Warningf("call backup request fail: %s", "global requestTimeout")
 				return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "global timeout"))
 		}
 	}
@@ -125,7 +125,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 		case resp = <-lastErrorCh:
 		case <-gTimer.C:
 	}
-	vlog.Warningf("call backup request fail: %s", "last timeout")
+	vlog.Warningf("call backup request fail: %s", "last requestTimeout")
 
 	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "last timeout"))
 
