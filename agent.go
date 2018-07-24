@@ -242,16 +242,19 @@ type agentMessageHandler struct {
 }
 
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
-	if request.GetAttachment(mpro.MSource) == "" {
-		application := a.agent.agentURL.GetParam(motan.ApplicationKey, "")
-		request.SetAttachment(mpro.MSource, application)
-	}
 	version := "0.1"
 	if request.GetAttachment(mpro.MVersion) != "" {
 		version = request.GetAttachment(mpro.MVersion)
 	}
 	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
 	if motanCluster := a.agent.clustermap[ck]; motanCluster != nil {
+		if request.GetAttachment(mpro.MSource) == "" {
+			application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
+			if application == "" {
+				application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+			}
+			request.SetAttachment(mpro.MSource, application)
+		}
 		res = motanCluster.Call(request)
 		if res == nil {
 			vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)

@@ -10,6 +10,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"time"
 )
 
 type MotanServer struct {
@@ -81,9 +82,8 @@ func (m *MotanServer) run() {
 }
 
 func (m *MotanServer) handleConn(conn net.Conn) {
-	defer motan.HandlePanic(func() {
-		conn.Close()
-	})
+	defer conn.Close()
+	defer motan.HandlePanic(nil)
 	buf := bufio.NewReader(conn)
 	for {
 		request, err := mpro.Decode(buf)
@@ -100,6 +100,12 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 	defer motan.HandlePanic(nil)
 	request.Header.SetProxy(m.proxy)
+	var ip string
+	if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		ip = ta.IP.String()
+	} else {
+		ip = getRemoteIP(conn.RemoteAddr().String())
+	}
 	// TODO request , response reuse
 	var res *mpro.Message
 	if request.Header.IsHeartbeat() {
@@ -112,11 +118,7 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata.LoadOrEmpty(mpro.MPath), request.Metadata.LoadOrEmpty(mpro.MMethod), err.Error())
 			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. err:" + err.Error() + " method:" + request.Metadata.LoadOrEmpty(mpro.MMethod), ErrType: motan.ServiceException}))
 		} else {
-			if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-				req.SetAttachment(motan.HostKey, ta.IP.String())
-			} else {
-				req.SetAttachment(motan.HostKey, getRemoteIP(conn.RemoteAddr().String()))
-			}
+			req.SetAttachment(motan.HostKey, ip)
 			req.GetRPCContext(true).ExtFactory = m.extFactory
 			mres = m.handler.Call(req)
 			//TODO oneway
@@ -133,7 +135,12 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		}
 	}
 	resbuf := res.Encode()
-	conn.Write(resbuf.Bytes())
+	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
+	_, err := conn.Write(resbuf.Bytes())
+	if err != nil {
+		vlog.Errorf("connection will close. ip: %s, cause:%s\n", ip, err.Error())
+		conn.Close()
+	}
 }
 
 func getRemoteIP(address string) string {

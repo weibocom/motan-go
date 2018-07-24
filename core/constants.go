@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 //--------------all global public constants--------------
 // exception type
 const (
@@ -48,4 +50,8 @@ const (
 	NodeTypeService = "service"
 	NodeTypeReferer = "referer"
 	NodeTypeAgent   = "agent"
+)
+
+const (
+	DefaultWriteTimeout = 5 * time.Second
 )
