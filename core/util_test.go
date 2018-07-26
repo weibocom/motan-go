@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseExportString(t *testing.T) {
@@ -74,4 +75,10 @@ func TestHandlePanic(t *testing.T) {
 		b = true
 	})
 	panic("test panic")
+}
+
+func TestSplitTrim(t *testing.T) {
+	str := "fd , fds,  ,df, f ds ,fd s , fds ,"
+	expect := []string{"fd", "fds", "df", "f ds", "fd s", "fds"}
+	assert.Equal(t, expect, TrimSplit(str, ","))
 }
