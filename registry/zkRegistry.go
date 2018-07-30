@@ -61,7 +61,7 @@ func (z *ZkRegistry) Initialize() {
 		return
 	}
 	z.zkConn = c
-	go z.handleNewSession(ch) //handleNewSession
+	go z.handleNewSession(ch)
 	z.setAvailable(true)
 }
 
@@ -164,8 +164,9 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
 	servicePath := toNodeTypePath(url, ZkNodeTypeServer)
-	if listeners, ok := z.subscribedServiceMap[servicePath]; ok && listeners != nil {
+	if listeners, ok := z.subscribedServiceMap[servicePath]; ok {
 		listeners[listener] = url
+		vlog.Infof("subscribe service success. path:%s, listener:%s\n", servicePath, listener.GetIdentity())
 		return
 	}
 	lisMap := make(map[motan.NotifyListener]*motan.URL)
@@ -188,10 +189,10 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 	}
 	switcherChan, ok := z.switcherMap[servicePath]
 	if !ok {
-		z.switcherMap[servicePath] = make(chan bool)
-		switcherChan = z.switcherMap[servicePath]
+		switcherChan = make(chan bool)
+		z.switcherMap[servicePath] = switcherChan
 	}
-	vlog.Infof("[ZkRegistry] start watch children. path:%s\n", servicePath)
+	vlog.Infof("[ZkRegistry] start watch server node. path:%s\n", servicePath)
 	url.PutParam(motan.NodeTypeKey, motan.NodeTypeReferer) // all subscribe url must as referer
 	if url.Host == "" {
 		url.Host = motan.GetLocalIP()
@@ -201,7 +202,7 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 		defer motan.HandlePanic(nil)
 		for {
 			select {
-			case evt := <-ch: //todo: 每次重连，都会触发notify，正常吗？
+			case evt := <-ch:
 				if evt.Type == zk.EventNodeChildrenChanged {
 					if nodes, _, chx, err := z.zkConn.ChildrenW(servicePath); err == nil {
 						z.buildSnapShotNodes(nodes, url)
@@ -214,10 +215,10 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 							}
 						}
 					} else {
-						vlog.Errorln("[ZkRegistry] watch children error. err:", err)
+						vlog.Errorln("[ZkRegistry] watch server node error. err:", err)
 					}
 				} else if evt.Type == zk.EventNotWatching {
-					vlog.Infoln("[ZkRegistry] not watch children. path:", servicePath)
+					vlog.Infoln("[ZkRegistry] not watch server node. path:", servicePath)
 					return
 				}
 			case checkWatch := <-switcherChan:
@@ -252,7 +253,7 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	if !z.IsAvailable() {
 		return nil
 	}
-	nodePath := toNodeTypePath(url, ZkNodeTypeServer) // discover server nodes
+	nodePath := toNodeTypePath(url, ZkNodeTypeServer)
 	nodes, _, err := z.zkConn.Children(nodePath)
 	if err == nil {
 		z.buildSnapShotNodes(nodes, url)
@@ -274,8 +275,8 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 	} else {
 		commandPath = toCommandPath(url)
 	}
-	//TODO: 原版subscribe和subscribeCommand不一样，为什么
 	if listeners, ok := z.subscribedCommandMap[commandPath]; ok && listeners != nil {
+		vlog.Infof("subscribe command success. path:%s, listener:%s\n", commandPath, listener.GetIdentity())
 		listeners[listener] = url
 		return
 	}
@@ -304,8 +305,8 @@ func (z *ZkRegistry) doSubscribeCommand(url *motan.URL) {
 	}
 	switcherChan, ok := z.switcherMap[commandPath]
 	if !ok {
-		z.switcherMap[commandPath] = make(chan bool)
-		switcherChan = z.switcherMap[commandPath]
+		switcherChan = make(chan bool)
+		z.switcherMap[commandPath] = switcherChan
 	}
 	vlog.Infof("[ZkRegistry] start watch command %s\n", commandPath)
 	go func() {
@@ -399,7 +400,7 @@ func (z *ZkRegistry) Available(url *motan.URL) {
 	z.registerLock.Lock()
 	z.registerLock.Unlock()
 	if url == nil {
-		vlog.Infof("[ZkRegistry] available services:%v\n", z.registeredServiceMap)
+		vlog.Infof("[ZkRegistry] available all services:%v\n", z.registeredServiceMap)
 	} else {
 		vlog.Infof("[ZkRegistry] available service:%s\n", url.GetIdentity())
 	}

@@ -78,7 +78,25 @@ func TestHandlePanic(t *testing.T) {
 }
 
 func TestSplitTrim(t *testing.T) {
-	str := "fd , fds,  ,df, f ds ,fd s , fds ,"
-	expect := []string{"fd", "fds", "df", "f ds", "fd s", "fds"}
-	assert.Equal(t, expect, TrimSplit(str, ","))
+	type SplitTest struct {
+		str    string
+		sep    string
+		expect []string
+	}
+	space := "\t\v\r\f\n\u0085\u00a0\u2000\u3000"
+	var splitList = []SplitTest{
+		{"", "", []string{}},
+		{"abcd", "", []string{"a", "b", "c", "d"}},
+		{"☺☻☹", "", []string{"☺", "☻", "☹"}},
+		{"abcd", "a", []string{"", "bcd"}},
+		{"abcd", "z", []string{"abcd"}},
+		{space + "1....2....3....4" + space, "...", []string{"1", ".2", ".3", ".4"}},
+		{"☺☻☹", "☹", []string{"☺☻", ""}},
+		{"1\t " + space + "\n2\t", " ", []string{"1", "2"}},
+		{"fd  , fds,  ,df\n, \v\ff ds ,,fd s , fds ,", ",", []string{"fd", "fds", "", "df", "f ds", "", "fd s", "fds", ""}},
+	}
+	for _, tt := range splitList {
+		ret := TrimSplit(tt.str, tt.sep)
+		assert.Equal(t, tt.expect, ret)
+	}
 }
