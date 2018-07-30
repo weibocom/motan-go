@@ -125,3 +125,27 @@ func HandlePanic(f func()) {
 		}
 	}
 }
+
+// Split slices s into all substrings separated by sep and
+// returns a slice of the substrings between those separators,
+// specially trim all substrings.
+func TrimSplit(s string, sep string) []string {
+	n := strings.Count(s, sep) + 1
+	a := make([]string, n)
+	i := 0
+	if sep == "" {
+		return strings.Split(s, sep)
+	}
+	for {
+		m := strings.Index(s, sep)
+		if m < 0 {
+			s = strings.TrimSpace(s)
+			break
+		}
+		a[i] = strings.TrimSpace(s[:m])
+		i++
+		s = s[m+len(sep):]
+	}
+	a[i] = s
+	return a[:i+1]
+}
