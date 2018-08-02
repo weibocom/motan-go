@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -54,7 +54,7 @@ func (t *testMetrics) Write(snap metrics.Registry) error {
 		v := strings.SplitN(message, ":", 2)
 		number := strings.SplitN(v[1], "|", 2)
 		times, err := strconv.ParseInt(number[0], 10, 0)
-		if nil == err {
+		if err == nil {
 			count += times
 		}
 		fmt.Printf("%s", message)
