@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,19 +13,20 @@ import (
 )
 
 const (
-	zkRegistryNamespace         = "/motan"
-	zkRegistryCommand           = "/command"
-	zkRegistryNode              = "/node"
-	zkPathSeparator             = "/"
-	zkNodeTypeServer            = "server"
-	zkNodeTypeUnavailableServer = "unavailableServer"
-	zkNodeTypeClient            = "client"
-	zkNodeTypeAgent             = "agent"
+	ZkRegistryNamespace         = "/motan"
+	ZkRegistryCommand           = "/command"
+	ZkRegistryNode              = "/node"
+	ZkPathSeparator             = "/"
+	ZkNodeTypeServer            = "server"
+	ZkNodeTypeUnavailableServer = "unavailableServer"
+	ZkNodeTypeClient            = "client"
+	ZkNodeTypeAgent             = "agent"
+	ZKDefaultSessionTimeout     = 1000
 
 	//Compatible with java ioStream
-	streamMagicTag = 0xaced
-	shortStringTag = 0x74
-	longStringTag  = 0x7C
+	StreamMagicTag = 0xaced
+	ShortStringTag = 0x74
+	LongStringTag  = 0x7C
 )
 
 type ZkRegistry struct {
@@ -46,11 +46,11 @@ type ZkRegistry struct {
 
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
-		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
+		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, ZKDefaultSessionTimeout)) * time.Second
 	z.subscribedServiceMap = make(map[string]map[motan.NotifyListener]*motan.URL)
 	z.subscribedCommandMap = make(map[string]map[motan.CommandNotifyListener]*motan.URL)
 	z.serviceNodeMap = make(map[string]ServiceNode)
-	z.StartSnapshot(GetSanpshotConf())
+	z.StartSnapshot(GetSnapshotConf())
 	z.switcherMap = make(map[string]chan bool)
 	z.registeredServiceMap = make(map[string]*motan.URL)
 	z.availableServiceMap = make(map[string]*motan.URL)
@@ -136,10 +136,10 @@ func (z *ZkRegistry) doRegister(url *motan.URL) {
 		vlog.Errorf("[ZkRegistry] register service fail. invalid url:%s\n", url.GetIdentity())
 	}
 	if IsAgent(url) {
-		z.createNode(url, zkNodeTypeAgent)
+		z.createNode(url, ZkNodeTypeAgent)
 	} else {
-		z.removeNode(url, zkNodeTypeServer)
-		z.createNode(url, zkNodeTypeUnavailableServer)
+		z.removeNode(url, ZkNodeTypeServer)
+		z.createNode(url, ZkNodeTypeUnavailableServer)
 	}
 }
 
@@ -151,8 +151,8 @@ func (z *ZkRegistry) UnRegister(url *motan.URL) {
 	defer z.registerLock.Unlock()
 	if _, ok := z.registeredServiceMap[url.GetIdentity()]; ok {
 		vlog.Infof("[ZkRegistry] unregister service. url:%s\n", url.GetIdentity())
-		z.removeNode(url, zkNodeTypeServer)
-		z.removeNode(url, zkNodeTypeUnavailableServer)
+		z.removeNode(url, ZkNodeTypeServer)
+		z.removeNode(url, ZkNodeTypeUnavailableServer)
 		delete(z.registeredServiceMap, url.GetIdentity())
 	}
 }
@@ -163,7 +163,7 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	}
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
-	servicePath := toNodeTypePath(url, zkNodeTypeServer)
+	servicePath := toNodeTypePath(url, ZkNodeTypeServer)
 	if listeners, ok := z.subscribedServiceMap[servicePath]; ok {
 		listeners[listener] = url
 		vlog.Infof("[ZkRegistry] subscribe service success. path:%s, listener:%s\n", servicePath, listener.GetIdentity())
@@ -177,7 +177,7 @@ func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 }
 
 func (z *ZkRegistry) doSubscribe(url *motan.URL) {
-	servicePath := toNodeTypePath(url, zkNodeTypeServer)
+	servicePath := toNodeTypePath(url, ZkNodeTypeServer)
 	if isExist, _, err := z.zkConn.Exists(servicePath); err != nil || !isExist {
 		vlog.Errorf("[ZkRegistry] check service exists fail. isExist:%v, path:%s, err:%v, \n", isExist, servicePath, err)
 		return
@@ -197,7 +197,7 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 	if url.Host == "" {
 		url.Host = motan.GetLocalIP()
 	}
-	z.createNode(url, zkNodeTypeClient) // register as rpc client
+	z.createNode(url, ZkNodeTypeClient) // register as rpc client
 	go func() {
 		defer motan.HandlePanic(nil)
 		for {
@@ -205,7 +205,7 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 			case evt := <-ch:
 				if evt.Type == zk.EventNodeChildrenChanged {
 					if nodes, _, chx, err := z.zkConn.ChildrenW(servicePath); err == nil {
-						z.buildSnapShotNodes(nodes, url)
+						z.saveSnapShot(nodes, url)
 						ch = chx
 						listeners, ok := z.subscribedServiceMap[servicePath];
 						if ok && len(nodes) > 0 {
@@ -238,7 +238,7 @@ func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) 
 	}
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
-	servicePath := toNodeTypePath(url, zkNodeTypeServer)
+	servicePath := toNodeTypePath(url, ZkNodeTypeServer)
 	if _, ok := z.subscribedServiceMap[servicePath]; ok {
 		vlog.Infof("[ZkRegistry] unsubscribe service. url:%s\n", url.GetIdentity())
 		delete(z.subscribedServiceMap[servicePath], listener)
@@ -253,10 +253,12 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	if !z.IsAvailable() {
 		return nil
 	}
-	nodePath := toNodeTypePath(url, zkNodeTypeServer)
+	z.subscribeLock.Lock()
+	defer z.subscribeLock.Unlock()
+	nodePath := toNodeTypePath(url, ZkNodeTypeServer)
 	nodes, _, err := z.zkConn.Children(nodePath)
 	if err == nil {
-		z.buildSnapShotNodes(nodes, url)
+		z.saveSnapShot(nodes, url)
 		return z.nodeChildsToURLs(url, nodePath, nodes)
 	}
 	vlog.Errorf("[ZkRegistry] discover service error! url:%s, err:%v\n", url.GetIdentity(), err)
@@ -294,8 +296,13 @@ func (z *ZkRegistry) doSubscribeCommand(url *motan.URL) {
 	} else {
 		commandPath = toCommandPath(url)
 	}
-	if isExist, _, err := z.zkConn.Exists(commandPath); err != nil || !isExist {
-		vlog.Errorf("[ZkRegistry] check command exists fail. isExist:%v, path:%s, err:%v, \n", isExist, commandPath, err)
+	if isExist, _, err := z.zkConn.Exists(commandPath); err == nil {
+		if !isExist {
+			vlog.Warningf("[ZkRegistry] command path is not exist, path:%s\n", commandPath)
+			return
+		}
+	} else {
+		vlog.Errorf("[ZkRegistry] command check error. path:%s, err:%v\n", commandPath, err)
 		return
 	}
 	_, _, ch, err := z.zkConn.GetW(commandPath)
@@ -376,19 +383,16 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 		commandPath = toCommandPath(url)
 	}
 	if isExist, _, err := z.zkConn.Exists(commandPath); err == nil {
-		if !isExist {
-			vlog.Warningf("[ZkRegistry] command didn't exist, path:%s\n", commandPath)
-			return res
+		if isExist {
+			if data, _, err := z.zkConn.Get(commandPath); err == nil {
+				vlog.Infof("[ZkRegistry] discover command. path:%s\n", commandPath)
+				res = getNodeInfo(data)
+			} else {
+				vlog.Errorf("[ZkRegistry] discover command error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
+			}
 		}
 	} else {
 		vlog.Errorf("[ZkRegistry] command check error:%v\n", err)
-		return res
-	}
-	if data, _, err := z.zkConn.Get(commandPath); err == nil {
-		vlog.Infof("[ZkRegistry] discover command. path:%s\n", commandPath)
-		res = getNodeInfo(data)
-	} else {
-		vlog.Errorf("[ZkRegistry] discover command error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
 	}
 	return res
 }
@@ -410,13 +414,13 @@ func (z *ZkRegistry) Available(url *motan.URL) {
 func (z *ZkRegistry) doAvailable(url *motan.URL) {
 	if url == nil {
 		for _, u := range z.registeredServiceMap {
-			z.removeNode(u, zkNodeTypeUnavailableServer)
-			z.createNode(u, zkNodeTypeServer)
+			z.removeNode(u, ZkNodeTypeUnavailableServer)
+			z.createNode(u, ZkNodeTypeServer)
 			z.availableServiceMap[u.GetIdentity()] = url
 		}
 	} else {
-		z.removeNode(url, zkNodeTypeUnavailableServer)
-		z.createNode(url, zkNodeTypeServer)
+		z.removeNode(url, ZkNodeTypeUnavailableServer)
+		z.createNode(url, ZkNodeTypeServer)
 		z.availableServiceMap[url.GetIdentity()] = url
 	}
 }
@@ -438,13 +442,13 @@ func (z *ZkRegistry) Unavailable(url *motan.URL) {
 func (z *ZkRegistry) doUnavailable(url *motan.URL) {
 	if url == nil {
 		for _, u := range z.registeredServiceMap {
-			z.removeNode(u, zkNodeTypeServer)
-			z.createNode(u, zkNodeTypeUnavailableServer)
+			z.removeNode(u, ZkNodeTypeServer)
+			z.createNode(u, ZkNodeTypeUnavailableServer)
 			delete(z.availableServiceMap, u.GetIdentity())
 		}
 	} else {
-		z.removeNode(url, zkNodeTypeServer)
-		z.createNode(url, zkNodeTypeUnavailableServer)
+		z.removeNode(url, ZkNodeTypeServer)
+		z.createNode(url, ZkNodeTypeUnavailableServer)
 		delete(z.availableServiceMap, url.GetIdentity())
 	}
 }
@@ -480,23 +484,10 @@ func (z *ZkRegistry) setAvailable(available bool) {
 }
 
 func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
-	if _, err := os.Stat(conf.SnapshotDir); os.IsNotExist(err) {
-		if err := os.Mkdir(conf.SnapshotDir, 0774); err != nil {
-			vlog.Errorln("[ZkRegistry] make directory error. err:" + err.Error())
-		}
-	}
-	go func(z *ZkRegistry) {
-		defer motan.HandlePanic(nil)
-		ticker := time.NewTicker(conf.SnapshotInterval)
-		for range ticker.C {
-			saveSnapshot(conf.SnapshotDir, z.serviceNodeMap)
-		}
-	}(z)
+	go InitSnapshot(conf)
 }
 
-func (z *ZkRegistry) buildSnapShotNodes(nodes []string, url *motan.URL) {
-	nodeRsSnapshotLock.Lock()
-	defer nodeRsSnapshotLock.Unlock()
+func (z *ZkRegistry) saveSnapShot(nodes []string, url *motan.URL) {
 	serviceNode := ServiceNode{
 		Group: url.Group,
 		Path:  url.Path,
@@ -506,12 +497,13 @@ func (z *ZkRegistry) buildSnapShotNodes(nodes []string, url *motan.URL) {
 		nodeInfos = append(nodeInfos, SnapShotNodeInfo{Addr: addr})
 	}
 	serviceNode.Nodes = nodeInfos
-	z.serviceNodeMap[getNodeKey(url)] = serviceNode
+	z.serviceNodeMap[GetNodeKey(url)] = serviceNode
+	SaveSnapshot(z.GetName(), z.serviceNodeMap)
 }
 
 func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
 	var nodePath string
-	if nodeType == zkNodeTypeAgent {
+	if nodeType == ZkNodeTypeAgent {
 		nodePath = toAgentNodePath(url)
 	} else {
 		nodePath = toNodePath(url, nodeType)
@@ -530,7 +522,7 @@ func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
 func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) {
 	var typePath string
 	var nodePath string
-	if nodeType == zkNodeTypeAgent {
+	if nodeType == ZkNodeTypeAgent {
 		typePath = toAgentNodeTypePath(url)
 		nodePath = toAgentNodePath(url)
 	} else {
@@ -564,10 +556,10 @@ func (z *ZkRegistry) createPersistent(path string, createParents bool) {
 }
 
 func getNodeInfo(data []byte) string {
-	if len(data) > 7 && binary.BigEndian.Uint16(data[:2]) == streamMagicTag {
-		if data[4] == shortStringTag {
+	if len(data) > 7 && binary.BigEndian.Uint16(data[:2]) == StreamMagicTag {
+		if data[4] == ShortStringTag {
 			return string(data[7:])
-		} else if data[4] == longStringTag && len(data) > 13 {
+		} else if data[4] == LongStringTag && len(data) > 13 {
 			return string(data[13:])
 		}
 	}
@@ -578,7 +570,7 @@ func (z *ZkRegistry) nodeChildsToURLs(url *motan.URL, parentPath string, current
 	urls := make([]*motan.URL, 0, len(currentChilds))
 	if currentChilds != nil {
 		for _, node := range currentChilds {
-			nodePath := parentPath + zkPathSeparator + node
+			nodePath := parentPath + ZkPathSeparator + node
 			data, _, err := z.zkConn.Get(nodePath)
 			if err != nil {
 				vlog.Errorln("[ZkRegistry] get node data error. err:" + err.Error())
@@ -613,37 +605,37 @@ func (z *ZkRegistry) nodeChildsToURLs(url *motan.URL, parentPath string, current
 }
 
 func toGroupPath(url *motan.URL) string {
-	return zkRegistryNamespace + zkPathSeparator + url.Group
+	return ZkRegistryNamespace + ZkPathSeparator + url.Group
 }
 
 func toServicePath(url *motan.URL) string {
-	return toGroupPath(url) + zkPathSeparator + url.Path
+	return toGroupPath(url) + ZkPathSeparator + url.Path
 }
 
 func toCommandPath(url *motan.URL) string {
-	return toGroupPath(url) + zkRegistryCommand
+	return toGroupPath(url) + ZkRegistryCommand
 }
 
 func toNodeTypePath(url *motan.URL, nodeType string) string {
-	return toServicePath(url) + zkPathSeparator + nodeType
+	return toServicePath(url) + ZkPathSeparator + nodeType
 }
 
 func toNodePath(url *motan.URL, nodeType string) string {
-	return toNodeTypePath(url, nodeType) + zkPathSeparator + url.GetAddressStr()
+	return toNodeTypePath(url, nodeType) + ZkPathSeparator + url.GetAddressStr()
 }
 
 func toAgentPath(url *motan.URL) string {
-	return zkRegistryNamespace + zkPathSeparator + zkNodeTypeAgent + zkPathSeparator + url.GetParam(motan.ApplicationKey, "")
+	return ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + url.GetParam(motan.ApplicationKey, "")
 }
 
 func toAgentNodeTypePath(url *motan.URL) string {
-	return toAgentPath(url) + zkRegistryNode
+	return toAgentPath(url) + ZkRegistryNode
 }
 
 func toAgentNodePath(url *motan.URL) string {
-	return toAgentNodeTypePath(url) + zkPathSeparator + url.GetAddressStr()
+	return toAgentNodeTypePath(url) + ZkPathSeparator + url.GetAddressStr()
 }
 
 func toAgentCommandPath(url *motan.URL) string {
-	return toAgentPath(url) + zkRegistryCommand
+	return toAgentPath(url) + ZkRegistryCommand
 }

@@ -165,7 +165,7 @@ func (a *Agent) SetSanpshotConf() {
 	if snapshotDir == "" {
 		snapshotDir = registry.DefaultSnapshotDir
 	}
-	registry.SetSanpshotConf(registry.DefaultSnapshotInterval, snapshotDir)
+	registry.SetSnapshotConf(registry.DefaultSnapshotInterval, snapshotDir)
 }
 
 func (a *Agent) initAgentURL() {
