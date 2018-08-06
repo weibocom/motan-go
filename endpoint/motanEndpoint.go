@@ -110,7 +110,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
 	startTime := time.Now().UnixNano()
-	if rc != nil && rc.AsyncCall {
+	if rc.AsyncCall {
 		rc.Result.StartTime = startTime
 	}
 	// get a channel
@@ -136,13 +136,16 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		vlog.Errorf("convert motan request fail! ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert motan request fail!", ErrType: motan.ServiceException})
 	}
+	if rc.Tc != nil {
+		rc.Tc.PutReqSpan(&motan.Span{Name: motan.Convert, Addr: m.GetURL().GetAddressStr(), Time: time.Now()})
+	}
 	recvMsg, err := channel.Call(msg, deadline, rc)
 	if err != nil {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
 	}
-	if rc != nil && rc.AsyncCall {
+	if rc.AsyncCall {
 		return defaultAsyncResponse
 	}
 	recvMsg.Header.SetProxy(m.proxy)
@@ -294,10 +297,15 @@ func (s *Stream) Send() error {
 	defer timer.Stop()
 
 	buf := s.sendMsg.Encode()
-
+	if s.rc != nil && s.rc.Tc != nil {
+		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
+	}
 	ready := sendReady{data: buf.Bytes()}
 	select {
 	case s.channel.sendCh <- ready:
+		if s.rc != nil && s.rc.Tc != nil {
+			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: time.Now()})
+		}
 		return nil
 	case <-timer.C:
 		return ErrSendRequestTimeout
@@ -327,25 +335,35 @@ func (s *Stream) Recv() (*mpro.Message, error) {
 	}
 }
 
-func (s *Stream) notify(msg *mpro.Message) {
+func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 	defer func() {
 		s.Close()
 	}()
-	if s.rc != nil && s.rc.AsyncCall {
-		msg.Header.SetProxy(s.rc.Proxy)
-		result := s.rc.Result
-		response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
-		if err != nil {
-			vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s\n", s.channel.address, msg.Header.RequestID, err.Error())
-			result.Error = err
+	if s.rc != nil {
+		if s.rc.Tc != nil {
+			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Recieve, Addr: s.channel.address, Time: t})
+			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
+		}
+		if s.rc.AsyncCall {
+			msg.Header.SetProxy(s.rc.Proxy)
+			result := s.rc.Result
+			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
+			if err != nil {
+				vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s\n", s.channel.address, msg.Header.RequestID, err.Error())
+				result.Error = err
+				result.Done <- result
+				return
+			}
+			response.ProcessDeserializable(result.Reply)
+			response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
+			if s.rc.Tc != nil {
+				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
+			}
 			result.Done <- result
 			return
 		}
-		response.ProcessDeserializable(result.Reply)
-		response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
-		result.Done <- result
-		return
 	}
+
 	s.recvMsg = msg
 	s.recvNotifyCh <- struct{}{}
 }
@@ -432,16 +450,16 @@ func (c *Channel) recv() {
 
 func (c *Channel) recvLoop() error {
 	for {
-		res, err := mpro.Decode(c.bufRead)
+		res, t, err := mpro.DecodeWithTime(c.bufRead)
 		if err != nil {
 			return err
 		}
 		//TODO async
 		var handleErr error
 		if res.Header.IsHeartbeat() {
-			handleErr = c.handleHeartbeat(res)
+			handleErr = c.handleHeartbeat(res, t)
 		} else {
-			handleErr = c.handleMessage(res)
+			handleErr = c.handleMessage(res, t)
 		}
 		if handleErr != nil {
 			return handleErr
@@ -473,26 +491,26 @@ func (c *Channel) send() {
 	}
 }
 
-func (c *Channel) handleHeartbeat(msg *mpro.Message) error {
+func (c *Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	c.heartbeatLock.Lock()
 	stream := c.heartbeats[msg.Header.RequestID]
 	c.heartbeatLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s\n", msg.Header.RequestID, c.address)
 	} else {
-		stream.notify(msg)
+		stream.notify(msg, t)
 	}
 	return nil
 }
 
-func (c *Channel) handleMessage(msg *mpro.Message) error {
+func (c *Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	c.streamLock.Lock()
 	stream := c.streams[msg.Header.RequestID]
 	c.streamLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle recv message, missing stream: %d, ep:%s\n", msg.Header.RequestID, c.address)
 	} else {
-		stream.notify(msg)
+		stream.notify(msg, t)
 	}
 	return nil
 }

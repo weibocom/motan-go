@@ -313,6 +313,9 @@ type RPCContext struct {
 	AsyncCall bool
 	Result    *AsyncResult
 	Reply     interface{}
+
+	// trace context
+	Tc *TraceContext
 }
 
 // AsyncResult : async call result
@@ -441,6 +444,7 @@ func (m *MotanRequest) Clone() interface{} {
 			AsyncCall:    m.RPCContext.AsyncCall,
 			Result:       m.RPCContext.Result,
 			Reply:        m.RPCContext.Reply,
+			Tc:           m.RPCContext.Tc,
 		}
 		if m.RPCContext.OriginalMessage != nil {
 			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
@@ -768,6 +772,9 @@ func (l *lastEndPointFilter) NewFilter(url *URL) Filter {
 }
 
 func (l *lastEndPointFilter) Filter(caller Caller, request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: EpFilterEnd, Addr: caller.GetURL().GetAddressStr(), Time: time.Now()})
+	}
 	return caller.Call(request)
 }
 
@@ -798,6 +805,9 @@ func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 }
 
 func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: ClustFliterEnd, Time: time.Now()})
+	}
 	return haStrategy.Call(request, loadBalance)
 }
 
@@ -825,6 +835,9 @@ type FilterEndPoint struct {
 }
 
 func (f *FilterEndPoint) Call(request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: EpFilterStart, Addr: f.GetURL().GetAddressStr(), Time: time.Now()})
+	}
 	return f.Filter.Filter(f.Caller, request)
 }
 func (f *FilterEndPoint) GetURL() *URL {

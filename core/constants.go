@@ -49,3 +49,15 @@ const (
 	NodeTypeReferer = "referer"
 	NodeTypeAgent   = "agent"
 )
+
+// trace span name
+const (
+	Recieve        = "recieve"
+	Decode         = "decode"
+	Convert        = "convert"
+	ClustFliterEnd = "clustFilter"
+	EpFilterStart  = "epFilterStart"
+	EpFilterEnd    = "epFilterEnd"
+	Encode         = "encode"
+	Send           = "send"
+)
