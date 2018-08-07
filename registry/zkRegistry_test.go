@@ -22,22 +22,22 @@ var (
 		Parameters: map[string]string{motan.ApplicationKey: "zkTestApp"},
 	}
 	//serverPath = "/motan/zkTestGroup/zkTestPath/server/127.0.0.1:1234"
-	serverPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkPathSeparator + testURL.Path + ZkPathSeparator + ZkNodeTypeServer + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
+	serverPath = zkRegistryNamespace + zkPathSeparator + testURL.Group + zkPathSeparator + testURL.Path + zkPathSeparator + zkNodeTypeServer + zkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//unavailableServerPath = "/motan/zkTestGroup/zkTestPath/unavailableServer/127.0.0.1:1234"
-	unavailableServerPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkPathSeparator + testURL.Path + ZkPathSeparator + ZkNodeTypeUnavailableServer + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
+	unavailableServerPath = zkRegistryNamespace + zkPathSeparator + testURL.Group + zkPathSeparator + testURL.Path + zkPathSeparator + zkNodeTypeUnavailableServer + zkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//agentPath = "/motan/agent/zkTestApp/node/127.0.0.1:1234"
-	agentPath = ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + testURL.GetParam(motan.ApplicationKey, "") + ZkRegistryNode + ZkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
+	agentPath = zkRegistryNamespace + zkPathSeparator + zkNodeTypeAgent + zkPathSeparator + testURL.GetParam(motan.ApplicationKey, "") + zkRegistryNode + zkPathSeparator + testURL.Host + ":" + testURL.GetPortStr()
 	//commandPath = "/motan/zkTestGroup/command"
-	commandPath = ZkRegistryNamespace + ZkPathSeparator + testURL.Group + ZkRegistryCommand
+	commandPath = zkRegistryNamespace + zkPathSeparator + testURL.Group + zkRegistryCommand
 	//agentCommandPath = "/motan/agent/zkTestApp/command"
-	agentCommandPath = ZkRegistryNamespace + ZkPathSeparator + ZkNodeTypeAgent + ZkPathSeparator + testURL.GetParam(motan.ApplicationKey, "") + ZkRegistryCommand
+	agentCommandPath = zkRegistryNamespace + zkPathSeparator + zkNodeTypeAgent + zkPathSeparator + testURL.GetParam(motan.ApplicationKey, "") + zkRegistryCommand
 	z                = &ZkRegistry{}
 )
 
 //Test path generation methods.
 func TestZkRegistryToPath(t *testing.T) {
 	//Test path create methods.
-	if p := toNodePath(testURL, ZkNodeTypeServer); p != serverPath {
+	if p := toNodePath(testURL, zkNodeTypeServer); p != serverPath {
 		t.Error("toNodePath err. result:", p)
 	}
 	if p := toCommandPath(testURL); p != commandPath {
@@ -61,7 +61,7 @@ func TestZkRegistryToPath(t *testing.T) {
 func TestZkRegistryBasic(t *testing.T) {
 	if getZK() {
 		//Test createNode method: server path.
-		z.createNode(testURL, ZkNodeTypeServer)
+		z.createNode(testURL, zkNodeTypeServer)
 		time.Sleep(DefaultWaitTime)
 		isExist, _, err := z.zkConn.Exists(serverPath)
 		if err != nil || !isExist {
@@ -69,7 +69,7 @@ func TestZkRegistryBasic(t *testing.T) {
 		}
 
 		//Test createNode method: agent path.
-		z.createNode(testURL, ZkNodeTypeAgent)
+		z.createNode(testURL, zkNodeTypeAgent)
 		time.Sleep(DefaultWaitTime)
 		isExist, _, err = z.zkConn.Exists(agentPath)
 		if err != nil || !isExist {
@@ -93,14 +93,14 @@ func TestZkRegistryBasic(t *testing.T) {
 		//Test DiscoverCommand method.
 		z.createPersistent(agentCommandPath, true)
 		z.zkConn.Set(agentCommandPath, []byte(commandReq), -1)
-		testURL.PutParam("nodeType", ZkNodeTypeAgent)
+		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		commandRes = z.DiscoverCommand(testURL)
 		testURL.PutParam("nodeType", "")
 		time.Sleep(DefaultWaitTime)
 		assert.Equal(t, commandReq, commandRes)
 
 		//Test removeNode method.
-		z.removeNode(testURL, ZkNodeTypeServer)
+		z.removeNode(testURL, zkNodeTypeServer)
 		time.Sleep(DefaultWaitTime)
 		if isExist, _, err := z.zkConn.Exists(serverPath); err == nil {
 			if isExist {
@@ -174,7 +174,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		if isExist, _, err := z.zkConn.Exists(unavailableServerPath); !isExist || err != nil {
 			t.Error("Register fail:", err)
 		}
-		testURL.PutParam("nodeType", ZkNodeTypeAgent)
+		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		testURL.Group = "agent" //build different urlID
 		testURL.ClearCachedInfo()
 		z.Register(testURL)
@@ -191,7 +191,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		//Test Subscribe method.
 		lis := MockListener{registryURL: &motan.URL{}}
 		z.Subscribe(testURL, &lis)
-		z.createNode(testURL, ZkNodeTypeServer)
+		z.createNode(testURL, zkNodeTypeServer)
 		time.Sleep(DefaultWaitTime)
 		urlRes := &motan.URL{
 			Host: zkURL.Host,
@@ -222,7 +222,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 
 		//Test SubscribeCommand method: agent command path.
 		lis = MockListener{}
-		testURL.PutParam("nodeType", ZkNodeTypeAgent)
+		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		testURL.Group = "agentCommand" //build different urlID
 		testURL.ClearCachedInfo()
 		z.createPersistent(agentCommandPath, true)
@@ -242,7 +242,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		}
 
 		//Test UnSubscribeCommand method: agent command path.
-		testURL.PutParam("nodeType", ZkNodeTypeAgent)
+		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		z.UnSubscribeCommand(testURL, &lis)
 		testURL.PutParam("nodeType", "")
 		time.Sleep(DefaultWaitTime)

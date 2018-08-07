@@ -288,6 +288,7 @@ func (a *Agent) startServerAgent() {
 			application = a.agentURL.GetParam(motan.ApplicationKey, "")
 			url.PutParam(motan.ApplicationKey, application)
 		}
+		url.ClearCachedInfo()
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
 		if provider == nil {

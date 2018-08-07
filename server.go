@@ -112,6 +112,7 @@ func (m *MSContext) export(url *motan.URL) {
 		if url.Host == "" {
 			url.Host = motan.GetLocalIP()
 		}
+		url.ClearCachedInfo()
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
 		motan.Initialize(provider)
