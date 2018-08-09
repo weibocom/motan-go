@@ -2,6 +2,7 @@ package registry
 
 import (
 	"strconv"
+	"strings"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -63,7 +64,7 @@ func parseURLs(url *motan.URL) []*motan.URL {
 	if len(url.Host) > 0 && url.Port > 0 {
 		urls = append(urls, url)
 	} else if address, exist := url.Parameters[motan.AddressKey]; exist {
-		for _, add := range motan.TrimSplit(address, ",") {
+		for _, add := range strings.Split(address, ",") {
 			hostport := motan.TrimSplit(add, ":")
 			if len(hostport) == 2 {
 				port, err := strconv.Atoi(hostport[1])
