@@ -42,12 +42,12 @@ var (
 	nodeRsSnapshotLock sync.RWMutex
 )
 
-func SetSanpshotConf(snapshotInterval time.Duration, snapshotDir string) {
+func SetSnapshotConf(snapshotInterval time.Duration, snapshotDir string) {
 	snapshotConf.SnapshotDir = snapshotDir
 	snapshotConf.SnapshotInterval = snapshotInterval
 }
 
-func GetSanpshotConf() *motan.SnapshotConf {
+func GetSnapshotConf() *motan.SnapshotConf {
 	return snapshotConf
 }
 
