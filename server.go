@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -92,7 +91,7 @@ func (m *MSContext) export(url *motan.URL) {
 		port := defaultServerPort
 		protocol := defaultProtocal
 		if export != "" {
-			s := strings.Split(export, ":")
+			s := motan.TrimSplit(export, ":")
 			if len(s) == 1 {
 				port = s[0]
 			} else if len(s) == 2 {
@@ -112,6 +111,7 @@ func (m *MSContext) export(url *motan.URL) {
 		if url.Host == "" {
 			url.Host = motan.GetLocalIP()
 		}
+		url.ClearCachedInfo()
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
 		motan.Initialize(provider)

@@ -165,7 +165,7 @@ func (a *Agent) SetSanpshotConf() {
 	if snapshotDir == "" {
 		snapshotDir = registry.DefaultSnapshotDir
 	}
-	registry.SetSanpshotConf(registry.DefaultSnapshotInterval, snapshotDir)
+	registry.SetSnapshotConf(registry.DefaultSnapshotInterval, snapshotDir)
 }
 
 func (a *Agent) initAgentURL() {
@@ -288,6 +288,7 @@ func (a *Agent) startServerAgent() {
 			application = a.agentURL.GetParam(motan.ApplicationKey, "")
 			url.PutParam(motan.ApplicationKey, application)
 		}
+		url.ClearCachedInfo()
 		exporter := &mserver.DefaultExporter{}
 		provider := a.extFactory.GetProvider(url)
 		if provider == nil {
