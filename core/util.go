@@ -22,7 +22,7 @@ const (
 func ParseExportInfo(export string) (string, int, error) {
 	port := defaultServerPort
 	protocol := defaultProtocal
-	s := strings.Split(export, ":")
+	s := TrimSplit(export, ":")
 	if len(s) == 1 && s[0] != "" {
 		port = s[0]
 	} else if len(s) == 2 {
