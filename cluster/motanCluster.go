@@ -3,7 +3,6 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -234,7 +233,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		err = errors.New(errInfo)
 		vlog.Errorln(errInfo)
 	}
-	arr := strings.Split(regs, ",")
+	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
 	for _, r := range arr {
 		if registryURL, ok := m.Context.RegistryURLs[r]; ok {

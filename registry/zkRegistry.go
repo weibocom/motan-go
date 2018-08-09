@@ -49,6 +49,7 @@ func (z *ZkRegistry) Initialize() {
 	z.subscribedServiceMap = make(map[string]map[motan.NotifyListener]*motan.URL)
 	z.subscribedCommandMap = make(map[string]map[motan.CommandNotifyListener]*motan.URL)
 	z.StartSnapshot(GetSnapshotConf())
+	z.StartSnapshot(GetSnapshotConf())
 	z.switcherMap = make(map[string]chan bool)
 	z.registeredServiceMap = make(map[string]*motan.URL)
 	z.availableServiceMap = make(map[string]*motan.URL)
@@ -283,7 +284,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 	lisMap := make(map[motan.CommandNotifyListener]*motan.URL)
 	lisMap[listener] = url
 	z.subscribedCommandMap[commandPath] = lisMap
-	vlog.Infof("[ZkRegistry] subscribe command. url:%s\n", url.GetIdentity())
+	vlog.Infof("[ZkRegistry] subscribe command success. path:%s, url:%s\n", commandPath, url.GetIdentity())
 	z.doSubscribeCommand(url)
 }
 
@@ -294,18 +295,17 @@ func (z *ZkRegistry) doSubscribeCommand(url *motan.URL) {
 	} else {
 		commandPath = toCommandPath(url)
 	}
-	if isExist, _, err := z.zkConn.Exists(commandPath); err == nil {
-		if !isExist {
-			vlog.Warningf("[ZkRegistry] command path is not exist, path:%s\n", commandPath)
-			return
-		}
-	} else {
-		vlog.Errorf("[ZkRegistry] command check error. path:%s, err:%v\n", commandPath, err)
+	isExist, _, err := z.zkConn.Exists(commandPath)
+	if err != nil {
+		vlog.Errorf("[ZkRegistry] check command exists err. path:%s, err:%v, \n", commandPath, err)
 		return
+	}
+	if !isExist {
+		z.createPersistent(commandPath, false)
 	}
 	_, _, ch, err := z.zkConn.GetW(commandPath)
 	if err != nil {
-		vlog.Errorf("[ZkRegistry] subscribe command error.  commandPath:%s, url:%v, err:%v\n", commandPath, url, err)
+		vlog.Errorf("[ZkRegistry] subscribe command error. commandPath:%s, url:%v, err:%v\n", commandPath, url, err)
 		return
 	}
 	switcherChan, ok := z.switcherMap[commandPath]
@@ -380,17 +380,16 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	} else {
 		commandPath = toCommandPath(url)
 	}
-	if isExist, _, err := z.zkConn.Exists(commandPath); err == nil {
-		if isExist {
-			if data, _, err := z.zkConn.Get(commandPath); err == nil {
-				vlog.Infof("[ZkRegistry] discover command. path:%s\n", commandPath)
-				res = getNodeInfo(data)
-			} else {
-				vlog.Errorf("[ZkRegistry] discover command error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
-			}
-		}
+	isExist, _, err := z.zkConn.Exists(commandPath)
+	if err != nil || !isExist {
+		vlog.Errorf("[ZkRegistry] check command exists err. path:%s, isExit:%v, err:%v, \n", commandPath, isExist, err)
+		return res
+	}
+	if data, _, err := z.zkConn.Get(commandPath); err == nil {
+		vlog.Infof("[ZkRegistry] discover command. path:%s\n", commandPath)
+		res = getNodeInfo(data)
 	} else {
-		vlog.Errorf("[ZkRegistry] command check error:%v\n", err)
+		vlog.Errorf("[ZkRegistry] discover command error. url:%s, err:%s\n", url.GetIdentity(), err.Error())
 	}
 	return res
 }

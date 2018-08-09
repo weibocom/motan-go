@@ -3,8 +3,6 @@ package server
 import (
 	"errors"
 	"fmt"
-	"strings"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -59,7 +57,7 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extention
 		vlog.Errorln(errInfo)
 		return err
 	}
-	arr := strings.Split(regs, ",")
+	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
 	for _, r := range arr {
 		if registryURL, ok := context.RegistryURLs[r]; ok {

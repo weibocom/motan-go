@@ -47,7 +47,7 @@ func (h *HTTPProvider) Initialize() {
 		for confID, info := range urlConf {
 			srvConf := make(srvConfT)
 			for methodArrStr, getSrvConf := range info.(map[interface{}]interface{}) {
-				methodArr := strings.Split(methodArrStr.(string), ",")
+				methodArr := motan.TrimSplit(methodArrStr.(string), ",")
 				for _, method := range methodArr {
 					sconf := make(sConfT)
 					for k, v := range getSrvConf.(map[interface{}]interface{}) {
