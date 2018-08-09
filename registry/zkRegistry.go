@@ -276,7 +276,7 @@ func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNoti
 		commandPath = toCommandPath(url)
 	}
 	if listeners, ok := z.subscribedCommandMap[commandPath]; ok && listeners != nil {
-		vlog.Infof("[ZkRegistry] subscribe command success. path:%s, url:%s\n", commandPath, url.GetIdentity())
+		vlog.Infof("[ZkRegistry] subscribe command success. path:%s, listener:%s\n", commandPath, listener.GetIdentity())
 		listeners[listener] = url
 		return
 	}
