@@ -9,8 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/weibocom/motan-go/log"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -27,7 +27,7 @@ const (
 	ZK     = "zookeeper"
 )
 
-type SnapShotNodeInfo struct {
+type SnapshotNodeInfo struct {
 	ExtInfo string `json:"extInfo"`
 	Addr    string `json:"address"`
 }
@@ -35,7 +35,7 @@ type SnapShotNodeInfo struct {
 type ServiceNode struct {
 	Group string             `json:"group"`
 	Path  string             `json:"path"`
-	Nodes []SnapShotNodeInfo `json:"nodes"`
+	Nodes []SnapshotNodeInfo `json:"nodes"`
 }
 
 var (
@@ -44,6 +44,42 @@ var (
 	snapshot           map[string]map[string]ServiceNode
 	snapshotConf       = &motan.SnapshotConf{SnapshotInterval: DefaultSnapshotInterval, SnapshotDir: DefaultSnapshotDir}
 )
+
+func CheckSnapshotDir() {
+	dir := snapshotConf.SnapshotDir
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir(dir, 0774); err != nil {
+			vlog.Errorf("registry make directory error. dir:%s, err:%s\n", dir, err.Error())
+			return
+		}
+	}
+}
+
+func flushSnapshot() {
+	vlog.Infoln("registry start snapshot, dir:", snapshotConf.SnapshotDir)
+	ticker := time.NewTicker(snapshotConf.SnapshotInterval)
+	for range ticker.C {
+		if snapshot != nil {
+			nodeRsSnapshotLock.RLock()
+			newNodes := map[string]ServiceNode{}
+			for _, serviceNodes := range snapshot {
+				for key, serviceNode := range serviceNodes {
+					if n, ok := newNodes[key]; ok {
+						n.Nodes = append(n.Nodes, serviceNode.Nodes...)
+						newNodes[key] = n
+					} else {
+						newNodes[key] = serviceNode
+					}
+				}
+			}
+			for key, node := range newNodes {
+				nodeRsSnapshot := JSONString(node)
+				ioutil.WriteFile(filepath.Join(snapshotConf.SnapshotDir, key), StringToSliceByte(nodeRsSnapshot), 0777)
+			}
+			nodeRsSnapshotLock.RUnlock()
+		}
+	}
+}
 
 func SetSnapshotConf(snapshotInterval time.Duration, snapshotDir string) {
 	snapshotConf.SnapshotDir = snapshotDir
@@ -93,66 +129,19 @@ func StringToSliceByte(s string) []byte {
 }
 
 func SaveSnapshot(registry string, nodeKey string, nodes ServiceNode) {
+	once.Do(func() {
+		CheckSnapshotDir()
+		go flushSnapshot()
+	})
 	nodeRsSnapshotLock.Lock()
 	defer nodeRsSnapshotLock.Unlock()
-	if len(snapshot) == 0 {
+	if snapshot == nil {
 		snapshot = make(map[string]map[string]ServiceNode)
 	}
-	if len(snapshot[registry]) == 0 {
+	if snapshot[registry] == nil {
 		snapshot[registry] = make(map[string]ServiceNode)
 	}
 	snapshot[registry][nodeKey] = nodes
-}
-
-func InitSnapshot(conf *motan.SnapshotConf) {
-	once.Do(func() {
-		if _, err := os.Stat(conf.SnapshotDir); os.IsNotExist(err) {
-			if err := os.Mkdir(conf.SnapshotDir, 0774); err != nil {
-				vlog.Errorf("registry make directory error. dir:%s, err:%s\n", conf.SnapshotDir, err.Error())
-				return
-			}
-		}
-		vlog.Infoln("registry start snapshot, dir:", conf.SnapshotDir)
-		flushSnapshot(conf)
-	})
-}
-func flushSnapshot(conf *motan.SnapshotConf) {
-	ticker := time.NewTicker(conf.SnapshotInterval)
-	for range ticker.C {
-		nodeRsSnapshotLock.RLock()
-		newNodes := map[string]ServiceNode{}
-		for _, serviceNodes := range snapshot {
-			for key, serviceNode := range serviceNodes {
-				if n, ok := newNodes[key]; ok {
-					n.Nodes = deduplicateMerge(n.Nodes, serviceNode.Nodes)
-					newNodes[key] = n
-				} else {
-					newNodes[key] = serviceNode
-				}
-			}
-		}
-		for key, node := range newNodes {
-			nodeRsSnapshot := JSONString(node)
-			ioutil.WriteFile(filepath.Join(conf.SnapshotDir, key), StringToSliceByte(nodeRsSnapshot), 0777)
-		}
-		nodeRsSnapshotLock.RUnlock()
-	}
-}
-
-func deduplicateMerge(l1 []SnapShotNodeInfo, l2 []SnapShotNodeInfo) []SnapShotNodeInfo {
-	var result []SnapShotNodeInfo
-	temp := make(map[SnapShotNodeInfo]bool, len(l1)+len(l2))
-	for _, e := range l1 {
-		temp[e] = true
-		result = append(result, e)
-	}
-	for _, e := range l2 {
-		if _, ok := temp[e]; !ok {
-			temp[e] = true
-			result = append(result, e)
-		}
-	}
-	return result
 }
 
 func JSONString(v interface{}) string {

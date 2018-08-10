@@ -11,7 +11,7 @@ import (
 var (
 	//zk server url
 	zkURL           = &motan.URL{Host: "127.0.0.1", Port: 2181}
-	DefaultWaitTime = 100 * time.Millisecond
+	defaultWaitTime = 100 * time.Millisecond
 	//unified test url
 	testURL = &motan.URL{
 		Protocol:   "zookeeper",
@@ -62,7 +62,7 @@ func TestZkRegistryBasic(t *testing.T) {
 	if getZK() {
 		//Test createNode method: server path.
 		z.createNode(testURL, zkNodeTypeServer)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		isExist, _, err := z.zkConn.Exists(serverPath)
 		if err != nil || !isExist {
 			t.Error("Create server node fail. exist:", isExist, " err:", err)
@@ -70,7 +70,7 @@ func TestZkRegistryBasic(t *testing.T) {
 
 		//Test createNode method: agent path.
 		z.createNode(testURL, zkNodeTypeAgent)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		isExist, _, err = z.zkConn.Exists(agentPath)
 		if err != nil || !isExist {
 			t.Error("Create agent node fail. exist:", isExist, " err:", err)
@@ -79,7 +79,7 @@ func TestZkRegistryBasic(t *testing.T) {
 		//Test Discover method.
 		testURL.ClearCachedInfo()
 		disURL := z.Discover(testURL)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		assert.Equal(t, disURL[0], testURL)
 
 		//Test DiscoverCommand method.
@@ -87,7 +87,7 @@ func TestZkRegistryBasic(t *testing.T) {
 		commandReq := "hello"
 		z.zkConn.Set(commandPath, []byte(commandReq), -1)
 		commandRes := z.DiscoverCommand(testURL)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		assert.Equal(t, commandReq, commandRes)
 
 		//Test DiscoverCommand method.
@@ -96,12 +96,12 @@ func TestZkRegistryBasic(t *testing.T) {
 		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		commandRes = z.DiscoverCommand(testURL)
 		testURL.PutParam("nodeType", "")
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		assert.Equal(t, commandReq, commandRes)
 
 		//Test removeNode method.
 		z.removeNode(testURL, zkNodeTypeServer)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if isExist, _, err := z.zkConn.Exists(serverPath); err == nil {
 			if isExist {
 				t.Error("removeNode fail.")
@@ -117,7 +117,7 @@ func TestZkRegistryRegister(t *testing.T) {
 		//Test Available method: with parameter.
 		z.Register(testURL)
 		z.Available(testURL)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if isExist, _, err := z.zkConn.Exists(serverPath); err == nil {
 			if !isExist {
 				t.Error("Register fail.")
@@ -128,7 +128,7 @@ func TestZkRegistryRegister(t *testing.T) {
 
 		//Test Unavailable method: without parameter.
 		z.Unavailable(testURL)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		isExistUnAvail, _, errUnAvail := z.zkConn.Exists(unavailableServerPath)
 		isExistAvail, _, errAvail := z.zkConn.Exists(serverPath)
 		if errUnAvail == nil && errAvail == nil {
@@ -142,7 +142,7 @@ func TestZkRegistryRegister(t *testing.T) {
 		//Test Available method: without parameter.
 		z.Register(testURL)
 		z.Available(nil)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if isExist, _, err := z.zkConn.Exists(serverPath); err == nil {
 			if !isExist {
 				t.Error("Register fail.")
@@ -153,7 +153,7 @@ func TestZkRegistryRegister(t *testing.T) {
 
 		//Test Unavailable method: with parameter.
 		z.Unavailable(nil)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		isExistUnAvail, _, errUnAvail = z.zkConn.Exists(unavailableServerPath)
 		isExistAvail, _, errAvail = z.zkConn.Exists(serverPath)
 		if errUnAvail == nil && errAvail == nil {
@@ -170,7 +170,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 	if getZK() {
 		//Test Register method.
 		z.Register(testURL)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if isExist, _, err := z.zkConn.Exists(unavailableServerPath); !isExist || err != nil {
 			t.Error("Register fail:", err)
 		}
@@ -192,19 +192,19 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		lis := MockListener{registryURL: &motan.URL{}}
 		z.Subscribe(testURL, &lis)
 		z.createNode(testURL, zkNodeTypeServer)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		urlRes := &motan.URL{
 			Host: zkURL.Host,
 			Port: zkURL.Port,
 		}
 		lis.registryURL.ClearCachedInfo()
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		assert.Equal(t, urlRes, lis.registryURL)
 
 		//Test UnSubscribe method.
 		lis = MockListener{}
 		z.Unsubscribe(testURL, &lis)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if listeners, ok := z.subscribedServiceMap[serverPath]; ok {
 			if _, ok := listeners[&lis]; ok {
 				t.Error("UnSubscribe fail. registryURL:", lis.registryURL)
@@ -217,7 +217,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		z.SubscribeCommand(testURL, &lis)
 		commandReq := "hello"
 		z.zkConn.Set(commandPath, []byte(commandReq), -1)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		//assert.Equal(t, commandReq, lis.command)
 
 		//Test SubscribeCommand method: agent command path.
@@ -231,12 +231,12 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		testURL.ClearCachedInfo()
 		testURL.PutParam("nodeType", "")
 		z.zkConn.Set(agentCommandPath, []byte(commandReq), -1)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		assert.Equal(t, commandReq, lis.command)
 
 		//Test UnSubscribeCommand method: service command path.
 		z.UnSubscribeCommand(testURL, &lis)
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if _, ok := z.switcherMap[commandPath]; ok {
 			t.Error("UnSubscribe command fail.")
 		}
@@ -245,7 +245,7 @@ func TestZkRegistrySubscribe(t *testing.T) {
 		testURL.PutParam("nodeType", zkNodeTypeAgent)
 		z.UnSubscribeCommand(testURL, &lis)
 		testURL.PutParam("nodeType", "")
-		time.Sleep(DefaultWaitTime)
+		time.Sleep(defaultWaitTime)
 		if _, ok := z.switcherMap[commandPath]; ok {
 			t.Error("UnSubscribe command fail.")
 		}

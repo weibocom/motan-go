@@ -48,8 +48,6 @@ func (z *ZkRegistry) Initialize() {
 		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, zKDefaultSessionTimeout)) * time.Second
 	z.subscribedServiceMap = make(map[string]map[motan.NotifyListener]*motan.URL)
 	z.subscribedCommandMap = make(map[string]map[motan.CommandNotifyListener]*motan.URL)
-	z.StartSnapshot(GetSnapshotConf())
-	z.StartSnapshot(GetSnapshotConf())
 	z.switcherMap = make(map[string]chan bool)
 	z.registeredServiceMap = make(map[string]*motan.URL)
 	z.availableServiceMap = make(map[string]*motan.URL)
@@ -204,9 +202,9 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 			case evt := <-ch:
 				if evt.Type == zk.EventNodeChildrenChanged {
 					if nodes, _, chx, err := z.zkConn.ChildrenW(servicePath); err == nil {
-						z.saveSnapShot(nodes, url)
+						z.saveSnapshot(nodes, url)
 						ch = chx
-						listeners, ok := z.subscribedServiceMap[servicePath];
+						listeners, ok := z.subscribedServiceMap[servicePath]
 						if ok && len(nodes) > 0 {
 							for lis := range listeners {
 								lis.Notify(z.url, z.nodeChildsToURLs(url, servicePath, nodes))
@@ -257,7 +255,7 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	nodePath := toNodeTypePath(url, zkNodeTypeServer)
 	nodes, _, err := z.zkConn.Children(nodePath)
 	if err == nil {
-		z.saveSnapShot(nodes, url)
+		z.saveSnapshot(nodes, url)
 		return z.nodeChildsToURLs(url, nodePath, nodes)
 	}
 	vlog.Errorf("[ZkRegistry] discover service error! url:%s, err:%v\n", url.GetIdentity(), err)
@@ -480,21 +478,19 @@ func (z *ZkRegistry) setAvailable(available bool) {
 	z.available = available
 }
 
-func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
-	go InitSnapshot(conf)
-}
+func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
 
-func (z *ZkRegistry) saveSnapShot(nodes []string, url *motan.URL) {
+func (z *ZkRegistry) saveSnapshot(nodes []string, url *motan.URL) {
 	serviceNode := ServiceNode{
 		Group: url.Group,
 		Path:  url.Path,
 	}
-	nodeInfos := make([]SnapShotNodeInfo, 0, len(nodes))
+	nodeInfos := make([]SnapshotNodeInfo, 0, len(nodes))
 	for _, addr := range nodes {
-		nodeInfos = append(nodeInfos, SnapShotNodeInfo{Addr: addr})
+		nodeInfos = append(nodeInfos, SnapshotNodeInfo{Addr: addr})
 	}
 	serviceNode.Nodes = nodeInfos
-	SaveSnapshot(z.GetName(),GetNodeKey(url), serviceNode)
+	SaveSnapshot(z.GetURL().GetIdentity(), GetNodeKey(url), serviceNode)
 }
 
 func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
