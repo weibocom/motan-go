@@ -65,8 +65,6 @@ func (m *MotanCluster) InitCluster() bool {
 	m.LoadBalance = m.extFactory.GetLB(m.url)
 	//filter
 	m.initFilters()
-	// parse registry and subscribe
-	m.parseRegistry()
 
 	if m.clusterFilter == nil {
 		m.clusterFilter = motan.GetLastClusterFilter()
@@ -77,6 +75,10 @@ func (m *MotanCluster) InitCluster() bool {
 	//TODO weather has available refers
 	m.available = true
 	m.closed = false
+
+	// parse registry and subscribe
+	m.parseRegistry()
+
 	vlog.Infof("init MotanCluster %s\n", m.GetIdentity())
 
 	return true

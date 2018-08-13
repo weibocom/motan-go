@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +21,7 @@ const (
 	zkNodeTypeUnavailableServer = "unavailableServer"
 	zkNodeTypeClient            = "client"
 	zkNodeTypeAgent             = "agent"
+	zKDefaultSessionTimeout     = 1000
 
 	//Compatible with java ioStream
 	streamMagicTag = 0xaced
@@ -36,7 +36,6 @@ type ZkRegistry struct {
 	sessionTimeout       time.Duration
 	registerLock         sync.Mutex
 	subscribeLock        sync.Mutex
-	serviceNodeMap       map[string]ServiceNode
 	switcherMap          map[string]chan bool
 	registeredServiceMap map[string]*motan.URL
 	availableServiceMap  map[string]*motan.URL
@@ -46,11 +45,9 @@ type ZkRegistry struct {
 
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
-		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, DefaultHeartbeatInterval)) * time.Millisecond
+		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, zKDefaultSessionTimeout)) * time.Second
 	z.subscribedServiceMap = make(map[string]map[motan.NotifyListener]*motan.URL)
 	z.subscribedCommandMap = make(map[string]map[motan.CommandNotifyListener]*motan.URL)
-	z.serviceNodeMap = make(map[string]ServiceNode)
-	z.StartSnapshot(GetSnapshotConf())
 	z.switcherMap = make(map[string]chan bool)
 	z.registeredServiceMap = make(map[string]*motan.URL)
 	z.availableServiceMap = make(map[string]*motan.URL)
@@ -205,9 +202,9 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 			case evt := <-ch:
 				if evt.Type == zk.EventNodeChildrenChanged {
 					if nodes, _, chx, err := z.zkConn.ChildrenW(servicePath); err == nil {
-						z.buildSnapShotNodes(nodes, url)
+						z.saveSnapshot(nodes, url)
 						ch = chx
-						listeners, ok := z.subscribedServiceMap[servicePath];
+						listeners, ok := z.subscribedServiceMap[servicePath]
 						if ok && len(nodes) > 0 {
 							for lis := range listeners {
 								lis.Notify(z.url, z.nodeChildsToURLs(url, servicePath, nodes))
@@ -253,10 +250,12 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	if !z.IsAvailable() {
 		return nil
 	}
+	z.subscribeLock.Lock()
+	defer z.subscribeLock.Unlock()
 	nodePath := toNodeTypePath(url, zkNodeTypeServer)
 	nodes, _, err := z.zkConn.Children(nodePath)
 	if err == nil {
-		z.buildSnapShotNodes(nodes, url)
+		z.saveSnapshot(nodes, url)
 		return z.nodeChildsToURLs(url, nodePath, nodes)
 	}
 	vlog.Errorf("[ZkRegistry] discover service error! url:%s, err:%v\n", url.GetIdentity(), err)
@@ -479,34 +478,19 @@ func (z *ZkRegistry) setAvailable(available bool) {
 	z.available = available
 }
 
-func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {
-	if _, err := os.Stat(conf.SnapshotDir); os.IsNotExist(err) {
-		if err := os.Mkdir(conf.SnapshotDir, 0774); err != nil {
-			vlog.Errorln("[ZkRegistry] make directory error. err:" + err.Error())
-		}
-	}
-	go func(z *ZkRegistry) {
-		defer motan.HandlePanic(nil)
-		ticker := time.NewTicker(conf.SnapshotInterval)
-		for range ticker.C {
-			saveSnapshot(conf.SnapshotDir, z.serviceNodeMap)
-		}
-	}(z)
-}
+func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
 
-func (z *ZkRegistry) buildSnapShotNodes(nodes []string, url *motan.URL) {
-	nodeRsSnapshotLock.Lock()
-	defer nodeRsSnapshotLock.Unlock()
+func (z *ZkRegistry) saveSnapshot(nodes []string, url *motan.URL) {
 	serviceNode := ServiceNode{
 		Group: url.Group,
 		Path:  url.Path,
 	}
-	nodeInfos := make([]SnapShotNodeInfo, 0, len(nodes))
+	nodeInfos := make([]SnapshotNodeInfo, 0, len(nodes))
 	for _, addr := range nodes {
-		nodeInfos = append(nodeInfos, SnapShotNodeInfo{Addr: addr})
+		nodeInfos = append(nodeInfos, SnapshotNodeInfo{Addr: addr})
 	}
 	serviceNode.Nodes = nodeInfos
-	z.serviceNodeMap[getNodeKey(url)] = serviceNode
+	SaveSnapshot(z.GetURL().GetIdentity(), GetNodeKey(url), serviceNode)
 }
 
 func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
