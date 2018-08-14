@@ -1,9 +1,9 @@
 package registry
 
 import (
-	"os"
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
