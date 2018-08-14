@@ -3,7 +3,6 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -66,8 +65,6 @@ func (m *MotanCluster) InitCluster() bool {
 	m.LoadBalance = m.extFactory.GetLB(m.url)
 	//filter
 	m.initFilters()
-	// parse registry and subscribe
-	m.parseRegistry()
 
 	if m.clusterFilter == nil {
 		m.clusterFilter = motan.GetLastClusterFilter()
@@ -78,6 +75,10 @@ func (m *MotanCluster) InitCluster() bool {
 	//TODO weather has available refers
 	m.available = true
 	m.closed = false
+
+	// parse registry and subscribe
+	m.parseRegistry()
+
 	vlog.Infof("init MotanCluster %s\n", m.GetIdentity())
 
 	return true
@@ -234,7 +235,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		err = errors.New(errInfo)
 		vlog.Errorln(errInfo)
 	}
-	arr := strings.Split(regs, ",")
+	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
 	for _, r := range arr {
 		if registryURL, ok := m.Context.RegistryURLs[r]; ok {

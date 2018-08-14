@@ -1,5 +1,7 @@
 package core
 
+import "time"
+
 //--------------all global public constants--------------
 // exception type
 const (
@@ -60,4 +62,8 @@ const (
 	EpFilterEnd    = "epFilterEnd"
 	Encode         = "encode"
 	Send           = "send"
+)
+
+const (
+	DefaultWriteTimeout = 5 * time.Second
 )

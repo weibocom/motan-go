@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -26,6 +25,8 @@ var (
 	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
+
+	panicErr = errors.New("panic error")
 )
 
 type MotanEndpoint struct {
@@ -258,7 +259,7 @@ type Channel struct {
 	address       string
 
 	// connection
-	conn    io.ReadWriteCloser
+	conn    net.Conn
 	bufRead *bufio.Reader
 
 	// send
@@ -442,7 +443,9 @@ func (c *Channel) IsClosed() bool {
 }
 
 func (c *Channel) recv() {
-	defer motan.HandlePanic(nil)
+	defer motan.HandlePanic(func() {
+		c.closeOnErr(panicErr)
+	})
 	if err := c.recvLoop(); err != nil {
 		c.closeOnErr(err)
 	}
@@ -468,12 +471,15 @@ func (c *Channel) recvLoop() error {
 }
 
 func (c *Channel) send() {
-	defer motan.HandlePanic(nil)
+	defer motan.HandlePanic(func() {
+		c.closeOnErr(panicErr)
+	})
 	for {
 		select {
 		case ready := <-c.sendCh:
 			if ready.data != nil {
 				// TODO need async?
+				c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
 				sent := 0
 				for sent < len(ready.data) {
 					n, err := c.conn.Write(ready.data[sent:])

@@ -254,7 +254,7 @@ func GetURLFilters(url *URL, extFactory ExtentionFactory) (clusterFilter Cluster
 	if filters, ok := url.Parameters[FilterKey]; ok {
 		clusterFilters := make([]Filter, 0, 10)
 		endpointFilters = make([]Filter, 0, 10)
-		arr := strings.Split(filters, ",")
+		arr := TrimSplit(filters, ",")
 		for _, f := range arr {
 			filter := extFactory.GetFilter(f)
 			if filter != nil {

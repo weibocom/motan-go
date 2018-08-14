@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rcrowley/go-metrics"
 	motan "github.com/weibocom/motan-go/core"
 	"sync"
 	"sync/atomic"
@@ -58,7 +58,7 @@ type qpsMeter struct {
 }
 
 func getOrRegisterMeter(name string, r metrics.Registry) metrics.Meter {
-	if nil == r {
+	if r == nil {
 		r = metrics.DefaultRegistry
 	}
 	return r.GetOrRegister(name, newQPSMeter).(metrics.Meter)

@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"time"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
-	"time"
 )
 
 type MotanServer struct {
@@ -82,10 +83,16 @@ func (m *MotanServer) run() {
 }
 
 func (m *MotanServer) handleConn(conn net.Conn) {
-	defer motan.HandlePanic(func() {
-		conn.Close()
-	})
+	defer conn.Close()
+	defer motan.HandlePanic(nil)
 	buf := bufio.NewReader(conn)
+
+	var ip string
+	if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		ip = ta.IP.String()
+	} else {
+		ip = getRemoteIP(conn.RemoteAddr().String())
+	}
 
 	for {
 		request, t, err := mpro.DecodeWithTime(buf)
@@ -95,12 +102,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			}
 			break
 		}
-		var ip string
-		if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
-			ip = ta.IP.String()
-		} else {
-			ip = getRemoteIP(conn.RemoteAddr().String())
-		}
+
 		request.Metadata.Store(motan.HostKey, ip)
 		var trace *motan.TraceContext
 		if !request.Header.IsHeartbeat() {
@@ -157,7 +159,13 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
-	conn.Write(resbuf.Bytes())
+
+	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
+	_, err := conn.Write(resbuf.Bytes())
+	if err != nil {
+		vlog.Errorf("connection will close. conn: %s, err:%s\n", conn.RemoteAddr().String(), err.Error())
+		conn.Close()
+	}
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: time.Now()})
 	}
