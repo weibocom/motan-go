@@ -25,7 +25,7 @@ func NoTrace(rid uint64, ext *StringMap) *TraceContext {
 	return nil
 }
 
-// RandomTrace : trace ratio is 1/DefaultRandomTraceBase
+// RandomTrace : trace ratio is 1/RandomTraceBase
 func RandomTrace(rid uint64, ext *StringMap) *TraceContext {
 	n := rand.Intn(RandomTraceBase)
 	if n == 0 {
@@ -105,7 +105,7 @@ func (t *TraceContext) PutResSpan(span *Span) {
 // GetTraceContexts get && remove all TraceContext in holder, and create a new TraceContext holder.
 func GetTraceContexts() []*TraceContext {
 	temp := holder
-	holder = &traceHolder{tcs: make([]*TraceContext, 0, 1024), max: MaxTraceSize}
+	holder = &traceHolder{tcs: make([]*TraceContext, 0, 512), max: MaxTraceSize}
 	if temp != nil {
 		return temp.tcs
 	}

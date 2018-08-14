@@ -109,7 +109,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			trace = motan.TracePolicy(request.Header.RequestID, request.Metadata)
 			if trace != nil {
 				trace.Addr = ip
-				trace.PutReqSpan(&motan.Span{Name: motan.Recieve, Time: t})
+				trace.PutReqSpan(&motan.Span{Name: motan.Receive, Time: t})
 				trace.PutReqSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 			}
 		}

@@ -438,7 +438,7 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 	if sa, ok := h.(SetAgent); ok {
 		sa.SetAgent(a)
 	}
-	http.Handle(k, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc(k, func(w http.ResponseWriter, r *http.Request) {
 		if !PermissionCheck(r) {
 			w.Write([]byte("need permission!"))
 			return
@@ -449,7 +449,7 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 			}
 		}()
 		h.ServeHTTP(w, r)
-	}))
+	})
 	vlog.Infof("add manage server handle path:%s\n", k)
 }
 

@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"errors"
-	"github.com/weibocom/motan-go/log"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -806,7 +807,7 @@ func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 
 func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
 	if request.GetRPCContext(true).Tc != nil {
-		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: ClustFliterEnd, Time: time.Now()})
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: ClustFliter, Time: time.Now()})
 	}
 	return haStrategy.Call(request, loadBalance)
 }

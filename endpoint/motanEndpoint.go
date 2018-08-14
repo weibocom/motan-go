@@ -342,7 +342,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 	}()
 	if s.rc != nil {
 		if s.rc.Tc != nil {
-			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Recieve, Addr: s.channel.address, Time: t})
+			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Receive, Addr: s.channel.address, Time: t})
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {

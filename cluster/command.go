@@ -235,6 +235,10 @@ func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.U
 			result = append(result, url) // add command rule url to the end of result.
 		}
 		result = proceeRoute(result, c.tcCommand.RouteRules)
+		if len(result) == 0 {
+			result = c.ownGroupURLs
+			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v\n", c.cluster.GetURL().GetIdentity(), c.tcCommand.MergeGroups, c.tcCommand.RouteRules)
+		}
 	} else {
 		result = c.ownGroupURLs
 	}
