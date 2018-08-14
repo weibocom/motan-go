@@ -2,9 +2,9 @@ package core
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strconv"
 	"testing"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestParseExportString(t *testing.T) {

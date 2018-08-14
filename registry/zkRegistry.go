@@ -1,15 +1,15 @@
 package registry
 
 import (
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 	"encoding/binary"
 	"github.com/samuel/go-zookeeper/zk"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 const (

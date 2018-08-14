@@ -1,10 +1,10 @@
 package registry
 
 import (
-	"strconv"
-	"strings"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"strconv"
+	"strings"
 )
 
 type DirectRegistry struct {
