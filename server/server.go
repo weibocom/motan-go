@@ -173,12 +173,13 @@ func (f *FilterProviderWarper) Call(request motan.Request) (res motan.Response) 
 	return f.filter.Filter(f.provider, request)
 }
 
-func WarperWithFilter(provider motan.Provider, extFactory motan.ExtentionFactory) motan.Provider {
+func WrapWithFilter(provider motan.Provider, extFactory motan.ExtentionFactory, context *motan.Context) motan.Provider {
 	var lastf motan.EndPointFilter
 	lastf = motan.GetLastEndPointFilter()
 	_, filters := motan.GetURLFilters(provider.GetURL(), extFactory)
 	for _, f := range filters {
 		if ef, ok := f.NewFilter(provider.GetURL()).(motan.EndPointFilter); ok {
+			motan.CanSetContext(ef, context)
 			ef.SetNext(lastf)
 			lastf = ef
 		}
