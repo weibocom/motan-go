@@ -2,13 +2,12 @@ package ha
 
 import (
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
-	metric "github.com/rcrowley/go-metrics"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 )
 
 const (
@@ -21,10 +20,6 @@ const (
 
 type BackupRequestHA struct {
 	url *motan.URL
-	// metric
-	registry   metric.Registry
-	samples    map[string]metric.Sample
-	sampleLock sync.RWMutex
 	// counter
 	curRoundTotalCount int
 	curRoundRetryCount int
@@ -33,13 +28,11 @@ type BackupRequestHA struct {
 }
 
 func (br *BackupRequestHA) Initialize() {
-	br.registry = metric.NewRegistry()
-	br.samples = make(map[string]metric.Sample)
 	br.lastResetTime = time.Now().UnixNano()
 }
 
 func (br *BackupRequestHA) GetName() string {
-	return "backupRequestHA"
+	return BackupRequest
 }
 
 func (br *BackupRequestHA) GetURL() *motan.URL {
@@ -61,16 +54,18 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	if retries == 0 {
 		return br.doCall(request, epList[0])
 	}
-
+	item := metrics.GetStatItem(request.GetAttachment("M_g"), request.GetAttachment("M_p"))
+	if item == nil || item.LastSnapshot() == nil {
+		return br.doCall(request, epList[0])
+	}
 	var resp motan.Response
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
 	backupRequestMaxRetryRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestMaxRetryRatio", defaultBackupRequestMaxRetryRatio)
 	requestTimeout := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "requestTimeout", defaultRequestTimeout)
 
 	successCh := make(chan motan.Response, retries+1)
-	methodKey := br.getMethodKey(request)
-	histogram := metric.GetOrRegisterHistogram(methodKey, br.registry, br.getSample(methodKey))
-	delay := int(histogram.Percentile(float64(backupRequestDelayRatio) / 100.0))
+
+	delay := (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
 	if delay < 10 {
 		delay = 10 // min 10ms
 	}
@@ -88,17 +83,15 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 		// log & clone backup request
 		pr := request
 		if i > 0 {
-			vlog.Infof("[backup request ha] delay %s request id: %d, service: %s, method: %s\n", strconv.Itoa(delay), request.GetRequestID(), request.GetServiceName(), methodKey)
+			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s\n", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
 			pr = request.Clone().(motan.Request)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
 		go func(postRequest motan.Request, endpoint motan.EndPoint, errorCh chan motan.Response) {
 			defer motan.HandlePanic(nil)
-			start := time.Now().UnixNano()
 			response := br.doCall(postRequest, endpoint)
 			if response != nil && (response.GetException() == nil || response.GetException().ErrType == motan.BizException) {
 				successCh <- response
-				histogram.Update((time.Now().UnixNano() - start) / 1e6)
 			} else {
 				errorCh <- response
 			}
@@ -159,20 +152,11 @@ func (br *BackupRequestHA) tryAcquirePermit(thresholdLimit int) bool {
 	return true
 }
 
-func (br *BackupRequestHA) getMethodKey(request motan.Request) string {
-	return fmt.Sprintf("%s(%s)", request.GetMethod(), request.GetMethodDesc())
-}
-
-func (br *BackupRequestHA) getSample(key string) metric.Sample {
-	br.sampleLock.RLock()
-	if sample, ok := br.samples[key]; ok {
-		br.sampleLock.RUnlock()
-		return sample
+func getKey(request motan.Request) string {
+	role := "motan-client"
+	ctx := request.GetRPCContext(false)
+	if ctx != nil && ctx.Proxy {
+		role = "motan-client-agent"
 	}
-	br.sampleLock.RUnlock()
-	br.sampleLock.Lock()
-	newSample := metric.NewExpDecaySample(1028, 0)
-	br.samples[key] = newSample
-	br.sampleLock.Unlock()
-	return newSample
+	return role + ":" + request.GetAttachment("M_s") + ":" + request.GetMethod()
 }

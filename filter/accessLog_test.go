@@ -5,29 +5,53 @@ import (
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
-	endpoint "github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/provider"
+)
+
+var (
+	testService = "com.weibo.testService"
+	testGroup   = "testGroup"
+	testMethod  = "testMethod"
 )
 
 func TestFilter(t *testing.T) {
+	factory := initFactory()
+	f := factory.GetFilter(AccessLog)
+	if f == nil {
+		t.Fatal("can not find accesslog filter!")
+	}
+	url := mockURL()
+	f = f.NewFilter(url)
+	ef := f.(motan.EndPointFilter)
+	ef.SetNext(motan.GetLastEndPointFilter())
+	caller := factory.GetEndPoint(url)
+	request := defaultRequest()
+	res := ef.Filter(caller, request)
+	fmt.Printf("res:%+v", res)
+}
+
+func initFactory() motan.ExtentionFactory {
 	defaultExtFactory := &motan.DefaultExtentionFactory{}
 	defaultExtFactory.Initialize()
 
 	RegistDefaultFilters(defaultExtFactory)
 	endpoint.RegistDefaultEndpoint(defaultExtFactory)
-	f := defaultExtFactory.GetFilter("accessLog")
-	if f == nil {
-		t.Fatal("can not find accesslog filter!")
-	}
-	url := &motan.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint"}
-	f = f.NewFilter(url)
-	ef := f.(motan.EndPointFilter)
-	ef.SetNext(motan.GetLastEndPointFilter())
-	caller := defaultExtFactory.GetEndPoint(url)
-	arguments := []interface{}{url, "xxx", 123, true}
-	attachments := motan.NewStringMap(0)
-	attachments.Store("key1", "value1")
-	attachments.Store("key2", "value2")
-	request := &motan.MotanRequest{RequestID: 11234, ServiceName: "com.weibo.TestService", Method: "testMethod", Arguments: arguments, Attachment: attachments}
-	res := ef.Filter(caller, request)
-	fmt.Printf("res:%+v", res)
+	provider.RegistDefaultProvider(defaultExtFactory)
+	return defaultExtFactory
+}
+
+func mockURL() *motan.URL {
+	url := &motan.URL{Host: "127.0.0.1", Port: 7888, Protocol: endpoint.Mock}
+	url.PutParam(motan.ProviderKey, provider.Mock)
+	return url
+}
+
+func defaultRequest() *motan.MotanRequest {
+	return getRequest(testService, testGroup, testMethod)
+}
+func getRequest(service string, group string, method string) *motan.MotanRequest {
+	r := &motan.MotanRequest{ServiceName: service, Method: method}
+	r.SetAttachment("M_g", group)
+	return r
 }

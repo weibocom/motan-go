@@ -89,7 +89,7 @@ func (e *FailfastFilter) GetIndex() int {
 }
 
 func (e *FailfastFilter) GetName() string {
-	return "failfast"
+	return FailFast
 }
 
 func (e *FailfastFilter) HasNext() bool {

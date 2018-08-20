@@ -1,17 +1,11 @@
 package filter
 
 import (
-	"fmt"
-	"strings"
-	"sync"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-
 	"github.com/weibocom/motan-go/metrics"
 )
-
-var initSync sync.Once
 
 type MetricsFilter struct {
 	next motan.EndPointFilter
@@ -26,7 +20,7 @@ func (m *MetricsFilter) NewFilter(url *motan.URL) motan.Filter {
 }
 
 func (m *MetricsFilter) GetName() string {
-	return "metrics"
+	return Metrics
 }
 
 func (m *MetricsFilter) HasNext() bool {
@@ -53,62 +47,57 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 }
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	role := "server"
+	start := time.Now()
+	response := m.GetNext().Filter(caller, request)
+
+	proxy := false
+	provider := false
+	ctx := request.GetRPCContext(false)
+	if ctx != nil {
+		proxy = ctx.Proxy
+	}
+	// get role
+	role := "motan-client"
 	switch caller.(type) {
 	case motan.Provider:
-		role = "server-agent"
-	case motan.EndPoint:
-		role = "client-agent"
-	}
-
-	start := time.Now()
-
-	response := m.GetNext().Filter(caller, request)
-	var key string
-	if role == "server-agent" {
-		application := caller.GetURL().GetParam(motan.ApplicationKey, "")
-		key = strings.Map(func(r rune) rune {
-			if metrics.Charmap[r] {
-				return '_'
-			}
-			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, application, request.GetAttachment("M_g"), request.GetAttachment("M_p"), request.GetMethod()))
-	} else {
-		key = strings.Map(func(r rune) rune {
-			if metrics.Charmap[r] {
-				return '_'
-			}
-			return r
-		}, fmt.Sprintf("motan-%s:%s:%s:%s:%s", role, request.GetAttachment("M_s"), request.GetAttachment("M_g"), request.GetAttachment("M_p"), request.GetMethod()))
-	}
-	keyCount := key + ".total_count"
-	metrics.AddCounter(keyCount, 1) //total_count
-
-	if response.GetException() != nil { //err_count
-		exception := response.GetException()
-		if exception.ErrType == motan.BizException {
-			bizErrCountKey := key + ".biz_error_count"
-			metrics.AddCounter(bizErrCountKey, 1)
+		provider = true
+		if proxy {
+			role = "motan-server-agent"
 		} else {
-			otherErrCountKey := key + ".other_error_count"
-			metrics.AddCounter(otherErrCountKey, 1)
+			role = "motan-server"
+		}
+	case motan.EndPoint:
+		if proxy {
+			role = "motan-client-agent"
 		}
 	}
-
-	end := time.Now()
-	cost := end.Sub(start).Nanoseconds() / 1e6
-	metrics.AddCounter(key+"."+metrics.ElapseTimeString(cost), 1)
-
-	if cost > 200 {
-		metrics.AddCounter(key+".slow_count", 1)
+	//get application
+	application := request.GetAttachment("M_s")
+	if provider {
+		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
-
-	metrics.AddHistograms(key, cost)
+	key := role + ":" + application + ":" + request.GetMethod()
+	addMetric(request.GetAttachment("M_g"), request.GetAttachment("M_p"), key, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
 
+func addMetric(group string, service string, key string, cost int64, response motan.Response) {
+	metrics.AddCounter(group, service, key+".total_count", 1) //total_count
+	if response.GetException() != nil {                       //err_count
+		exception := response.GetException()
+		if exception.ErrType == motan.BizException {
+			metrics.AddCounter(group, service, key+".biz_error_count", 1)
+		} else {
+			metrics.AddCounter(group, service, key+".other_error_count", 1)
+		}
+	}
+	metrics.AddCounter(group, service, key+"."+metrics.ElapseTimeString(cost), 1)
+	if cost > 200 {
+		metrics.AddCounter(group, service, key+".slow_count", 1)
+	}
+	metrics.AddHistograms(group, service, key, cost)
+}
+
 func (m *MetricsFilter) SetContext(context *motan.Context) {
-	initSync.Do(func() {
-		metrics.Run(context.Config)
-	})
+	metrics.StartReporter(context)
 }

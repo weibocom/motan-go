@@ -72,7 +72,7 @@ func (m *MotanCluster) InitCluster() bool {
 	if m.Filters == nil {
 		m.Filters = make([]motan.Filter, 0)
 	}
-	//TODO weather has available refers
+	//TODO whether has available refers
 	m.available = true
 	m.closed = false
 

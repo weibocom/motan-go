@@ -1,9 +1,10 @@
 package filter
 
 import (
+	"time"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	"time"
 )
 
 type AccessLogEndPointFilter struct {
@@ -15,7 +16,7 @@ func (t *AccessLogEndPointFilter) GetIndex() int {
 }
 
 func (t *AccessLogEndPointFilter) GetName() string {
-	return "accessLog"
+	return AccessLog
 }
 
 func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {

@@ -1,15 +1,15 @@
 package core
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
-
-	"errors"
-	"github.com/weibocom/motan-go/log"
 	"sync/atomic"
+	"time"
 	"unsafe"
+
+	"github.com/weibocom/motan-go/log"
 )
 
 const (

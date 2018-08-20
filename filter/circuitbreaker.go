@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"errors"
+
 	"github.com/afex/hystrix-go/hystrix"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -34,7 +35,7 @@ func (t *CircuitBreakerEndPointFilter) GetIndex() int {
 }
 
 func (t *CircuitBreakerEndPointFilter) GetName() string {
-	return "circuitbreaker"
+	return CircuitBreaker
 }
 
 func (t *CircuitBreakerEndPointFilter) NewFilter(url *motan.URL) motan.Filter {

@@ -1,30 +1,35 @@
 package metrics
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 
-	"github.com/rcrowley/go-metrics"
 	"github.com/weibocom/motan-go/log"
 )
 
 const (
-	messageMaxLen  = 65000
-	graphiteWriter = "graphite"
+	messageMaxLen = 5 * 1024
 )
 
 var (
-	Charmap = map[rune]bool{
-		'.': true,
-		'/': true}
+	sla = map[string]float64{
+		"p50":   0.5,
+		"p75":   0.75,
+		"p95":   0.95,
+		"p99":   0.99,
+		"p999":  0.999,
+		"p9999": 0.9999}
+	minKeyLength = 3
 )
 
 type graphite struct {
-	Host string
-	Port int
-	Name string
+	Host    string
+	Port    int
+	Name    string
+	localIP string
 }
 
 func newGraphite(ip, pool string, port int) *graphite {
@@ -35,80 +40,61 @@ func newGraphite(ip, pool string, port int) *graphite {
 	}
 }
 
-func (g *graphite) Write(snap metrics.Registry) error {
+func (g *graphite) Write(snapshots []Snapshot) error {
 	conn, err := net.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
 	if err != nil {
+		vlog.Warningf("open graphite conn fail. err:%s\n", err.Error())
 		return err
 	}
-	ip := strings.SplitN(conn.LocalAddr().String(), ":", 2)[0]
-	ip = strings.Replace(ip, ".", "_", -1)
-	messages := genGraphiteMessages(ip, snap)
+	defer conn.Close()
+	if g.localIP == "" {
+		g.localIP = strings.Replace(strings.Split(conn.LocalAddr().String(), ":")[0], ".", "_", -1)
+	}
+
+	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
 		_, err = conn.Write([]byte(message))
 		if err != nil {
-			vlog.Errorln("graphite send message error: %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
+	messages := make([]string, 0, 16)
+	var buf bytes.Buffer
+	buf.Grow(messageMaxLen)
+
+	for _, snap := range snapshots {
+		if snap.IsReport() {
+			snap.RangeKey(func(k string) {
+				var segment string
+				pni := strings.SplitN(k, ":", minKeyLength)
+				if len(pni) < minKeyLength {
+					return
+				}
+				if snap.IsHistogram(k) { //histogram
+					for slak, slav := range sla {
+						segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
+							pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], slak, snap.Percentile(k, slav))
+					}
+					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
+				} else { //counter
+					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Count(k))
+				}
+				if buf.Len() > 0 && buf.Len()+len(segment) > messageMaxLen {
+					messages = append(messages, buf.String())
+					buf = bytes.Buffer{}
+					buf.Grow(messageMaxLen)
+				}
+				buf.WriteString(segment)
+			})
 		}
 	}
 
-	return conn.Close()
-}
-
-func genGraphiteMessages(localIP string, snap metrics.Registry) []string {
-	messages := make([]string, 0)
-	segments := make([]string, 0)
-	segmentsLength := 0
-
-	snap.Each(func(key string, i interface{}) {
-		var segment string
-		pni := strings.SplitN(key, ":", 5)
-
-		switch m := i.(type) {
-
-		case metrics.Counter:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
-		case metrics.Meter:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d.00|c\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Count())
-		case metrics.Timer:
-			/*TODO
-			 */
-		case metrics.Gauge:
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], m.Value())
-			//	case metrics.GaugeFloat64:
-		case metrics.Histogram:
-			ps := m.Percentiles([]float64{0.5, 0.75, 0.95, 0.99, 0.999, 0.9999})
-			segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p50", ps[0])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p75", ps[1])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p95", ps[2])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p99", ps[3])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p999", ps[4])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "p9999", ps[5])
-			segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
-				pni[0], pni[1], pni[2], localIP, pni[3], pni[4], "avg_time", m.Mean())
-
-		default:
-			return
-		}
-		if segmentsLength+len(segment) > messageMaxLen {
-			message := strings.Join(segments, "")
-			messages = append(messages, message)
-			segments = make([]string, 0)
-			segmentsLength = 0
-		}
-		segments = append(segments, segment)
-		segmentsLength += len(segment)
-	})
-
-	message := strings.Join(segments, "")
-	messages = append(messages, message)
-
+	messages = append(messages, buf.String())
 	return messages
 }

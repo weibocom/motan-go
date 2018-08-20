@@ -3,6 +3,8 @@ package motan
 import (
 	"sync"
 
+	"net/http"
+
 	motan "github.com/weibocom/motan-go/core"
 	endpoint "github.com/weibocom/motan-go/endpoint"
 	filter "github.com/weibocom/motan-go/filter"
@@ -12,7 +14,6 @@ import (
 	registry "github.com/weibocom/motan-go/registry"
 	serialize "github.com/weibocom/motan-go/serialize"
 	server "github.com/weibocom/motan-go/server"
-	"net/http"
 )
 
 var (
