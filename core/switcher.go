@@ -1,0 +1,105 @@
+package core
+
+import (
+	"sync"
+
+	"github.com/weibocom/motan-go/log"
+)
+
+var (
+	manager = &SwitcherManager{switcherMap: make(map[string]*Switcher)}
+)
+
+type SwitcherManager struct {
+	switcherLock sync.RWMutex
+	switcherMap  map[string]*Switcher
+}
+
+type SwitcherListener interface {
+	Notify(value bool)
+}
+
+func GetSwitcherManager() *SwitcherManager {
+	return manager
+}
+
+func (s *SwitcherManager) Register(name string, value bool, listeners ...SwitcherListener) {
+	if name == "" {
+		vlog.Warningln("[switcher] register failed: switcher name is empty")
+		return
+	}
+	s.switcherLock.Lock()
+	defer s.switcherLock.Unlock()
+	if _, ok := s.switcherMap[name]; ok {
+		vlog.Warningf("[switcher] register failed: %s has been registered\n", name)
+		return
+	}
+	newSwitcher := &Switcher{name: name, value: value, listeners: []SwitcherListener{}}
+	newSwitcher.Watch(listeners...)
+	s.switcherMap[name] = newSwitcher
+	vlog.Infof("[switcher] register %s success, value:%v, len(listeners):%d\n", name, value, len(listeners))
+}
+
+func (s *SwitcherManager) GetAllSwitchers() map[string]bool {
+	s.switcherLock.RLock()
+	defer s.switcherLock.RUnlock()
+	result := make(map[string]bool)
+	for key, sw := range s.switcherMap {
+		result[key] = sw.value
+	}
+	return result
+}
+
+func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
+	s.switcherLock.RLock()
+	defer s.switcherLock.RUnlock()
+	if sw, ok := s.switcherMap[name]; ok {
+		return sw
+	}
+	vlog.Warningf("[switcher] get switcher failed: %s is not registered\n", name)
+	return nil
+}
+
+type Switcher struct {
+	name         string
+	value        bool
+	listenerLock sync.RWMutex
+	listeners    []SwitcherListener
+}
+
+func (s *Switcher) GetName() string {
+	return s.name
+}
+
+func (s *Switcher) IsOpen() bool {
+	return s.value
+}
+
+func (s *Switcher) Watch(listeners ...SwitcherListener) {
+	s.listenerLock.Lock()
+	defer s.listenerLock.Unlock()
+	for _, listener := range listeners {
+		s.listeners = append(s.listeners, listener)
+	}
+	vlog.Infof("[switcher] watch %s success. len(listeners):%d\n", s.GetName(), len(listeners))
+}
+
+func (s *Switcher) SetValue(value bool) {
+	name := s.GetName()
+	if value == s.value {
+		return
+	}
+	s.value = value
+	vlog.Infof("[switcher] value changed, name:%s, value:%v\n", name, value)
+	listeners := s.listeners
+	if listeners != nil {
+		go func() {
+			s.listenerLock.RLock()
+			defer s.listenerLock.RUnlock()
+			for _, listener := range listeners {
+				listener.Notify(value)
+			}
+			vlog.Infof("[switcher] notify %s all listeners. len(listeners):%d\n", name, len(listeners))
+		}()
+	}
+}

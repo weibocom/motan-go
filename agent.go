@@ -105,6 +105,7 @@ func (a *Agent) initParam() {
 		logdir = "."
 	}
 	initLog(logdir)
+	registerSwitchers(a.Context)
 
 	port := *motan.Port
 	if port == 0 && section != nil && section["port"] != nil {
@@ -231,7 +232,7 @@ func (a *Agent) registerAgent() {
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL)
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL.GetIdentity())
 		}
 	}
 }
@@ -371,6 +372,14 @@ func initLog(logdir string) {
 	flag.Set("log_dir", logdir)
 	vlog.FlushInterval = 1 * time.Second
 	vlog.LogInit(nil)
+}
+
+func registerSwitchers(c *motan.Context) {
+	switchers, _ := c.Config.GetSection(motan.SwitcherSection)
+	s := motan.GetSwitcherManager()
+	for n, v := range switchers {
+		s.Register(n.(string), v.(bool))
+	}
 }
 
 func getDefaultResponse(requestid uint64, errmsg string) *motan.MotanResponse {

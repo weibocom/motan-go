@@ -81,8 +81,8 @@ func (i *InfoHandler) getReferService() []byte {
 		available := cls.IsAvailable()
 		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
 	}
-	retData := &jsonRetData{Code: 200, Body: mbody}
-	data, _ := json.Marshal(&retData)
+	retData := jsonRetData{Code: 200, Body: mbody}
+	data, _ := json.Marshal(retData)
 	return data
 }
 
@@ -134,7 +134,6 @@ func (d *DebugHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			Index(rw, req)
 		}
 	}
-
 }
 
 func MeshTrace(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +237,48 @@ func (c *CustomTrace) Trace(rid uint64, ext *motan.StringMap) *motan.TraceContex
 		}
 	}
 	return motan.NewTraceContext(rid)
+}
+
+type SwitcherHandle struct{}
+
+func (s *SwitcherHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	name := r.FormValue("name")
+	value := r.FormValue("value")
+	switcher := motan.GetSwitcherManager()
+	switch r.URL.Path {
+	case "/switcher/set":
+		if name == "" {
+			fmt.Fprintf(w, "Please specify a switcher name!")
+			return
+		}
+		if value == "" {
+			fmt.Fprintf(w, "Please specify a switcher value!")
+			return
+		}
+		valueBool, err := strconv.ParseBool(value)
+		if err != nil {
+			fmt.Fprintf(w, "Invalid switcher value(must be Bool): %s", value)
+			return
+		}
+		switcher.GetSwitcher(name).SetValue(valueBool)
+		fmt.Fprintf(w, "Set switcher %s value to %s !", name, value)
+	case "/switcher/get":
+		if name == "" {
+			fmt.Fprintf(w, "Please specify a switcher name!")
+			return
+		}
+		s := switcher.GetSwitcher(name)
+		if s == nil {
+			fmt.Fprintf(w, "Not a registered switcher, name: %s", name)
+			return
+		}
+		value := s.IsOpen()
+		fmt.Fprintf(w, "Switcher value for %s is %v!", name, value)
+	case "/switcher/getAll":
+		result := switcher.GetAllSwitchers()
+		b, _ := json.Marshal(result)
+		w.Write(b)
+	}
 }
 
 //------------ below code is copied from net/http/pprof -------------

@@ -46,7 +46,7 @@ func (g *graphite) Write(snap metrics.Registry) error {
 	for _, message := range messages {
 		_, err = conn.Write([]byte(message))
 		if err != nil {
-			vlog.Errorln("graphite send message error: %v", err)
+			vlog.Errorf("graphite send message error: %v\n", err)
 		}
 	}
 

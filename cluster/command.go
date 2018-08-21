@@ -26,8 +26,8 @@ const (
 	RuleProtocol = "rule"
 )
 
-// CommandRegistryWarper warper registry for every cluster
-type CommandRegistryWarper struct {
+// CommandRegistryWrapper wrapper registry for every cluster
+type CommandRegistryWrapper struct {
 	cluster            *MotanCluster
 	registry           motan.Registry
 	notifyListener     motan.NotifyListener // e.g. cluster
@@ -58,7 +58,7 @@ type Command struct {
 type serviceListener struct {
 	referURL *motan.URL
 	urls     []*motan.URL
-	crw      *CommandRegistryWarper
+	crw      *CommandRegistryWrapper
 }
 
 func (s *serviceListener) GetIdentity() string {
@@ -123,35 +123,35 @@ func ParseCommand(commandInfo string) *Command {
 	return command
 }
 
-func GetCommandRegistryWarper(cluster *MotanCluster, registry motan.Registry) motan.Registry {
-	cmdRegistry := &CommandRegistryWarper{cluster: cluster, registry: registry}
+func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) motan.Registry {
+	cmdRegistry := &CommandRegistryWrapper{cluster: cluster, registry: registry}
 	cmdRegistry.ownGroupURLs = make([]*motan.URL, 0)
 	cmdRegistry.otherGroupListener = make(map[string]*serviceListener)
 	cmdRegistry.cluster = cluster
 	return cmdRegistry
 }
 
-func (c *CommandRegistryWarper) Register(serverURL *motan.URL) {
+func (c *CommandRegistryWrapper) Register(serverURL *motan.URL) {
 	c.registry.Register(serverURL)
 }
 
-func (c *CommandRegistryWarper) UnRegister(serverURL *motan.URL) {
+func (c *CommandRegistryWrapper) UnRegister(serverURL *motan.URL) {
 	c.registry.UnRegister(serverURL)
 }
 
-func (c *CommandRegistryWarper) Available(serverURL *motan.URL) {
+func (c *CommandRegistryWrapper) Available(serverURL *motan.URL) {
 	c.registry.Available(serverURL)
 }
 
-func (c *CommandRegistryWarper) Unavailable(serverURL *motan.URL) {
+func (c *CommandRegistryWrapper) Unavailable(serverURL *motan.URL) {
 	c.registry.Unavailable(serverURL)
 }
 
-func (c *CommandRegistryWarper) GetRegisteredServices() []*motan.URL {
+func (c *CommandRegistryWrapper) GetRegisteredServices() []*motan.URL {
 	return c.registry.GetRegisteredServices()
 }
 
-func (c *CommandRegistryWarper) Subscribe(url *motan.URL, listener motan.NotifyListener) {
+func (c *CommandRegistryWrapper) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	c.notifyListener = listener
 	c.registry.Subscribe(url, c)
 	if cr, ok := c.registry.(motan.DiscoverCommand); ok {
@@ -159,7 +159,7 @@ func (c *CommandRegistryWarper) Subscribe(url *motan.URL, listener motan.NotifyL
 	}
 }
 
-func (c *CommandRegistryWarper) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
+func (c *CommandRegistryWrapper) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 	c.registry.Unsubscribe(url, c)
 	if cr, ok := c.registry.(motan.DiscoverCommand); ok {
 		cr.UnSubscribeCommand(url, c)
@@ -167,7 +167,7 @@ func (c *CommandRegistryWarper) Unsubscribe(url *motan.URL, listener motan.Notif
 	c.clear()
 }
 
-func (c *CommandRegistryWarper) Discover(url *motan.URL) []*motan.URL {
+func (c *CommandRegistryWrapper) Discover(url *motan.URL) []*motan.URL {
 	c.ownGroupURLs = c.registry.Discover(url)
 	var result []*motan.URL
 	if cr, ok := c.registry.(motan.DiscoverCommand); ok {
@@ -180,15 +180,15 @@ func (c *CommandRegistryWarper) Discover(url *motan.URL) []*motan.URL {
 	return result
 }
 
-func (c *CommandRegistryWarper) StartSnapshot(conf *motan.SnapshotConf) {
+func (c *CommandRegistryWrapper) StartSnapshot(conf *motan.SnapshotConf) {
 	c.registry.StartSnapshot(conf)
 }
 
-func (c *CommandRegistryWarper) GetURL() *motan.URL {
+func (c *CommandRegistryWrapper) GetURL() *motan.URL {
 	return c.registry.GetURL()
 }
 
-func (c *CommandRegistryWarper) clear() {
+func (c *CommandRegistryWrapper) clear() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	c.tcCommand = nil
@@ -202,7 +202,7 @@ func (c *CommandRegistryWarper) clear() {
 	c.otherGroupListener = make(map[string]*serviceListener)
 }
 
-func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.URL {
+func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.URL {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	result := make([]*motan.URL, 0)
@@ -222,7 +222,7 @@ func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.U
 					result = append(result, u)
 				}
 			} else {
-				vlog.Warningf("TCcommand merge group not found. refer:%s, group notfound: %s, TCcommand %v\n", c.cluster.GetURL(), g[0], c.tcCommand)
+				vlog.Warningf("TC command merge group not found. refer:%s, group not found: %s, TC command %v\n", c.cluster.GetURL().GetIdentity(), g[0], c.tcCommand)
 				continue
 			}
 			if buffer.Len() > 0 {
@@ -234,7 +234,7 @@ func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.U
 			url := buildRuleURL(buffer.String())
 			result = append(result, url) // add command rule url to the end of result.
 		}
-		result = proceeRoute(result, c.tcCommand.RouteRules)
+		result = processRoute(result, c.tcCommand.RouteRules)
 		if len(result) == 0 {
 			result = c.ownGroupURLs
 			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v\n", c.cluster.GetURL().GetIdentity(), c.tcCommand.MergeGroups, c.tcCommand.RouteRules)
@@ -242,21 +242,20 @@ func (c *CommandRegistryWarper) getResultWithCommand(neednotify bool) []*motan.U
 	} else {
 		result = c.ownGroupURLs
 	}
-	if neednotify {
+	if needNotify {
 		c.notifyListener.Notify(c.registry.GetURL(), result)
 	}
-	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t\n", c.cluster.GetURL().GetIdentity(), c.tcCommand != nil, c.degradeCommand != nil, len(result), neednotify)
+	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t\n", c.cluster.GetURL().GetIdentity(), c.tcCommand != nil, c.degradeCommand != nil, len(result), needNotify)
 	return result
-
 }
 
-func proceeRoute(urls []*motan.URL, routers []string) []*motan.URL {
+func processRoute(urls []*motan.URL, routers []string) []*motan.URL {
 	if len(urls) > 0 && len(routers) > 0 {
 		lastURLs := urls
 		for _, r := range routers {
 			rs := strings.Split(r, "to")
 			if len(rs) != 2 {
-				vlog.Warningf("worng command router:%s is ignored!\n", r)
+				vlog.Warningf("wrong command router:%s is ignored!\n", r)
 				continue
 			}
 			from := strings.TrimSpace(rs[0])
@@ -304,7 +303,7 @@ func buildRuleURL(weight string) *motan.URL {
 	return url
 }
 
-func (c *CommandRegistryWarper) processCommand(commandType int, commandInfo string) bool {
+func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo string) bool {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	needNotify := false
@@ -326,7 +325,7 @@ func (c *CommandRegistryWarper) processCommand(commandType int, commandInfo stri
 		return false
 	}
 
-	// rebuild clientcommand
+	// rebuild clientCommand
 	var newTcCommand *ClientCommand
 	var newDegradeCommand *ClientCommand
 	if c.agentCommandInfo != "" { // agent command first
@@ -363,11 +362,11 @@ func (c *CommandRegistryWarper) processCommand(commandType int, commandInfo stri
 				continue
 			}
 			if listener, ok := c.otherGroupListener[g[0]]; ok { // already exist
-				vlog.Infof("commandwarper %s process tc command. reuse group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
+				vlog.Infof("commandWrapper %s process tc command. reuse group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
 				newOtherGroupListener[g[0]] = listener
 				delete(c.otherGroupListener, g[0])
 			} else {
-				vlog.Infof("commandwarper %s process tc command. subscribe new group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
+				vlog.Infof("commandWrapper %s process tc command. subscribe new group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
 				newGroupURL := c.cluster.GetURL().Copy()
 				newGroupURL.Group = g[0]
 				l := &serviceListener{crw: c, referURL: newGroupURL}
@@ -400,7 +399,7 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 	//only one command of a type will enable in same service. depends on the index of command
 	cmd := ParseCommand(commandInfo)
 	if cmd == nil {
-		vlog.Warningf("pasre command fail, command is ignored. command info: %s\n", commandInfo)
+		vlog.Warningf("parse command fail, command is ignored. command info: %s\n", commandInfo)
 	} else {
 		var cmds CmdList = cmd.ClientCommandList
 		sort.Sort(cmds)
@@ -412,7 +411,7 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 						temp := c
 						tcCommand = &temp
 					} else {
-						vlog.Warningf("traffic control command will igore by priority. command : %v", c)
+						vlog.Warningf("traffic control command will ignore by priority. command : %v", c)
 					}
 				case CMDDegrade:
 					temp := c
@@ -424,42 +423,42 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 	return tcCommand, degradeCommand
 }
 
-func (c *CommandRegistryWarper) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
+func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
 	vlog.Infof("%s receive Command notify. type:%d, command:%s\n", c.cluster.GetURL().GetIdentity(), commandType, commandInfo)
-	neednotify := c.processCommand(commandType, commandInfo)
-	if neednotify {
-		c.getResultWithCommand(neednotify)
+	needNotify := c.processCommand(commandType, commandInfo)
+	if needNotify {
+		c.getResultWithCommand(needNotify)
 	}
 }
 
-func (c *CommandRegistryWarper) Notify(registryURL *motan.URL, urls []*motan.URL) {
-	vlog.Infof("CommandRegistryWarper notify urls size is %d. refer: %v, registry: %v\n", len(urls), c.cluster.GetURL(), registryURL)
+func (c *CommandRegistryWrapper) Notify(registryURL *motan.URL, urls []*motan.URL) {
+	vlog.Infof("CommandRegistryWrapper notify urls size is %d. refer: %v, registry: %v\n", len(urls), c.cluster.GetURL(), registryURL)
 	c.ownGroupURLs = urls
-	neednotify := false
+	needNotify := false
 	if c.tcCommand != nil {
 		for _, group := range c.tcCommand.MergeGroups {
 			g := strings.Split(group, ":")
 			if g[0] == c.cluster.GetURL().Group {
-				neednotify = true
+				needNotify = true
 			}
 		}
 	} else {
-		neednotify = true
+		needNotify = true
 	}
 
-	if neednotify {
-		c.getResultWithCommand(neednotify)
+	if needNotify {
+		c.getResultWithCommand(needNotify)
 	}
 }
 
-func (c *CommandRegistryWarper) SetURL(url *motan.URL) {
+func (c *CommandRegistryWrapper) SetURL(url *motan.URL) {
 	c.registry.SetURL(url)
 }
 
-func (c *CommandRegistryWarper) GetName() string {
-	return "commandwarp:" + c.registry.GetName()
+func (c *CommandRegistryWrapper) GetName() string {
+	return "commandWrapper:" + c.registry.GetName()
 }
 
-func (c *CommandRegistryWarper) GetIdentity() string {
+func (c *CommandRegistryWrapper) GetIdentity() string {
 	return c.notifyListener.GetIdentity()
 }
