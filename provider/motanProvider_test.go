@@ -1,9 +1,10 @@
 package provider
 
 import (
+	"testing"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/endpoint"
-	"testing"
 )
 
 const (

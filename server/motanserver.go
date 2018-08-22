@@ -6,7 +6,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"

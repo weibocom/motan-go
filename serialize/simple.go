@@ -2,10 +2,11 @@ package serialize
 
 import (
 	"errors"
-	motan "github.com/weibocom/motan-go/core"
 	"io"
 	"math"
 	"reflect"
+
+	motan "github.com/weibocom/motan-go/core"
 )
 
 // serialize type

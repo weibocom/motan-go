@@ -1,13 +1,13 @@
 package lb
 
 import (
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	motan "github.com/weibocom/motan-go/core"
-	"math/rand"
 )
 
 // ext name

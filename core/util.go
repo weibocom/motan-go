@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"math/rand"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/weibocom/motan-go/log"
-	"runtime/debug"
 )
 
 var localIPs = make([]string, 0)

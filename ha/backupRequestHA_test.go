@@ -1,9 +1,10 @@
 package ha
 
 import (
+	"testing"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/lb"
-	"testing"
 )
 
 func TestBackupRequestHA_Call(t *testing.T) {

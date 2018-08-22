@@ -5,9 +5,8 @@ import (
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
-
-	ha "github.com/weibocom/motan-go/ha"
-	lb "github.com/weibocom/motan-go/lb"
+	"github.com/weibocom/motan-go/ha"
+	"github.com/weibocom/motan-go/lb"
 )
 
 var (

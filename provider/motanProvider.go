@@ -2,9 +2,10 @@ package provider
 
 import (
 	"errors"
+	"time"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	"time"
 )
 
 type MotanProvider struct {

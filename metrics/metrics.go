@@ -5,11 +5,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rcrowley/go-metrics"
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-
-	"github.com/rcrowley/go-metrics"
 )
 
 const (

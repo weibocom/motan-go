@@ -1,10 +1,11 @@
 package registry
 
 import (
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"strconv"
 	"strings"
+
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 type DirectRegistry struct {

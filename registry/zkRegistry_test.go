@@ -1,11 +1,12 @@
 package registry
 
 import (
-	"github.com/stretchr/testify/assert"
-	motan "github.com/weibocom/motan-go/core"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	motan "github.com/weibocom/motan-go/core"
 )
 
 var (
