@@ -29,7 +29,7 @@ type MSContext struct {
 
 const (
 	defaultServerPort = "9982"
-	defaultProtocal   = "motan2"
+	defaultProtocol   = "motan2"
 )
 
 var (
@@ -90,7 +90,7 @@ func (m *MSContext) export(url *motan.URL) {
 		//TODO multi protocol support. convert to multi url
 		export := url.GetParam(motan.ExportKey, "")
 		port := defaultServerPort
-		protocol := defaultProtocal
+		protocol := defaultProtocol
 		if export != "" {
 			s := motan.TrimSplit(export, ":")
 			if len(s) == 1 {
@@ -141,7 +141,7 @@ func (m *MSContext) export(url *motan.URL) {
 			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
 		} else {
 			vlog.Infof("service export success. url:%v\n", url)
-			for _, r := range exporter.Registrys {
+			for _, r := range exporter.Registries {
 				rid := r.GetURL().GetIdentity()
 				if _, ok := m.registries[rid]; !ok {
 					m.registries[rid] = r
@@ -201,6 +201,7 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 
 // ServicesAvailable will enable all service registed in registries
 func (m *MSContext) ServicesAvailable() {
+	// TODO: same as agent
 	availableService(m.registries)
 }
 

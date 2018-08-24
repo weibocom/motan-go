@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/protocol"
 )
@@ -31,8 +32,7 @@ type SetAgent interface {
 // StatusHandler can change http status, such as 200, 503
 // the registed services will not available when status is 503, and will available when status change to 200
 type StatusHandler struct {
-	status int
-	a      *Agent
+	a *Agent
 }
 
 func (s *StatusHandler) SetAgent(agent *Agent) {
@@ -42,18 +42,26 @@ func (s *StatusHandler) SetAgent(agent *Agent) {
 func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
 	case "/200":
-		availableService(s.a.serviceRegistries)
-		s.status = http.StatusOK
+		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
+			exporter.(motan.Exporter).Available()
+			return true
+		})
+		s.a.status = http.StatusOK
+		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/503":
-		unavailableService(s.a.serviceRegistries)
-		s.status = http.StatusServiceUnavailable
+		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
+			exporter.(motan.Exporter).Unavailable()
+			return true
+		})
+		s.a.status = http.StatusServiceUnavailable
+		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/version":
 		rw.Write([]byte(Version))
 	default:
-		rw.WriteHeader(s.status)
-		rw.Write([]byte(http.StatusText(s.status)))
+		rw.WriteHeader(s.a.status)
+		rw.Write([]byte(http.StatusText(s.a.status)))
 	}
 }
 
@@ -76,13 +84,15 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (i *InfoHandler) getReferService() []byte {
 	mbody := body{Service: []rpcService{}}
-	for _, cls := range i.a.clustermap {
+	i.a.clustermap.Range(func(_, v interface{}) bool {
+		cls := v.(*cluster.MotanCluster)
 		rpc := cls.GetURL().Path
 		available := cls.IsAvailable()
 		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
-	}
-	retData := jsonRetData{Code: 200, Body: mbody}
-	data, _ := json.Marshal(retData)
+		return true
+	})
+	retData := &jsonRetData{Code: 200, Body: mbody}
+	data, _ := json.Marshal(&retData)
 	return data
 }
 

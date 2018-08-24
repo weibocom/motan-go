@@ -1,53 +1,35 @@
 package core
 
 import (
+	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"strconv"
 	"testing"
 )
 
-func assertEqualInt(excepted, actual int, t *testing.T) {
-	if excepted != actual {
-		t.Errorf("int except: %v, but actual was: %v", excepted, actual)
-	}
-}
-
-func assertEqualString(excepted, actual string, t *testing.T) {
-	if excepted != actual {
-		t.Errorf("string except: %v, but actual was: %v", excepted, actual)
-	}
-}
-
-func assertEqualBool(excepted, actual bool, t *testing.T) {
-	if excepted != actual {
-		t.Errorf("bool except: %v, but actual was: %v", excepted, actual)
-	}
-}
-
 func TestStringMap(t *testing.T) {
 	stringMap := NewStringMap(0)
-	assertEqualInt(0, stringMap.Len(), t)
+	assert.Equal(t, 0, stringMap.Len())
 	stringMap.Store("key", "value")
-	assertEqualInt(1, stringMap.Len(), t)
+	assert.Equal(t, 1, stringMap.Len())
 	stringMap.Delete("key")
-	assertEqualInt(0, stringMap.Len(), t)
+	assert.Equal(t, 0, stringMap.Len())
 
 	stringMap.Store("key1", "value1")
 	stringMap.Store("key2", "value2")
 	stringMap.Store("key3", "value3")
 	stringMap.Store("key4", "value4")
 	stringMap.Store("key5", "value5")
-	assertEqualInt(5, stringMap.Len(), t)
+	assert.Equal(t, 5, stringMap.Len())
 	value, ok := stringMap.Load("key3")
-	assertEqualBool(true, ok, t)
-	assertEqualString("value3", value, t)
-	assertEqualString("value3", stringMap.LoadOrEmpty("key3"), t)
-	assertEqualString("", stringMap.LoadOrEmpty("key6"), t)
-
-	assertEqualInt(5, len(stringMap.RawMap()), t)
+	assert.Equal(t, true, ok)
+	assert.Equal(t, "value3", value)
+	assert.Equal(t, "value3", stringMap.LoadOrEmpty("key3"))
+	assert.Equal(t, "", stringMap.LoadOrEmpty("key6"))
+	assert.Equal(t, 5, len(stringMap.RawMap()))
 
 	stringMap.Range(func(k, v string) bool {
-		assertEqualString("value"+k[3:], v, t)
+		assert.Equal(t, "value"+k[3:], v)
 		return true
 	})
 }
@@ -78,10 +60,59 @@ func BenchmarkStringMapRead(b *testing.B) {
 		stringMap.Store(s, s)
 	}
 	b.SetParallelism(3)
-	b.N = 3
+	b.N = 10000
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			stringMap.Range(func(_, _ string) bool { return true })
 		}
 	})
+}
+
+func TestCopyOnWriteMap_Load(t *testing.T) {
+	cowMap := NewCopyOnWriteMap()
+	value, b := cowMap.Load("testKey")
+	assert.Equal(t, false, b)
+	assert.Equal(t, nil, value)
+	cowMap.Store("testKey", "testValue")
+	value, b = cowMap.Load("testKey")
+	assert.Equal(t, true, b)
+	assert.Equal(t, "testValue", value)
+}
+
+func TestCopyOnWriteMap_LoadOrNil(t *testing.T) {
+	cowMap := NewCopyOnWriteMap()
+	value := cowMap.LoadOrNil("testKey")
+	assert.Equal(t, nil, value)
+	cowMap.Store("testKey", "testValue")
+	value = cowMap.LoadOrNil("testKey")
+	assert.Equal(t, "testValue", value)
+}
+
+func TestCopyOnWriteMap_Store(t *testing.T) {
+	cowMap := NewCopyOnWriteMap()
+	for i := 0; i < 100; i++ {
+		cowMap.Store("testKey"+strconv.Itoa(i), "testValue"+strconv.Itoa(i))
+	}
+
+	for i := 0; i < 100; i++ {
+		assert.Equal(t, "testValue"+strconv.Itoa(i), cowMap.LoadOrNil("testKey"+strconv.Itoa(i)))
+	}
+}
+
+func TestCopyOnWriteMap_Delete(t *testing.T) {
+	cowMap := NewCopyOnWriteMap()
+	for i := 0; i < 100; i++ {
+		cowMap.Store("testKey"+strconv.Itoa(i), "testValue"+strconv.Itoa(i))
+	}
+
+	delIndex := rand.Intn(100)
+	cowMap.Delete("testKey" + strconv.Itoa(delIndex))
+
+	for i := 0; i < 100; i++ {
+		if i == delIndex {
+			assert.Equal(t, nil, cowMap.LoadOrNil("testKey"+strconv.Itoa(delIndex)))
+		} else {
+			assert.Equal(t, "testValue"+strconv.Itoa(i), cowMap.LoadOrNil("testKey"+strconv.Itoa(i)))
+		}
+	}
 }

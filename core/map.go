@@ -83,3 +83,58 @@ func (m *StringMap) Len() int {
 	defer m.mu.RUnlock()
 	return len(m.innerMap)
 }
+
+type CopyOnWriteMap struct {
+	mu       sync.Mutex
+	innerMap map[interface{}]interface{}
+}
+
+func NewCopyOnWriteMap() *CopyOnWriteMap {
+	return &CopyOnWriteMap{}
+}
+
+func (m *CopyOnWriteMap) Load(key interface{}) (interface{}, bool) {
+	value, ok := m.innerMap[key]
+	return value, ok
+}
+
+func (m *CopyOnWriteMap) LoadOrNil(key interface{}) interface{} {
+	return m.innerMap[key]
+}
+
+func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
+	for k, v := range m.innerMap {
+		if !f(k, v) {
+			return
+		}
+	}
+}
+
+func (m *CopyOnWriteMap) Store(key, value interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	copiedMap := make(map[interface{}]interface{}, len(m.innerMap)+1)
+	for k, v := range m.innerMap {
+		copiedMap[k] = v
+	}
+	copiedMap[key] = value
+	m.innerMap = copiedMap
+}
+
+func (m *CopyOnWriteMap) Delete(key interface{}) (pv interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.innerMap[key]; !ok {
+		return pv
+	}
+	copiedMap := make(map[interface{}]interface{}, len(m.innerMap))
+	for k, v := range m.innerMap {
+		if k == key {
+			pv = v
+			continue
+		}
+		copiedMap[k] = v
+	}
+	m.innerMap = copiedMap
+	return pv
+}

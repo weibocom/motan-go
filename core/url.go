@@ -11,12 +11,12 @@ import (
 )
 
 type URL struct {
-	Protocol   string
-	Host       string
-	Port       int
-	Path       string //e.g. service name
-	Group      string
-	Parameters map[string]string
+	Protocol   string            `json:"protocol"`
+	Host       string            `json:"host"`
+	Port       int               `json:"port"`
+	Path       string            `json:"path"` //e.g. service name
+	Group      string            `json:"group"`
+	Parameters map[string]string `json:"parameters"`
 
 	// cached info
 	address  string

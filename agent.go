@@ -15,35 +15,48 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
+	"path/filepath"
+	"sync"
 )
 
 const (
 	defaultPort       = 9981
+	defaultEport      = 9982
 	defaultMport      = 8002
 	defaultPidFile    = "./agent.pid"
 	defaultAgentGroup = "default_agent_group"
+	defaultRuntimeDir = "./agent_runtime"
+	defaultStatusSnap = "status"
 )
 
 type Agent struct {
 	ConfigFile string
 	extFactory motan.ExtensionFactory
 	Context    *motan.Context
+	recover    bool
 
 	agentServer motan.Server
 
-	clustermap map[string]*cluster.MotanCluster
+	clustermap *motan.CopyOnWriteMap
 	status     int
 	agentURL   *motan.URL
 	logdir     string
 	port       int
 	mport      int
+	eport      int
 	pidfile    string
+	runtimedir string
 
-	agentPortService  map[int]motan.Exporter
+	serviceExporters  *motan.CopyOnWriteMap
 	agentPortServer   map[int]motan.Server
-	serviceRegistries map[string]motan.Registry // all registries used for services
+	serviceRegistries *motan.CopyOnWriteMap
 
 	manageHandlers map[string]http.Handler
+
+	svcLock sync.Mutex
+	clsLock sync.Mutex
+
+	configurer *DynamicConfigurer
 }
 
 func NewAgent(extfactory motan.ExtensionFactory) *Agent {
@@ -54,19 +67,31 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	} else {
 		agent = &Agent{extFactory: extfactory}
 	}
-	agent.clustermap = make(map[string]*cluster.MotanCluster)
-	agent.agentPortService = make(map[int]motan.Exporter)
+	agent.clustermap = motan.NewCopyOnWriteMap()
+	agent.serviceExporters = motan.NewCopyOnWriteMap()
 	agent.agentPortServer = make(map[int]motan.Server)
-	agent.serviceRegistries = make(map[string]motan.Registry)
-	agent.status = http.StatusOK
+	agent.serviceRegistries = motan.NewCopyOnWriteMap()
 	agent.manageHandlers = make(map[string]http.Handler)
 	return agent
+}
+
+func (a *Agent) initProxyURL(url *motan.URL) {
+	export := url.GetParam(motan.ExportKey, "")
+	url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
+	url.Host = motan.GetLocalIP()
+	application := url.GetParam(motan.ApplicationKey, "")
+	if application == "" {
+		application = a.agentURL.GetParam(motan.ApplicationKey, "")
+		url.PutParam(motan.ApplicationKey, application)
+	}
+	url.ClearCachedInfo()
 }
 
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
+	a.recover = *motan.Recover
 	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
 	a.Context.Initialize()
 	if a.Context.Config == nil {
@@ -77,8 +102,10 @@ func (a *Agent) StartMotanAgent() {
 	a.initParam()
 	a.SetSanpshotConf()
 	a.initAgentURL()
+	a.initStatus()
 	a.initClusters()
 	a.startServerAgent()
+	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
 	go a.registerAgent()
 	f, err := os.Create(a.pidfile)
@@ -90,6 +117,40 @@ func (a *Agent) StartMotanAgent() {
 	}
 	vlog.Infoln("Motan agent is starting...")
 	a.startAgent()
+}
+
+func (a *Agent) initStatus() {
+	if a.recover {
+		a.recoverStatus()
+		return
+	}
+	a.status = http.StatusServiceUnavailable
+}
+
+func (a *Agent) saveStatus() {
+	statSnapFile := a.runtimedir + string(filepath.Separator) + defaultStatusSnap
+	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(int(http.StatusOK))), 0644)
+	if err != nil {
+		vlog.Errorln("Save status error: " + err.Error())
+		return
+	}
+}
+
+func (a *Agent) recoverStatus() {
+	a.status = http.StatusServiceUnavailable
+	statSnapFile := a.runtimedir + string([]rune{filepath.Separator}) + defaultStatusSnap
+	bytes, err := ioutil.ReadFile(statSnapFile)
+	if err != nil {
+		return
+	}
+	code, err := strconv.Atoi(string(bytes))
+	if err != nil {
+		return
+	}
+	if code == http.StatusOK {
+		a.status = http.StatusOK
+		return
+	}
 }
 
 func (a *Agent) initParam() {
@@ -123,6 +184,14 @@ func (a *Agent) initParam() {
 		mport = defaultMport
 	}
 
+	eport := *motan.Eport
+	if eport == 0 && section != nil && section["eport"] != nil {
+		eport = section["eport"].(int)
+	}
+	if eport == 0 {
+		eport = defaultEport
+	}
+
 	pidfile := *motan.Pidfile
 	if pidfile == "" && section != nil && section["pidfile"] != nil {
 		pidfile = section["pidfile"].(string)
@@ -131,26 +200,44 @@ func (a *Agent) initParam() {
 		pidfile = defaultPidFile
 	}
 
-	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s\n", port, mport, pidfile, logdir)
+	runtimedir := ""
+	if section != nil && section["runtime_dir"] != nil {
+		runtimedir = section["runtime_dir"].(string)
+	}
+	if runtimedir == "" {
+		runtimedir = defaultRuntimeDir
+	}
+
+	err = os.MkdirAll(runtimedir, 0775)
+	if err != nil {
+		panic("Init runtime directory error: " + err.Error())
+	}
+
+	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s\n", port, mport, pidfile, logdir, runtimedir)
 	a.logdir = logdir
 	a.port = port
+	a.eport = eport
 	a.mport = mport
 	a.pidfile = pidfile
+	a.runtimedir = runtimedir
 }
 
 func (a *Agent) initClusters() {
-	var mapKey string
 	for _, url := range a.Context.RefersURLs {
-		if url.Parameters[motan.ApplicationKey] == "" {
-			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
-		}
-		mapKey = getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-		c := cluster.NewCluster(url, true)
-		c.SetExtFactory(a.extFactory)
-		c.Context = a.Context
-		c.InitCluster()
-		a.clustermap[mapKey] = c
+		a.initCluster(url)
 	}
+}
+
+func (a *Agent) initCluster(url *motan.URL) {
+	a.clsLock.Lock()
+	defer a.clsLock.Unlock()
+
+	if url.Parameters[motan.ApplicationKey] == "" {
+		url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
+	}
+	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
+	a.clustermap.Store(mapKey, c)
 }
 
 func (a *Agent) SetSanpshotConf() {
@@ -247,7 +334,8 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 		version = request.GetAttachment(mpro.MVersion)
 	}
 	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
-	if motanCluster := a.agent.clustermap[ck]; motanCluster != nil {
+	if motanCluster := a.agent.clustermap.LoadOrNil(ck); motanCluster != nil {
+		motanCluster := motanCluster.(*cluster.MotanCluster)
 		if request.GetAttachment(mpro.MSource) == "" {
 			application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
 			if application == "" {
@@ -280,61 +368,66 @@ func (a *agentMessageHandler) GetProvider(serviceName string) motan.Provider {
 func (a *Agent) startServerAgent() {
 	globalContext := a.Context
 	for _, url := range globalContext.ServiceURLs {
-		export := url.GetParam(motan.ExportKey, "")
-		url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
-		url.Host = motan.GetLocalIP()
-		application := url.GetParam(motan.ApplicationKey, "")
-		if application == "" {
-			application = a.agentURL.GetParam(motan.ApplicationKey, "")
-			url.PutParam(motan.ApplicationKey, application)
-		}
-		url.ClearCachedInfo()
-		exporter := &mserver.DefaultExporter{}
-		provider := a.extFactory.GetProvider(url)
-		if provider == nil {
-			vlog.Errorf("Didn't have a %s provider, url:%+v\n", url.Protocol, url)
-			return
-		}
-		motan.CanSetContext(provider, globalContext)
-		motan.Initialize(provider)
-		provider = mserver.WrapWithFilter(provider, a.extFactory, globalContext)
-		exporter.SetProvider(provider)
-		server := a.agentPortServer[url.Port]
-		if server == nil {
-			server = a.extFactory.GetServer(url)
-			handler := &serverAgentMessageHandler{}
-			motan.Initialize(handler)
-			handler.AddProvider(provider)
-			err := server.Open(false, true, handler, a.extFactory)
-			if err != nil {
-				vlog.Fatalf("start server agent fail. port :%d, err: %v\n", url.Port, err)
-			}
-			a.agentPortServer[url.Port] = server
-		} else if canShareChannel(*url, *server.GetURL()) {
-			server.GetMessageHandler().AddProvider(provider)
-		}
-		err := exporter.Export(server, a.extFactory, globalContext)
+		a.initProxyURL(url)
+		a.doExportService(url)
+	}
+}
+
+func (a *Agent) doExportService(url *motan.URL) {
+	a.svcLock.Lock()
+	defer a.svcLock.Unlock()
+
+	globalContext := a.Context
+	exporter := &mserver.DefaultExporter{}
+	provider := a.extFactory.GetProvider(url)
+	if provider == nil {
+		vlog.Errorf("Didn't have a %s provider, url:%+v\n", url.Protocol, url)
+		return
+	}
+	motan.CanSetContext(provider, globalContext)
+	motan.Initialize(provider)
+	provider = mserver.WrapWithFilter(provider, a.extFactory, globalContext)
+	exporter.SetProvider(provider)
+	server := a.agentPortServer[url.Port]
+	if server == nil {
+		server = a.extFactory.GetServer(url)
+		handler := &serverAgentMessageHandler{}
+		motan.Initialize(handler)
+		handler.AddProvider(provider)
+		err := server.Open(false, true, handler, a.extFactory)
 		if err != nil {
-			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
-		} else {
-			vlog.Infof("service export success. url:%v\n", url)
-			for _, r := range exporter.Registrys {
-				rid := r.GetURL().GetIdentity()
-				if _, ok := a.serviceRegistries[rid]; !ok {
-					a.serviceRegistries[rid] = r
-				}
-			}
+			vlog.Fatalf("start server agent fail. port :%d, err: %v\n", url.Port, err)
+		}
+		a.agentPortServer[url.Port] = server
+	} else if canShareChannel(*url, *server.GetURL()) {
+		server.GetMessageHandler().AddProvider(provider)
+	}
+	err := exporter.Export(server, a.extFactory, globalContext)
+	if err != nil {
+		vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
+		return
+	}
+
+	a.serviceExporters.Store(url.GetIdentity(), exporter)
+	vlog.Infof("service export success. url:%v\n", url)
+	for _, r := range exporter.Registries {
+		rid := r.GetURL().GetIdentity()
+		if _, ok := a.serviceRegistries.Load(rid); !ok {
+			a.serviceRegistries.Store(rid, r)
 		}
 	}
 
+	if a.status == http.StatusOK {
+		exporter.Available()
+	}
 }
 
 type serverAgentMessageHandler struct {
-	providers map[string]motan.Provider
+	providers *motan.CopyOnWriteMap
 }
 
 func (sa *serverAgentMessageHandler) Initialize() {
-	sa.providers = make(map[string]motan.Provider)
+	sa.providers = motan.NewCopyOnWriteMap()
 }
 
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
@@ -342,8 +435,8 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
 	})
-	p := sa.providers[request.GetServiceName()]
-	if p != nil {
+	if p := sa.providers.LoadOrNil(request.GetServiceName()); p != nil {
+		p := p.(motan.Provider)
 		res = p.Call(request)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
@@ -353,11 +446,13 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
-	sa.providers[p.GetPath()] = p
+	sa.providers.Store(p.GetPath(), p)
 	return nil
 }
 
-func (sa *serverAgentMessageHandler) RmProvider(p motan.Provider) {}
+func (sa *serverAgentMessageHandler) RmProvider(p motan.Provider) {
+	sa.providers.Delete(p.GetPath())
+}
 
 func (sa *serverAgentMessageHandler) GetProvider(serviceName string) motan.Provider {
 	return nil
@@ -397,14 +492,15 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 	//TODO notify according cluster
 	if commandInfo != a.CurrentCommandInfo {
 		a.CurrentCommandInfo = commandInfo
-		for _, cls := range a.agent.clustermap {
-			for _, registry := range cls.Registrys {
+		a.agent.clustermap.Range(func(k, v interface{}) bool {
+			cls := v.(*cluster.MotanCluster)
+			for _, registry := range cls.Registries {
 				if cr, ok := registry.(motan.CommandNotifyListener); ok {
 					cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 				}
 			}
-		}
-
+			return true
+		})
 	}
 }
 
@@ -465,4 +561,43 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 func (a *Agent) getConfigData() []byte {
 	data, _ := ioutil.ReadFile(*motan.CfgFile)
 	return data
+}
+
+func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
+	for _, u := range urls {
+		if url.GetIdentity() == u.GetIdentity() {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Agent) SubscribeService(url *motan.URL) error {
+	if urlExist(url, a.Context.RefersURLs) {
+		return nil
+	}
+	a.initCluster(url)
+	return nil
+}
+
+func (a *Agent) ExportService(url *motan.URL) error {
+	if urlExist(url, a.Context.ServiceURLs) {
+		return nil
+	}
+	a.doExportService(url)
+	return nil
+}
+
+func (a *Agent) UnexportService(url *motan.URL) error {
+	if urlExist(url, a.Context.ServiceURLs) {
+		return nil
+	}
+
+	a.svcLock.Lock()
+	defer a.svcLock.Unlock()
+
+	if exporter := a.serviceExporters.Delete(url.GetIdentity()); exporter != nil {
+		exporter.(motan.Exporter).Unexport()
+	}
+	return nil
 }
