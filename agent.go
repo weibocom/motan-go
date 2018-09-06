@@ -1,7 +1,6 @@
 package motan
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -411,24 +410,15 @@ func (a *Agent) RegisterManageHandler(path string, handler http.Handler) {
 }
 
 func (a *Agent) startMServer() {
-	if _, ok := a.manageHandlers["/"]; !ok {
-		a.manageHandlers["/"] = http.HandlerFunc(a.rootHandler)
-	}
-	if _, ok := a.manageHandlers["/503"]; !ok {
-		a.manageHandlers["/503"] = http.HandlerFunc(a.StatusChangeHandler)
-	}
-	if _, ok := a.manageHandlers["/200"]; !ok {
-		a.manageHandlers["/200"] = http.HandlerFunc(a.StatusChangeHandler)
-	}
-	if _, ok := a.manageHandlers["/getConfig"]; !ok {
-		a.manageHandlers["/getConfig"] = http.HandlerFunc(a.getConfigHandler)
-	}
-	if _, ok := a.manageHandlers["/getReferService"]; !ok {
-		a.manageHandlers["/getReferService"] = http.HandlerFunc(a.getReferServiceHandler)
+	handlers := make(map[string]http.Handler, 16)
+	for k, v := range GetDefaultManageHandlers() {
+		handlers[k] = v
 	}
 	for k, v := range a.manageHandlers {
-		http.Handle(k, v)
-		vlog.Infof("add manage server handle path:%s\n", k)
+		handlers[k] = v
+	}
+	for k, v := range handlers {
+		a.mhandle(k, v)
 	}
 
 	vlog.Infof("start listen manage port %d ...\n", a.mport)
@@ -439,60 +429,31 @@ func (a *Agent) startMServer() {
 	}
 }
 
-type rpcService struct {
-	Name   string `json:"name"`
-	Status bool   `json:"status"`
-}
-
-type body struct {
-	Service []rpcService `json:"service"`
-}
-
-type jsonRetData struct {
-	Code int  `json:"code"`
-	Body body `json:"body"`
-}
-
-// return agent server status, e.g. 200 or 503
-func (a *Agent) rootHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(a.status)
-	w.Write([]byte(http.StatusText(a.status)))
-}
-
-func (a *Agent) getConfigHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := ioutil.ReadFile(*motan.CfgFile)
-	if err != nil {
-		w.Write([]byte("error."))
-	} else {
-		w.Write(data)
+func (a *Agent) mhandle(k string, h http.Handler) {
+	defer func() {
+		if err := recover(); err != nil {
+			vlog.Warningf("managehandler register fail. maybe the pattern '%s' alreay regist\n", k)
+		}
+	}()
+	if sa, ok := h.(SetAgent); ok {
+		sa.SetAgent(a)
 	}
+	http.HandleFunc(k, func(w http.ResponseWriter, r *http.Request) {
+		if !PermissionCheck(r) {
+			w.Write([]byte("need permission!"))
+			return
+		}
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Fprintf(w, "process request err: %s\n", err)
+			}
+		}()
+		h.ServeHTTP(w, r)
+	})
+	vlog.Infof("add manage server handle path:%s\n", k)
 }
 
-func (a *Agent) getReferServiceHandler(w http.ResponseWriter, r *http.Request) {
-
-	mbody := body{Service: []rpcService{}}
-	for _, cls := range a.clustermap {
-		rpc := cls.GetURL().Path
-		available := cls.IsAvailable()
-		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
-	}
-	retData := &jsonRetData{Code: 200, Body: mbody}
-	if data, err := json.Marshal(&retData); err == nil {
-		w.Write(data)
-	} else {
-		w.Write([]byte("error."))
-	}
-}
-
-// StatusChangeHandler change agent server status, and set registed services available or unavailable.
-func (a *Agent) StatusChangeHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.RequestURI {
-	case "/200":
-		availableService(a.serviceRegistries)
-		a.status = http.StatusOK
-	case "/503":
-		unavailableService(a.serviceRegistries)
-		a.status = http.StatusServiceUnavailable
-	}
-	w.Write([]byte("ok."))
+func (a *Agent) getConfigData() []byte {
+	data, _ := ioutil.ReadFile(*motan.CfgFile)
+	return data
 }

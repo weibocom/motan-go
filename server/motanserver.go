@@ -7,10 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"time"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
-	"time"
 )
 
 type MotanServer struct {
@@ -85,27 +86,40 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	defer conn.Close()
 	defer motan.HandlePanic(nil)
 	buf := bufio.NewReader(conn)
-	for {
-		request, err := mpro.Decode(buf)
-		if err != nil {
-			if err.Error() != "EOF" {
-				vlog.Warningf("decode motan message fail! con:%s, err:%s\n.", conn.RemoteAddr().String(), err.Error())
-			}
-			break
-		}
-		go m.processReq(request, conn)
-	}
-}
 
-func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
-	defer motan.HandlePanic(nil)
-	request.Header.SetProxy(m.proxy)
 	var ip string
 	if ta, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
 		ip = ta.IP.String()
 	} else {
 		ip = getRemoteIP(conn.RemoteAddr().String())
 	}
+
+	for {
+		request, t, err := mpro.DecodeWithTime(buf)
+		if err != nil {
+			if err.Error() != "EOF" {
+				vlog.Warningf("decode motan message fail! con:%s, err:%s\n.", conn.RemoteAddr().String(), err.Error())
+			}
+			break
+		}
+
+		request.Metadata.Store(motan.HostKey, ip)
+		var trace *motan.TraceContext
+		if !request.Header.IsHeartbeat() {
+			trace = motan.TracePolicy(request.Header.RequestID, request.Metadata)
+			if trace != nil {
+				trace.Addr = ip
+				trace.PutReqSpan(&motan.Span{Name: motan.Receive, Time: t})
+				trace.PutReqSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
+			}
+		}
+		go m.processReq(request, trace, conn)
+	}
+}
+
+func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, conn net.Conn) {
+	defer motan.HandlePanic(nil)
+	request.Header.SetProxy(m.proxy)
 	// TODO request , response reuse
 	var res *mpro.Message
 	if request.Header.IsHeartbeat() {
@@ -118,13 +132,20 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata.LoadOrEmpty(mpro.MPath), request.Metadata.LoadOrEmpty(mpro.MMethod), err.Error())
 			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. err:" + err.Error() + " method:" + request.Metadata.LoadOrEmpty(mpro.MMethod), ErrType: motan.ServiceException}))
 		} else {
-			req.SetAttachment(motan.HostKey, ip)
 			req.GetRPCContext(true).ExtFactory = m.extFactory
+			if tc != nil {
+				tc.PutReqSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
+				req.GetRPCContext(true).Tc = tc
+			}
+
 			mres = m.handler.Call(req)
 			//TODO oneway
 			if mres != nil {
 				mres.GetRPCContext(true).Proxy = m.proxy
 				res, err = mpro.ConvertToResMessage(mres, serialization)
+				if tc != nil {
+					tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
+				}
 			} else {
 				err = errors.New("handler call return nil")
 			}
@@ -135,11 +156,18 @@ func (m *MotanServer) processReq(request *mpro.Message, conn net.Conn) {
 		}
 	}
 	resbuf := res.Encode()
+	if tc != nil {
+		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
+	}
+
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
 	_, err := conn.Write(resbuf.Bytes())
 	if err != nil {
-		vlog.Errorf("connection will close. ip: %s, cause:%s\n", ip, err.Error())
+		vlog.Errorf("connection will close. conn: %s, err:%s\n", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
+	}
+	if tc != nil {
+		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: time.Now()})
 	}
 }
 
