@@ -116,7 +116,7 @@ func (m *MSContext) export(url *motan.URL) {
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
 		motan.Initialize(provider)
-		provider = mserver.WarperWithFilter(provider, m.extFactory)
+		provider = mserver.WrapWithFilter(provider, m.extFactory, m.context)
 
 		exporter := &mserver.DefaultExporter{}
 		exporter.SetProvider(provider)
