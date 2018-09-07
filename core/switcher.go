@@ -35,7 +35,9 @@ func (s *SwitcherManager) Register(name string, value bool, listeners ...Switche
 		return
 	}
 	newSwitcher := &Switcher{name: name, value: value, listeners: []SwitcherListener{}}
-	newSwitcher.Watch(listeners...)
+	if len(listeners) > 0 {
+		newSwitcher.Watch(listeners...)
+	}
 	s.switcherMap[name] = newSwitcher
 	vlog.Infof("[switcher] register %s success, value:%v, len(listeners):%d\n", name, value, len(listeners))
 }

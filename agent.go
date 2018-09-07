@@ -215,7 +215,7 @@ func (a *Agent) startAgent() {
 }
 
 func (a *Agent) registerAgent() {
-	vlog.Infoln("start agent regitstry.")
+	vlog.Infoln("start agent registry.")
 	if reg, exit := a.agentURL.Parameters[motan.RegistryKey]; exit {
 		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
 			registry := a.extFactory.GetRegistry(registryURL)
@@ -441,7 +441,7 @@ func (a *Agent) startMServer() {
 func (a *Agent) mhandle(k string, h http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
-			vlog.Warningf("managehandler register fail. maybe the pattern '%s' alreay regist\n", k)
+			vlog.Warningf("manageHandler register fail. maybe the pattern '%s' already registered\n", k)
 		}
 	}()
 	if sa, ok := h.(SetAgent); ok {

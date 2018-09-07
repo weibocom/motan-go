@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -15,6 +16,7 @@ import (
 const (
 	CMDTrafficControl = iota
 	CMDDegrade        //service degrade
+	CMDSwitcher
 )
 
 const (
@@ -25,6 +27,8 @@ const (
 const (
 	RuleProtocol = "rule"
 )
+
+var oldSwitcherMap = make(map[string]bool) //Save the default value before the switcher last called
 
 // CommandRegistryWrapper wrapper registry for every cluster
 type CommandRegistryWrapper struct {
@@ -38,6 +42,7 @@ type CommandRegistryWrapper struct {
 	otherGroupListener map[string]*serviceListener
 	tcCommand          *ClientCommand //effective traffic control command
 	degradeCommand     *ClientCommand //effective degrade command
+	switcherCommand    *ClientCommand
 }
 
 type ClientCommand struct {
@@ -101,6 +106,9 @@ func (c CmdList) Less(i, j int) bool {
 }
 
 func (c *ClientCommand) MatchCmdPattern(url *motan.URL) bool {
+	if c.CommandType == CMDSwitcher {
+		return true
+	}
 	if c.Pattern == "*" || strings.HasPrefix(url.Path, c.Pattern) {
 		return true
 	}
@@ -328,17 +336,21 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	// rebuild clientCommand
 	var newTcCommand *ClientCommand
 	var newDegradeCommand *ClientCommand
+	var newSwitcherCommand *ClientCommand
 	if c.agentCommandInfo != "" { // agent command first
-		newTcCommand, newDegradeCommand = mergeCommand(c.agentCommandInfo, c.cluster.GetURL())
+		newTcCommand, newDegradeCommand, newSwitcherCommand = mergeCommand(c.agentCommandInfo, c.cluster.GetURL())
 	}
 
 	if c.serviceCommandInfo != "" {
-		tc, dc := mergeCommand(c.serviceCommandInfo, c.cluster.GetURL())
+		tc, dc, sc := mergeCommand(c.serviceCommandInfo, c.cluster.GetURL())
 		if newTcCommand == nil {
 			newTcCommand = tc
 		}
 		if newDegradeCommand == nil {
 			newDegradeCommand = dc
+		}
+		if newSwitcherCommand == nil {
+			newSwitcherCommand = sc
 		}
 	}
 	if newTcCommand != nil || (c.tcCommand != nil && newTcCommand == nil) {
@@ -373,7 +385,6 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 				l.subscribe(c.registry)
 				newOtherGroupListener[g[0]] = l
 			}
-
 		}
 
 		oldOtherGroupListener := c.otherGroupListener
@@ -392,18 +403,48 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 		c.cluster.available = false
 	}
 
+	//process switcher command
+	switcherManger := motan.GetSwitcherManager()
+	newSwitcherMap := make(map[string]bool)
+	if newSwitcherCommand != nil {
+		switchers := strings.Split(newSwitcherCommand.Pattern, ",")
+		for _, switcherStr := range switchers {
+			v := strings.Split(switcherStr, ":")
+			if len(v) > 1 {
+				if value, err := strconv.ParseBool(v[1]); err == nil {
+					if switcher := switcherManger.GetSwitcher(v[0]); switcher != nil {
+						if _, ok := oldSwitcherMap[v[0]]; !ok {
+							oldSwitcherMap[v[0]] = switcher.IsOpen()
+						}
+						switcher.SetValue(value)
+						newSwitcherMap[v[0]] = true //record current switcher names
+					}
+				}
+			}
+		}
+	}
+	for name, value := range oldSwitcherMap {
+		if _, ok := newSwitcherMap[name]; !ok {
+			switcherManger.GetSwitcher(name).SetValue(value) //restore default value
+		} else {
+			newSwitcherMap[name] = value //save default switcher
+		}
+	}
+	oldSwitcherMap = newSwitcherMap
+	c.switcherCommand = newSwitcherCommand
+
 	return needNotify
 }
 
-func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand, degradeCommand *ClientCommand) {
+func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand, degradeCommand *ClientCommand, switcherCommand *ClientCommand) {
 	//only one command of a type will enable in same service. depends on the index of command
 	cmd := ParseCommand(commandInfo)
 	if cmd == nil {
 		vlog.Warningf("parse command fail, command is ignored. command info: %s\n", commandInfo)
 	} else {
-		var cmds CmdList = cmd.ClientCommandList
-		sort.Sort(cmds)
-		for _, c := range cmds {
+		var cmdList CmdList = cmd.ClientCommandList
+		sort.Sort(cmdList)
+		for _, c := range cmdList {
 			if c.MatchCmdPattern(url) {
 				switch c.CommandType {
 				case CMDTrafficControl:
@@ -416,11 +457,14 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 				case CMDDegrade:
 					temp := c
 					degradeCommand = &temp
+				case CMDSwitcher:
+					temp := c
+					switcherCommand = &temp
 				}
 			}
 		}
 	}
-	return tcCommand, degradeCommand
+	return tcCommand, degradeCommand, switcherCommand
 }
 
 func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
