@@ -13,6 +13,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	"strings"
+	"time"
 )
 
 const (
@@ -285,18 +286,25 @@ func (msg *Message) Clone() interface{} {
 }
 
 func Decode(buf *bufio.Reader) (msg *Message, err error) {
+	msg, _, err = DecodeWithTime(buf)
+	return msg, err
+}
+
+func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error) {
 	temp := make([]byte, HeaderLength, HeaderLength)
 
 	// decode header
 	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
+	start = time.Now()
 	if err != nil {
-		return nil, err
+		return nil, start, err
 	}
 	mn := binary.BigEndian.Uint16(temp[:2])
 	if mn != MotanMagic {
 		vlog.Errorf("worng magic num:%d, err:%v\n", mn, err)
-		return nil, ErrMagicNum
+		return nil, start, ErrMagicNum
 	}
+
 	header := &Header{Magic: MotanMagic}
 	header.MsgType = temp[2]
 	header.VersionStatus = temp[3]
@@ -306,14 +314,14 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 	// decode meta
 	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		return nil, err
+		return nil, start, err
 	}
 	metasize := int(binary.BigEndian.Uint32(temp[:4]))
 	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
 		metadata, err := readBytes(buf, metasize)
 		if err != nil {
-			return nil, err
+			return nil, start, err
 		}
 		s, e := 0, 0
 		var k string
@@ -331,14 +339,14 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 		}
 		if k != "" {
 			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
-			return nil, ErrMetadata
+			return nil, start, ErrMetadata
 		}
 	}
 
 	//decode body
 	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		return nil, err
+		return nil, start, err
 	}
 	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
 	var body []byte
@@ -348,10 +356,10 @@ func Decode(buf *bufio.Reader) (msg *Message, err error) {
 		body = make([]byte, 0)
 	}
 	if err != nil {
-		return nil, err
+		return nil, start, err
 	}
 	msg = &Message{header, metamap, body, Req}
-	return msg, err
+	return msg, start, err
 }
 
 func DecodeGzipBody(body []byte) []byte {
