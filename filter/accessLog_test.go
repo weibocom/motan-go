@@ -9,7 +9,7 @@ import (
 )
 
 func TestFilter(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 
 	RegistDefaultFilters(defaultExtFactory)

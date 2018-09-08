@@ -19,7 +19,7 @@ var (
 type MCContext struct {
 	confFile   string
 	context    *motan.Context
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 	clients    map[string]*Client
 
 	csync  sync.Mutex
@@ -29,7 +29,7 @@ type MCContext struct {
 type Client struct {
 	url        *motan.URL
 	cluster    *cluster.MotanCluster
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 }
 
 func (c *Client) Call(method string, args []interface{}, reply interface{}) error {
@@ -127,7 +127,7 @@ func (m *MCContext) Initialize() {
 	}
 }
 
-func (m *MCContext) Start(extfactory motan.ExtentionFactory) {
+func (m *MCContext) Start(extfactory motan.ExtensionFactory) {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	m.extFactory = extfactory

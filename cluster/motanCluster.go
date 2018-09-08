@@ -18,7 +18,7 @@ type MotanCluster struct {
 	Refers         []motan.EndPoint
 	Filters        []motan.Filter
 	clusterFilter  motan.ClusterFilter
-	extFactory     motan.ExtentionFactory
+	extFactory     motan.ExtensionFactory
 	registryRefers map[string][]motan.EndPoint
 	notifyLock     sync.Mutex
 	available      bool
@@ -143,7 +143,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 				ep.SetProxy(m.proxy)
 				serialization := motan.GetSerialization(newURL, m.extFactory)
 				if serialization == nil {
-					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtentionFactory! url:%+v\n", m.url)
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v\n", m.url)
 				} else {
 					ep.SetSerialization(serialization)
 				}
@@ -224,7 +224,7 @@ func (m *MotanCluster) Destroy() {
 	}
 }
 
-func (m *MotanCluster) SetExtFactory(factory motan.ExtentionFactory) {
+func (m *MotanCluster) SetExtFactory(factory motan.ExtensionFactory) {
 	m.extFactory = factory
 }
 

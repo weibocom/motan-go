@@ -27,7 +27,7 @@ const (
 
 type Agent struct {
 	ConfigFile string
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 	Context    *motan.Context
 
 	agentServer motan.Server
@@ -47,10 +47,10 @@ type Agent struct {
 	manageHandlers map[string]http.Handler
 }
 
-func NewAgent(extfactory motan.ExtentionFactory) *Agent {
+func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	var agent *Agent
 	if extfactory == nil {
-		fmt.Println("agent using default extentionFactory.")
+		fmt.Println("agent using default extensionFactory.")
 		agent = &Agent{extFactory: GetDefaultExtFactory()}
 	} else {
 		agent = &Agent{extFactory: extfactory}

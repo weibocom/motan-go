@@ -16,19 +16,19 @@ import (
 
 var (
 	once              sync.Once
-	defaultExtFactory *motan.DefaultExtentionFactory
+	defaultExtFactory *motan.DefaultExtensionFactory
 )
 
-func GetDefaultExtFactory() motan.ExtentionFactory {
+func GetDefaultExtFactory() motan.ExtensionFactory {
 	once.Do(func() {
-		defaultExtFactory = &motan.DefaultExtentionFactory{}
+		defaultExtFactory = &motan.DefaultExtensionFactory{}
 		defaultExtFactory.Initialize()
 		AddDefaultExt(defaultExtFactory)
 	})
 	return defaultExtFactory
 }
 
-func AddDefaultExt(d motan.ExtentionFactory) {
+func AddDefaultExt(d motan.ExtensionFactory) {
 
 	// all default extension
 	filter.RegistDefaultFilters(d)
