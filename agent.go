@@ -122,9 +122,9 @@ func (a *Agent) StartMotanAgent() {
 func (a *Agent) initStatus() {
 	if a.recover {
 		a.recoverStatus()
-		return
+	} else {
+		a.status = http.StatusServiceUnavailable
 	}
-	a.status = http.StatusServiceUnavailable
 }
 
 func (a *Agent) saveStatus() {
@@ -138,18 +138,19 @@ func (a *Agent) saveStatus() {
 
 func (a *Agent) recoverStatus() {
 	a.status = http.StatusServiceUnavailable
-	statSnapFile := a.runtimedir + string([]rune{filepath.Separator}) + defaultStatusSnap
+	statSnapFile := a.runtimedir + string(filepath.Separator) + defaultStatusSnap
 	bytes, err := ioutil.ReadFile(statSnapFile)
 	if err != nil {
+		vlog.Warningln("Read status snapshot error: " + err.Error())
 		return
 	}
 	code, err := strconv.Atoi(string(bytes))
 	if err != nil {
+		vlog.Errorln("Convert status code error: " + err.Error())
 		return
 	}
 	if code == http.StatusOK {
 		a.status = http.StatusOK
-		return
 	}
 }
 

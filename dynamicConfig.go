@@ -213,10 +213,10 @@ func (h *DynamicConfigurerHTTPHandler) getURL(req *http.Request) (*core.URL, err
 	}
 	registryID := ""
 	// such as 'direct://localhost:9981'
-	registryStr := url.GetParam(core.RegistryKey, "")
-	if registryStr != "" {
+	proxyRegistry := url.GetParam(core.ProxyRegistryKey, "")
+	if proxyRegistry != "" {
 		for id, url := range h.agent.Context.RegistryURLs {
-			if fmt.Sprintf("%s://%s:%d", url.Protocol, url.Host, url.Port) == registryStr {
+			if fmt.Sprintf("%s://%s:%d", url.Protocol, url.Host, url.Port) == proxyRegistry {
 				registryID = id
 				break
 			}

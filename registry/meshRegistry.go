@@ -1,69 +1,199 @@
 package registry
 
 import (
+	"bytes"
+	"encoding/json"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
+	"io/ioutil"
+	"net/http"
+	"sync"
+	"time"
 )
 
+const defaultMeshPort = 9981
+const defaultMeshRegistryHost = "localhost"
+const defaultMeshRegistryPort = 8002
+const meshRegistryRequestContentType = "application/json;charset=utf-8"
+
+type dynamicConfigResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Body    interface{} `json:"body"`
+}
+
 type MeshRegistry struct {
-	url              *motan.URL
-	urls             []*motan.URL
-	registerService  []*motan.URL
-	subscribeService []*motan.URL
+	url               *motan.URL
+	meshPort          int
+	proxyRegistry     string
+	registeredService map[string]*motan.URL
+	subscribedService map[string]*motan.URL
+	registerLock      sync.Mutex
+	subscribeLock     sync.Mutex
 }
 
-func (d *MeshRegistry) GetURL() *motan.URL {
-	return d.url
+func (r *MeshRegistry) Initialize() {
+	r.registeredService = make(map[string]*motan.URL)
+	r.subscribedService = make(map[string]*motan.URL)
+	if r.url.Host == "" {
+		r.url.Host = defaultMeshRegistryHost
+	}
+	if r.url.Port == 0 {
+		r.url.Port = defaultMeshRegistryPort
+	}
+	r.meshPort = int(r.url.GetIntValue(motan.MeshPortKey, defaultMeshPort))
+	r.proxyRegistry = r.url.GetParam(motan.ProxyRegistryKey, "")
+	if r.proxyRegistry == "" {
+		panic("Mesh registry should specify the proxyRegistry")
+	}
 }
 
-func (d *MeshRegistry) SetURL(url *motan.URL) {
-	d.url = url
-	d.urls = parseURLs(url)
+func (r *MeshRegistry) GetURL() *motan.URL {
+	return r.url
 }
 
-func (d *MeshRegistry) GetName() string {
+func (r *MeshRegistry) SetURL(url *motan.URL) {
+	r.url = url
+}
+
+func (r *MeshRegistry) GetName() string {
 	return "mesh"
 }
 
-func (d *MeshRegistry) InitRegistry() {
-}
-
-func (d *MeshRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
-}
-
-func (d *MeshRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
-	// Do nothing
-}
-
-func (d *MeshRegistry) Discover(url *motan.URL) []*motan.URL {
-	if d.urls == nil {
-		d.urls = parseURLs(d.url)
+func (r *MeshRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
+	vlog.Infof("Subscribe url [%s] to mesh registry [%s]", url.GetIdentity(), r.url.GetIdentity())
+	r.subscribeLock.Lock()
+	defer r.subscribeLock.Unlock()
+	if _, ok := r.subscribedService[url.GetIdentity()]; ok {
+		return
 	}
-	result := make([]*motan.URL, 0, len(d.urls))
-	for _, u := range d.urls {
-		newURL := *url
-		newURL.Host = u.Host
-		meshPort, _ := url.GetInt("meshPort")
-		newURL.Port = int(meshPort)
-		result = append(result, &newURL)
+	reqData, _ := r.initRegistryRequest(url)
+	for {
+		// TODO: what to do when failed
+		resp, err := http.Post("http://"+r.url.Host+":"+r.url.GetPortStr()+"/registry/subscribe",
+			meshRegistryRequestContentType,
+			bytes.NewReader(reqData))
+		if err != nil {
+			vlog.Errorf("Subscribe url %s request registry failed: %s", url.GetIdentity(), err.Error())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		response, err := r.readMeshRegistryResponse(resp)
+		if err != nil {
+			vlog.Errorf("Subscribe url %s read response failed: %s", url.GetIdentity(), err.Error())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		if response.Code == 200 {
+			r.subscribedService[url.GetIdentity()] = url
+		} else {
+			vlog.Errorf("Subscribe url %s failed: %s", url.GetIdentity(), response.Message)
+		}
+		return
 	}
-	return result
 }
 
-func (d *MeshRegistry) Register(serverURL *motan.URL) {
+func (r *MeshRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 }
 
-func (d *MeshRegistry) UnRegister(serverURL *motan.URL) {
-
+func (r *MeshRegistry) Discover(url *motan.URL) []*motan.URL {
+	newUrl := url.Copy()
+	newUrl.Host = r.url.Host
+	newUrl.Port = r.meshPort
+	return []*motan.URL{newUrl}
 }
 
-func (d *MeshRegistry) Available(serverURL *motan.URL) {
+func (r *MeshRegistry) Register(url *motan.URL) {
+	vlog.Infof("Register url [%s] to mesh registry [%s]", url.GetIdentity(), r.url.GetIdentity())
+	r.registerLock.Lock()
+	defer r.registerLock.Unlock()
+	if _, ok := r.registeredService[url.GetIdentity()]; ok {
+		return
+	}
+	reqData, _ := r.initRegistryRequest(url)
+	for {
+		resp, err := http.Post("http://"+r.url.Host+":"+r.url.GetPortStr()+"/registry/register",
+			meshRegistryRequestContentType,
+			bytes.NewReader(reqData))
+		if err != nil {
+			vlog.Errorf("Register url %s request registry failed: %s", url.GetIdentity(), err.Error())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		response, err := r.readMeshRegistryResponse(resp)
+		if err != nil {
+			vlog.Errorf("Register url %s read response failed: %s", url.GetIdentity(), err.Error())
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		if response.Code == 200 {
+			r.registeredService[url.GetIdentity()] = url
+		} else {
+			vlog.Errorf("Register url %s failed: %s", url.GetIdentity(), response.Message)
+		}
+		return
+	}
 }
 
-func (d *MeshRegistry) Unavailable(serverURL *motan.URL) {
+func (r *MeshRegistry) UnRegister(url *motan.URL) {
+	vlog.Infof("UnRegister url [%s] from mesh registry [%s]", url.GetIdentity(), r.url.GetIdentity())
+	r.registerLock.Lock()
+	defer r.registerLock.Unlock()
+	if _, ok := r.registeredService[url.GetIdentity()]; !ok {
+		return
+	}
+	reqData, _ := r.initRegistryRequest(url)
+	resp, err := http.Post("http://"+r.url.Host+":"+r.url.GetPortStr()+"/registry/unregister",
+		meshRegistryRequestContentType,
+		bytes.NewReader(reqData))
+	if err != nil {
+		vlog.Errorf("Unregister url %s request registry failed: %s", url.GetIdentity(), err.Error())
+		return
+	}
+	response, err := r.readMeshRegistryResponse(resp)
+	if err != nil {
+		vlog.Errorf("Unregister url %s read response failed: %s", url.GetIdentity(), err.Error())
+		return
+	}
+	if response.Code == 200 {
+		delete(r.registeredService, url.GetIdentity())
+	} else {
+		vlog.Errorf("Unregister url %s failed: %s", url.GetIdentity(), response.Message)
+	}
 }
 
-func (d *MeshRegistry) GetRegisteredServices() []*motan.URL {
-	return d.registerService
+func (r *MeshRegistry) initRegistryRequest(url *motan.URL) ([]byte, error) {
+	url = url.Copy()
+	url.PutParam(motan.ProxyRegistryKey, r.proxyRegistry)
+	return json.Marshal(url)
 }
 
-func (d *MeshRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
+func (r *MeshRegistry) readMeshRegistryResponse(resp *http.Response) (*dynamicConfigResponse, error) {
+	body := resp.Body
+	defer body.Close()
+	resData, err := ioutil.ReadAll(body)
+	if err != nil {
+		return nil, err
+	}
+	response := new(dynamicConfigResponse)
+	err = json.Unmarshal(resData, &response)
+	return response, err
+}
+
+func (r *MeshRegistry) Available(serverURL *motan.URL) {
+}
+
+func (r *MeshRegistry) Unavailable(serverURL *motan.URL) {
+}
+
+func (r *MeshRegistry) GetRegisteredServices() []*motan.URL {
+	r.registerLock.Lock()
+	defer r.registerLock.Unlock()
+	urls := make([]*motan.URL, 0, len(r.registeredService))
+	for _, u := range r.registeredService {
+		urls = append(urls, u)
+	}
+	return urls
+}
+
+func (r *MeshRegistry) StartSnapshot(conf *motan.SnapshotConf) {}

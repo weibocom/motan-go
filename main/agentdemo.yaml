@@ -1,18 +1,19 @@
 ##only support 3 level config info
 #config fo agent
 motan-agent:
-  port: 9981 # agent serve port. 
+  port: 9981 # agent serve port.
+  eport: 9982 # service export port when as a reverse proxy
   mport: 8002 # agent manage port
-  log_dir: "./agentlogs" 
-  registry: "zk-registry" # registry id for registering agent info 
-  application: "ray-test" # agent identify. for agent command notify and so on  
+  log_dir: "./demologs"
+  registry: "direct-registry" # registry id for registering agent info
+  application: "agent-test" # agent identify. for agent command notify and so on
 
 #config of registries
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
-    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
-    port: 8100 #direct server port
+    host: localhost # direct server ip in single ip. if has host, address will disable.
+    port: 9982 #direct server port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
   # zk-registry:
