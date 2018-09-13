@@ -11,7 +11,7 @@ type AccessLogEndPointFilter struct {
 }
 
 func (t *AccessLogEndPointFilter) GetIndex() int {
-	return 11
+	return 1
 }
 
 func (t *AccessLogEndPointFilter) GetName() string {
