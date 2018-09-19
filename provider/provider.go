@@ -16,7 +16,7 @@ const (
 	Default = "default"
 )
 
-func RegistDefaultProvider(extFactory motan.ExtentionFactory) {
+func RegistDefaultProvider(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtProvider(CGI, func(url *motan.URL) motan.Provider {
 		return &CgiProvider{url: url}

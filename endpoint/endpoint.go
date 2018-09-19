@@ -21,7 +21,7 @@ const (
 
 var idOffset uint64 // id generator offset
 
-func RegistDefaultEndpoint(extFactory motan.ExtentionFactory) {
+func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
 		return &MotanEndpoint{url: url}
 	})
