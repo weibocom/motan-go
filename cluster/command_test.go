@@ -27,12 +27,12 @@ func TestProcessRouter(t *testing.T) {
 
 	//not match
 	*motan.LocalIP = "10.75.0.8"
-	result := proceeRoute(urls, router)
+	result := processRoute(urls, router)
 	checksize(len(result), len(urls), t)
 
 	// prefix match
 	*motan.LocalIP = "10.73.1.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.75.1")
@@ -41,7 +41,7 @@ func TestProcessRouter(t *testing.T) {
 	// exact match
 	router = newRouter("10.75.0.8 to 10.73.1.*")
 	*motan.LocalIP = "10.75.0.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.73.1")
@@ -50,7 +50,7 @@ func TestProcessRouter(t *testing.T) {
 	// * match
 	router = newRouter(" * to 10.75.*")
 	*motan.LocalIP = "10.108.0.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 4, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.75")
@@ -59,18 +59,18 @@ func TestProcessRouter(t *testing.T) {
 	// multi rules
 	router = newRouter(" * to 10.75.*", "10.108.* to 10.77.1.* ")
 	*motan.LocalIP = "10.108.0.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 0, t)
 
 	router = newRouter(" * to 10.75.*", "10.108.* to 10.75.1.* ")
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !(strings.HasPrefix(host, "10.77.1") || strings.HasPrefix(host, "10.75"))
 	}, t)
 
 	router = newRouter(" * to 10.*", "10.108.* to !10.73.1.* ")
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 6, t)
 	checkHost(result, func(host string) bool {
 		return !(strings.HasPrefix(host, "10.77.1") || strings.HasPrefix(host, "10.75"))
@@ -78,14 +78,14 @@ func TestProcessRouter(t *testing.T) {
 
 	router = newRouter(" 10.79.* to !10.75.1.*", "10.108.* to 10.73.1.* ", "10.108.* to !10.73.1.5")
 	*motan.LocalIP = "10.79.0.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 6, t)
 	checkHost(result, func(host string) bool {
 		return strings.HasPrefix(host, "10.75.1")
 	}, t)
 
 	*motan.LocalIP = "10.108.0.8"
-	result = proceeRoute(urls, router)
+	result = processRoute(urls, router)
 	checksize(len(result), 1, t)
 	checkHost(result, func(host string) bool {
 		return host != "10.73.1.3"
@@ -186,7 +186,7 @@ func TestProcessCommand(t *testing.T) {
 	fmt.Printf("notify:%t, crw:%+v\n", notify, crw)
 }
 
-func processServiceCmd(crw *CommandRegistryWarper, cl string, t *testing.T) {
+func processServiceCmd(crw *CommandRegistryWrapper, cl string, t *testing.T) {
 	notify := crw.processCommand(ServiceCmd, cl)
 	if crw.serviceCommandInfo != cl {
 		t.Errorf("serviceCommandInfo not correct! real:%s, expect:%s\n", crw.serviceCommandInfo, cl)
@@ -275,11 +275,11 @@ func checkHost(urls []*motan.URL, f func(host string) bool, t *testing.T) {
 	}
 }
 
-func getDefalultCommandWarper() *CommandRegistryWarper {
+func getDefalultCommandWarper() *CommandRegistryWrapper {
 	cluster := initCluster()
 	cluster.InitCluster()
 	registry := cluster.extFactory.GetRegistry(RegistryURL)
-	return GetCommandRegistryWarper(cluster, registry).(*CommandRegistryWarper)
+	return GetCommandRegistryWrapper(cluster, registry).(*CommandRegistryWrapper)
 }
 
 func buildCmd(index int, cmdType int, pattern string, mergeGroup string, routers string) string {

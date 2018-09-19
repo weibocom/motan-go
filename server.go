@@ -65,6 +65,7 @@ func GetMotanServerContext(confFile string) *MSContext {
 			logdir = "."
 		}
 		initLog(logdir)
+		registerSwitchers(ms.context)
 	}
 	return ms
 }

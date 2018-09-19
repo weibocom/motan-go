@@ -111,6 +111,7 @@ func GetClientContext(confFile string) *MCContext {
 			logdir = "."
 		}
 		initLog(logdir)
+		registerSwitchers(mc.context)
 	}
 	return mc
 }
