@@ -10,7 +10,7 @@ const (
 	GrpcPb = "grpc-pb"
 )
 
-func RegistDefaultSerializations(extFactory motan.ExtentionFactory) {
+func RegistDefaultSerializations(extFactory motan.ExtensionFactory) {
 	extFactory.RegistryExtSerialization(Simple, 6, func() motan.Serialization {
 		return &SimpleSerialization{}
 	})

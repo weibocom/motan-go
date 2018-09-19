@@ -7,7 +7,6 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-
 	"github.com/weibocom/motan-go/metrics"
 )
 

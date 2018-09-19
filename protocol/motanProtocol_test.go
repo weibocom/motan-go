@@ -3,8 +3,9 @@ package protocol
 import (
 	"bufio"
 	"fmt"
-	"github.com/weibocom/motan-go/core"
 	"testing"
+
+	"github.com/weibocom/motan-go/core"
 )
 
 func TestVersion(t *testing.T) {

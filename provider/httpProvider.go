@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"io"
 	"io/ioutil"
 	"net"
@@ -14,6 +12,9 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 type sConfT map[string]string

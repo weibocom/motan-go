@@ -5,11 +5,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rcrowley/go-metrics"
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-
-	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -154,7 +153,7 @@ func (r *reporter) sink() {
 
 	for name, writer := range r.writers {
 		if err := writer.Write(snap); err != nil {
-			vlog.Errorln("metrics writer %s error : %v", name, err)
+			vlog.Errorf("metrics writer %s error : %v\n", name, err)
 			break
 		}
 	}

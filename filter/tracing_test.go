@@ -2,12 +2,13 @@ package filter
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/core"
-	"testing"
 )
 
 func TestAttachmentReader_ForeachKey(t *testing.T) {

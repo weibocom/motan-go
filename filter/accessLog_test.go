@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
-	endpoint "github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/endpoint"
 )
 
 func TestFilter(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 
 	RegistDefaultFilters(defaultExtFactory)

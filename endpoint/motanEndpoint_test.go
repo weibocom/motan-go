@@ -9,7 +9,7 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	serialize "github.com/weibocom/motan-go/serialize"
+	"github.com/weibocom/motan-go/serialize"
 )
 
 //TODO more UT

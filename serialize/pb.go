@@ -2,9 +2,10 @@ package serialize
 
 import (
 	"errors"
-	"github.com/golang/protobuf/proto"
 	"math"
 	"reflect"
+
+	"github.com/golang/protobuf/proto"
 )
 
 var (

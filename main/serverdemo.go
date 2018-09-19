@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	motan "github.com/weibocom/motan-go"
+	"github.com/weibocom/motan-go"
 )
 
 func main() {

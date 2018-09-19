@@ -8,7 +8,7 @@ import (
 )
 
 func TestGetDirectRegistey(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultRegistry(defaultExtFactory)
 	dirURL := &motan.URL{Protocol: "direct", Host: "localhost", Port: 8001}

@@ -9,11 +9,11 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"strings"
+	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	"strings"
-	"time"
 )
 
 const (

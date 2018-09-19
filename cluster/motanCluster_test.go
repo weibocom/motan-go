@@ -5,9 +5,8 @@ import (
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
-
-	ha "github.com/weibocom/motan-go/ha"
-	lb "github.com/weibocom/motan-go/lb"
+	"github.com/weibocom/motan-go/ha"
+	"github.com/weibocom/motan-go/lb"
 )
 
 var (
@@ -111,8 +110,8 @@ func TestDestroy(t *testing.T) {
 }
 
 //-------------test struct--------------------
-func getCustomExt() motan.ExtentionFactory {
-	ext := &motan.DefaultExtentionFactory{}
+func getCustomExt() motan.ExtensionFactory {
+	ext := &motan.DefaultExtensionFactory{}
 	ext.Initialize()
 	ha.RegistDefaultHa(ext)
 	lb.RegistDefaultLb(ext)

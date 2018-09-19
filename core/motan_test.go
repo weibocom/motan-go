@@ -7,7 +7,7 @@ import (
 )
 
 func TestExtFactory(t *testing.T) {
-	ext := DefaultExtentionFactory{}
+	ext := DefaultExtensionFactory{}
 	ext.Initialize()
 	ext.RegistExtHa("test", newHa)
 	ext.RegistExtHa("test2", newHa)
