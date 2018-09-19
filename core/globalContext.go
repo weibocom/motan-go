@@ -22,6 +22,7 @@ const (
 	serverSection        = "motan-server"
 	importSection        = "import-refer"
 	dynamicSection       = "dynamic-param"
+	SwitcherSection      = "switcher"
 
 	// URLConfKey is config id
 	// config Keys

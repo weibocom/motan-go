@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	// path constants
 	zkRegistryNamespace         = "/motan"
 	zkRegistryCommand           = "/command"
 	zkRegistryNode              = "/node"
@@ -22,28 +23,32 @@ const (
 	zkNodeTypeUnavailableServer = "unavailableServer"
 	zkNodeTypeClient            = "client"
 	zkNodeTypeAgent             = "agent"
-	zKDefaultSessionTimeout     = 1000
 
-	//Compatible with java ioStream
+	zKDefaultSessionTimeout = 1000 // Second
+
+	// Compatible with java ioStream.
 	streamMagicTag = 0xaced
 	shortStringTag = 0x74
 	longStringTag  = 0x7C
 )
 
+// ZkRegistry is a registry based on zookeeper implementation, containing
+// the zookeeper configuration, all registration and subscription information.
 type ZkRegistry struct {
 	available            bool
-	zkConn               *zk.Conn
-	url                  *motan.URL
+	zkConn               *zk.Conn   // zkClient connection
+	url                  *motan.URL // zookeeper configuration info
 	sessionTimeout       time.Duration
 	registerLock         sync.Mutex
 	subscribeLock        sync.Mutex
-	switcherMap          map[string]chan bool
-	registeredServiceMap map[string]*motan.URL
-	availableServiceMap  map[string]*motan.URL
-	subscribedServiceMap map[string]map[motan.NotifyListener]*motan.URL
-	subscribedCommandMap map[string]map[motan.CommandNotifyListener]*motan.URL
+	switcherMap          map[string]chan bool                                  // save all switchers for each subscription
+	registeredServiceMap map[string]*motan.URL                                 // save all registered services
+	availableServiceMap  map[string]*motan.URL                                 // save all available services
+	subscribedServiceMap map[string]map[motan.NotifyListener]*motan.URL        // save all subscribed services with listeners
+	subscribedCommandMap map[string]map[motan.CommandNotifyListener]*motan.URL // save all subscribed commands with listeners
 }
 
+// Initialize initializes all structure members and handles new session.
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(
 		z.url.GetPositiveIntValue(motan.SessionTimeOutKey, zKDefaultSessionTimeout)) * time.Second
@@ -63,6 +68,7 @@ func (z *ZkRegistry) Initialize() {
 	z.setAvailable(true)
 }
 
+// handleNewSession restores the scene, when the session is updated.
 func (z *ZkRegistry) handleNewSession(ch <-chan zk.Event) {
 	defer motan.HandlePanic(nil)
 	for {
@@ -78,6 +84,7 @@ func (z *ZkRegistry) handleNewSession(ch <-chan zk.Event) {
 	}
 }
 
+// recoverService recovers available and unavailable services.
 func (z *ZkRegistry) recoverService() {
 	z.registerLock.Lock()
 	defer z.registerLock.Unlock()
@@ -95,6 +102,7 @@ func (z *ZkRegistry) recoverService() {
 	}
 }
 
+// recoverSubscribe recovers subscribed service and commands.
 func (z *ZkRegistry) recoverSubscribe() {
 	z.subscribeLock.Lock()
 	defer z.subscribeLock.Unlock()
@@ -116,6 +124,7 @@ func (z *ZkRegistry) recoverSubscribe() {
 	}
 }
 
+// Register creates a unavailableServer node based on url.
 func (z *ZkRegistry) Register(url *motan.URL) {
 	if !z.IsAvailable() {
 		return
@@ -141,6 +150,7 @@ func (z *ZkRegistry) doRegister(url *motan.URL) {
 	}
 }
 
+// UnRegister removes server node and unavailableServer node based on url.
 func (z *ZkRegistry) UnRegister(url *motan.URL) {
 	if !z.IsAvailable() {
 		return
@@ -155,6 +165,7 @@ func (z *ZkRegistry) UnRegister(url *motan.URL) {
 	}
 }
 
+// Subscribe listens the service node using listener.
 func (z *ZkRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 	if !z.IsAvailable() {
 		return
@@ -230,6 +241,7 @@ func (z *ZkRegistry) doSubscribe(url *motan.URL) {
 	}()
 }
 
+// Unsubscribe removes the listener of the service.
 func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 	if !z.IsAvailable() {
 		return
@@ -247,6 +259,7 @@ func (z *ZkRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) 
 	}
 }
 
+// Discover returns all nodes of a service.
 func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	if !z.IsAvailable() {
 		return nil
@@ -263,6 +276,7 @@ func (z *ZkRegistry) Discover(url *motan.URL) []*motan.URL {
 	return nil
 }
 
+// SubscribeCommand listens the command node using listener.
 func (z *ZkRegistry) SubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
 	if !z.IsAvailable() {
 		return
@@ -346,6 +360,7 @@ func (z *ZkRegistry) doSubscribeCommand(url *motan.URL) {
 	}()
 }
 
+// UnSubscribeCommand removes the listener of the command.
 func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNotifyListener) {
 	if !z.IsAvailable() {
 		return
@@ -368,6 +383,7 @@ func (z *ZkRegistry) UnSubscribeCommand(url *motan.URL, listener motan.CommandNo
 	}
 }
 
+// DiscoverCommand returns string info on the command node.
 func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	if !z.IsAvailable() {
 		return ""
@@ -393,6 +409,7 @@ func (z *ZkRegistry) DiscoverCommand(url *motan.URL) string {
 	return res
 }
 
+// Available moves unavailableServer node to server node.
 func (z *ZkRegistry) Available(url *motan.URL) {
 	if !z.IsAvailable() {
 		return
@@ -421,6 +438,7 @@ func (z *ZkRegistry) doAvailable(url *motan.URL) {
 	}
 }
 
+// Unavailable moves server node to unavailableServer node.
 func (z *ZkRegistry) Unavailable(url *motan.URL) {
 	if !z.IsAvailable() {
 		return
@@ -449,6 +467,7 @@ func (z *ZkRegistry) doUnavailable(url *motan.URL) {
 	}
 }
 
+// GetRegisteredServices returns all registered services.
 func (z *ZkRegistry) GetRegisteredServices() []*motan.URL {
 	z.registerLock.Lock()
 	defer z.registerLock.Unlock()
@@ -481,6 +500,7 @@ func (z *ZkRegistry) setAvailable(available bool) {
 
 func (z *ZkRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
 
+// saveSnapshot is a common snapshot mode, called when node found or node changed.
 func (z *ZkRegistry) saveSnapshot(nodes []string, url *motan.URL) {
 	serviceNode := ServiceNode{
 		Group: url.Group,
@@ -494,6 +514,7 @@ func (z *ZkRegistry) saveSnapshot(nodes []string, url *motan.URL) {
 	SaveSnapshot(z.GetURL().GetIdentity(), GetNodeKey(url), serviceNode)
 }
 
+// removeNode removes the node of the specified nodeType, if it exists.
 func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
 	var nodePath string
 	if nodeType == zkNodeTypeAgent {
@@ -512,6 +533,7 @@ func (z *ZkRegistry) removeNode(url *motan.URL, nodeType string) {
 	}
 }
 
+// createNode creates the node of the specified nodeType, if it not exists.
 func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) {
 	var typePath string
 	var nodePath string
@@ -535,6 +557,7 @@ func (z *ZkRegistry) createNode(url *motan.URL, nodeType string) {
 	}
 }
 
+// createPersistent recursively creates the node and its parent directory.
 func (z *ZkRegistry) createPersistent(path string, createParents bool) {
 	if _, err := z.zkConn.Create(path, nil, 0, zk.WorldACL(zk.PermAll)); err != nil {
 		if err == zk.ErrNoNode && createParents {
@@ -548,6 +571,7 @@ func (z *ZkRegistry) createPersistent(path string, createParents bool) {
 	}
 }
 
+// getNodeInfo reads node information using string type and compatible with java ioStream
 func getNodeInfo(data []byte) string {
 	if len(data) > 7 && binary.BigEndian.Uint16(data[:2]) == streamMagicTag {
 		if data[4] == shortStringTag {
@@ -559,6 +583,7 @@ func getNodeInfo(data []byte) string {
 	return string(data)
 }
 
+// nodeChildsToURLs convert all currentChilds to URL type, and returns url list
 func (z *ZkRegistry) nodeChildsToURLs(url *motan.URL, parentPath string, currentChilds []string) []*motan.URL {
 	urls := make([]*motan.URL, 0, len(currentChilds))
 	if currentChilds != nil {
@@ -597,6 +622,7 @@ func (z *ZkRegistry) nodeChildsToURLs(url *motan.URL, parentPath string, current
 	return urls
 }
 
+// >>>>>>>>>>>>>>>>> Path conversion functions >>>>>>>>>>>>>>>>>
 func toGroupPath(url *motan.URL) string {
 	return zkRegistryNamespace + zkPathSeparator + url.Group
 }
@@ -632,3 +658,5 @@ func toAgentNodePath(url *motan.URL) string {
 func toAgentCommandPath(url *motan.URL) string {
 	return toAgentPath(url) + zkRegistryCommand
 }
+
+// <<<<<<<<<<<<<<<<< Path conversion functions <<<<<<<<<<<<<<<<<

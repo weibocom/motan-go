@@ -105,6 +105,7 @@ func (a *Agent) initParam() {
 		logdir = "."
 	}
 	initLog(logdir)
+	registerSwitchers(a.Context)
 
 	port := *motan.Port
 	if port == 0 && section != nil && section["port"] != nil {
@@ -214,7 +215,7 @@ func (a *Agent) startAgent() {
 }
 
 func (a *Agent) registerAgent() {
-	vlog.Infoln("start agent regitstry.")
+	vlog.Infoln("start agent registry.")
 	if reg, exit := a.agentURL.Parameters[motan.RegistryKey]; exit {
 		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
 			registry := a.extFactory.GetRegistry(registryURL)
@@ -231,7 +232,7 @@ func (a *Agent) registerAgent() {
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL)
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL.GetIdentity())
 		}
 	}
 }
@@ -296,7 +297,7 @@ func (a *Agent) startServerAgent() {
 		}
 		motan.CanSetContext(provider, globalContext)
 		motan.Initialize(provider)
-		provider = mserver.WarperWithFilter(provider, a.extFactory)
+		provider = mserver.WrapWithFilter(provider, a.extFactory, globalContext)
 		exporter.SetProvider(provider)
 		server := a.agentPortServer[url.Port]
 		if server == nil {
@@ -373,6 +374,14 @@ func initLog(logdir string) {
 	vlog.LogInit(nil)
 }
 
+func registerSwitchers(c *motan.Context) {
+	switchers, _ := c.Config.GetSection(motan.SwitcherSection)
+	s := motan.GetSwitcherManager()
+	for n, v := range switchers {
+		s.Register(n.(string), v.(bool))
+	}
+}
+
 func getDefaultResponse(requestid uint64, errmsg string) *motan.MotanResponse {
 	return motan.BuildExceptionResponse(requestid, &motan.Exception{ErrCode: 400, ErrMsg: errmsg, ErrType: motan.ServiceException})
 }
@@ -432,7 +441,7 @@ func (a *Agent) startMServer() {
 func (a *Agent) mhandle(k string, h http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
-			vlog.Warningf("managehandler register fail. maybe the pattern '%s' alreay regist\n", k)
+			vlog.Warningf("manageHandler register fail. maybe the pattern '%s' already registered\n", k)
 		}
 	}()
 	if sa, ok := h.(SetAgent); ok {

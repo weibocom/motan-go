@@ -34,14 +34,17 @@ func NoPermissionCheck(r *http.Request) bool {
 func GetDefaultManageHandlers() map[string]http.Handler {
 	handlerOnce.Do(func() {
 		defaultManageHandlers = make(map[string]http.Handler, 16)
+
 		status := &StatusHandler{}
 		defaultManageHandlers["/"] = status
 		defaultManageHandlers["/200"] = status
 		defaultManageHandlers["/503"] = status
 		defaultManageHandlers["/version"] = status
+
 		info := &InfoHandler{}
 		defaultManageHandlers["/getConfig"] = info
 		defaultManageHandlers["/getReferService"] = info
+
 		debug := &DebugHandler{}
 		defaultManageHandlers["/debug/pprof/"] = debug
 		defaultManageHandlers["/debug/pprof/cmdline"] = debug
@@ -50,6 +53,11 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/debug/pprof/trace"] = debug
 		defaultManageHandlers["/debug/mesh/trace"] = debug
 		defaultManageHandlers["/debug/pprof/sw"] = debug
+
+		switcher := &SwitcherHandle{}
+		defaultManageHandlers["/switcher/set"] = switcher
+		defaultManageHandlers["/switcher/get"] = switcher
+		defaultManageHandlers["/switcher/getAll"] = switcher
 	})
 	return defaultManageHandlers
 }

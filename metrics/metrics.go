@@ -153,7 +153,7 @@ func (r *reporter) sink() {
 
 	for name, writer := range r.writers {
 		if err := writer.Write(snap); err != nil {
-			vlog.Errorln("metrics writer %s error : %v", name, err)
+			vlog.Errorf("metrics writer %s error : %v\n", name, err)
 			break
 		}
 	}

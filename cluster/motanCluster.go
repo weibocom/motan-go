@@ -242,7 +242,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 			registry := m.extFactory.GetRegistry(registryURL)
 			if registry != nil {
 				if _, ok := registry.(motan.DiscoverCommand); ok {
-					registry = GetCommandRegistryWarper(m, registry)
+					registry = GetCommandRegistryWrapper(m, registry)
 				}
 				registry.Subscribe(m.url, m)
 				registries = append(registries, registry)
