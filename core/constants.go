@@ -52,6 +52,18 @@ const (
 	NodeTypeAgent   = "agent"
 )
 
+// trace span name
+const (
+	Receive       = "receive"
+	Decode        = "decode"
+	Convert       = "convert"
+	ClustFliter   = "clustFilter"
+	EpFilterStart = "selectEp"
+	EpFilterEnd   = "epFilter"
+	Encode        = "encode"
+	Send          = "send"
+)
+
 const (
 	DefaultWriteTimeout = 5 * time.Second
 )

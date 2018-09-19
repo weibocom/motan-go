@@ -66,7 +66,7 @@ func parseURLs(url *motan.URL) []*motan.URL {
 		urls = append(urls, url)
 	} else if address, exist := url.Parameters[motan.AddressKey]; exist {
 		for _, add := range strings.Split(address, ",") {
-			hostport := strings.Split(add, ":")
+			hostport := motan.TrimSplit(add, ":")
 			if len(hostport) == 2 {
 				port, err := strconv.Atoi(hostport[1])
 				if err == nil {

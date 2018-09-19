@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"reflect"
+	"regexp"
 
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v2"
-	"reflect"
-	"regexp"
 )
 
 type Config struct {

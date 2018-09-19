@@ -1,11 +1,12 @@
 package metrics
 
 import (
-	metrics "github.com/rcrowley/go-metrics"
-	motan "github.com/weibocom/motan-go/core"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rcrowley/go-metrics"
+	motan "github.com/weibocom/motan-go/core"
 )
 
 // go-metrics中的Meter的Rate相关计算的都是指数移动变化率(http://blog.sina.com.cn/s/blog_5069fdde0100g4ua.html),
@@ -58,7 +59,7 @@ type qpsMeter struct {
 }
 
 func getOrRegisterMeter(name string, r metrics.Registry) metrics.Meter {
-	if nil == r {
+	if r == nil {
 		r = metrics.DefaultRegistry
 	}
 	return r.GetOrRegister(name, newQPSMeter).(metrics.Meter)

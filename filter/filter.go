@@ -14,7 +14,7 @@ const (
 	Trace          = "trace"
 )
 
-func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
+func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtFilter(AccessLog, func() motan.Filter {
 		return &AccessLogEndPointFilter{}
 	})

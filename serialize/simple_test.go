@@ -2,10 +2,11 @@ package serialize
 
 import (
 	"fmt"
-	motan "github.com/weibocom/motan-go/core"
 	"reflect"
 	"strconv"
 	"testing"
+
+	motan "github.com/weibocom/motan-go/core"
 )
 
 // serialize && deserialize string

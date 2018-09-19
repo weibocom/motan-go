@@ -49,7 +49,7 @@ motan-refer:
     basicRefer: mybasicRefer # basic refer id
 
 
-#conf of extentions. any custom config
+#conf of extensions. any custom config
 testextconf:
   foo: xxx
   bar:

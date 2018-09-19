@@ -3,12 +3,14 @@ package registry
 import (
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
 	"unsafe"
 
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -25,7 +27,7 @@ const (
 	ZK     = "zookeeper"
 )
 
-type SnapShotNodeInfo struct {
+type SnapshotNodeInfo struct {
 	ExtInfo string `json:"extInfo"`
 	Addr    string `json:"address"`
 }
@@ -33,25 +35,62 @@ type SnapShotNodeInfo struct {
 type ServiceNode struct {
 	Group string             `json:"group"`
 	Path  string             `json:"path"`
-	Nodes []SnapShotNodeInfo `json:"nodes"`
+	Nodes []SnapshotNodeInfo `json:"nodes"`
 }
 
 var (
-	// TODO support mulit registry
-	snapshotConf       = &motan.SnapshotConf{SnapshotInterval: DefaultSnapshotInterval, SnapshotDir: DefaultSnapshotDir}
+	once               sync.Once
 	nodeRsSnapshotLock sync.RWMutex
+	snapshot           map[string]map[string]ServiceNode
+	snapshotConf       = &motan.SnapshotConf{SnapshotInterval: DefaultSnapshotInterval, SnapshotDir: DefaultSnapshotDir}
 )
 
-func SetSanpshotConf(snapshotInterval time.Duration, snapshotDir string) {
+func CheckSnapshotDir() {
+	dir := snapshotConf.SnapshotDir
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.Mkdir(dir, 0774); err != nil {
+			vlog.Errorf("registry make directory error. dir:%s, err:%s\n", dir, err.Error())
+			return
+		}
+	}
+}
+
+func flushSnapshot() {
+	vlog.Infoln("registry start snapshot, dir:", snapshotConf.SnapshotDir)
+	ticker := time.NewTicker(snapshotConf.SnapshotInterval)
+	for range ticker.C {
+		if snapshot != nil {
+			nodeRsSnapshotLock.RLock()
+			newNodes := map[string]ServiceNode{}
+			for _, serviceNodes := range snapshot {
+				for key, serviceNode := range serviceNodes {
+					if n, ok := newNodes[key]; ok {
+						n.Nodes = append(n.Nodes, serviceNode.Nodes...)
+						newNodes[key] = n
+					} else {
+						newNodes[key] = serviceNode
+					}
+				}
+			}
+			for key, node := range newNodes {
+				nodeRsSnapshot := JSONString(node)
+				ioutil.WriteFile(filepath.Join(snapshotConf.SnapshotDir, key), StringToSliceByte(nodeRsSnapshot), 0777)
+			}
+			nodeRsSnapshotLock.RUnlock()
+		}
+	}
+}
+
+func SetSnapshotConf(snapshotInterval time.Duration, snapshotDir string) {
 	snapshotConf.SnapshotDir = snapshotDir
 	snapshotConf.SnapshotInterval = snapshotInterval
 }
 
-func GetSanpshotConf() *motan.SnapshotConf {
+func GetSnapshotConf() *motan.SnapshotConf {
 	return snapshotConf
 }
 
-func RegistDefaultRegistry(extFactory motan.ExtentionFactory) {
+func RegistDefaultRegistry(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtRegistry(Direct, func(url *motan.URL) motan.Registry {
 		return &DirectRegistry{url: url}
 	})
@@ -79,12 +118,8 @@ func GetSubKey(url *motan.URL) string {
 	return url.Group + "/" + url.Path + "/service"
 }
 
-func getNodeKey(url *motan.URL) string {
+func GetNodeKey(url *motan.URL) string {
 	return url.Group + "_" + url.Path
-}
-
-func SliceByteToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
 }
 
 func StringToSliceByte(s string) []byte {
@@ -93,14 +128,20 @@ func StringToSliceByte(s string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&h))
 }
 
-func saveSnapshot(d string, nodes map[string]ServiceNode) {
-	nodeRsSnapshotLock.RLock()
-	for key, node := range nodes {
-		nodeRsSnapshot := JSONString(node)
-		// ioutil.ReadFile(filepath.Join(d, key))
-		ioutil.WriteFile(filepath.Join(d, key), StringToSliceByte(nodeRsSnapshot), 0777)
+func SaveSnapshot(registry string, nodeKey string, nodes ServiceNode) {
+	once.Do(func() {
+		CheckSnapshotDir()
+		go flushSnapshot()
+	})
+	nodeRsSnapshotLock.Lock()
+	defer nodeRsSnapshotLock.Unlock()
+	if snapshot == nil {
+		snapshot = make(map[string]map[string]ServiceNode)
 	}
-	nodeRsSnapshotLock.RUnlock()
+	if snapshot[registry] == nil {
+		snapshot[registry] = make(map[string]ServiceNode)
+	}
+	snapshot[registry][nodeKey] = nodes
 }
 
 func JSONString(v interface{}) string {

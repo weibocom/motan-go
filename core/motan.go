@@ -1,15 +1,15 @@
 package core
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
-
-	"errors"
-	"github.com/weibocom/motan-go/log"
 	"sync/atomic"
+	"time"
 	"unsafe"
+
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -201,7 +201,7 @@ type Server interface {
 	Destroyable
 	SetMessageHandler(mh MessageHandler)
 	GetMessageHandler() MessageHandler
-	Open(block bool, proxy bool, handler MessageHandler, extFactory ExtentionFactory) error
+	Open(block bool, proxy bool, handler MessageHandler, extFactory ExtensionFactory) error
 }
 
 // Exporter : export and manage a service. one exporter bind with a service
@@ -237,8 +237,8 @@ type Serialization interface {
 	DeSerializeMulti(b []byte, v []interface{}) ([]interface{}, error)
 }
 
-// ExtentionFactory : can regiser and get all kinds of extension implements.
-type ExtentionFactory interface {
+// ExtensionFactory : can regiser and get all kinds of extension implements.
+type ExtensionFactory interface {
 	GetHa(url *URL) HaStrategy
 	GetLB(url *URL) LoadBalance
 	GetFilter(name string) Filter
@@ -301,7 +301,7 @@ type Exception struct {
 
 // RPCContext : Context for RPC call
 type RPCContext struct {
-	ExtFactory      ExtentionFactory
+	ExtFactory      ExtensionFactory
 	OriginalMessage interface{}
 	Oneway          bool
 	Proxy           bool
@@ -313,6 +313,9 @@ type RPCContext struct {
 	AsyncCall bool
 	Result    *AsyncResult
 	Reply     interface{}
+
+	// trace context
+	Tc *TraceContext
 }
 
 // AsyncResult : async call result
@@ -441,6 +444,7 @@ func (m *MotanRequest) Clone() interface{} {
 			AsyncCall:    m.RPCContext.AsyncCall,
 			Result:       m.RPCContext.Result,
 			Reply:        m.RPCContext.Reply,
+			Tc:           m.RPCContext.Tc,
 		}
 		if m.RPCContext.OriginalMessage != nil {
 			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
@@ -562,7 +566,7 @@ type NewServerFunc func(url *URL) Server
 type NewMessageHandlerFunc func() MessageHandler
 type NewSerializationFunc func() Serialization
 
-type DefaultExtentionFactory struct {
+type DefaultExtensionFactory struct {
 	// factories
 	filterFactories   map[string]DefaultFilterFunc
 	haFactories       map[string]NewHaFunc
@@ -579,33 +583,33 @@ type DefaultExtentionFactory struct {
 	newRegistryLock sync.Mutex
 }
 
-func (d *DefaultExtentionFactory) GetHa(url *URL) HaStrategy {
+func (d *DefaultExtensionFactory) GetHa(url *URL) HaStrategy {
 	haName := url.GetParam(Hakey, "failover")
 	if newHa, ok := d.haFactories[haName]; ok {
 		return newHa(url)
 	}
-	vlog.Errorf("HaStrategy name %s is not found in DefaultExtentionFactory!\n", haName)
+	vlog.Errorf("HaStrategy name %s is not found in DefaultExtensionFactory!\n", haName)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetLB(url *URL) LoadBalance {
+func (d *DefaultExtensionFactory) GetLB(url *URL) LoadBalance {
 	lbName := url.GetParam(Lbkey, "random")
 	if newLb, ok := d.lbFactories[lbName]; ok {
 		return newLb(url)
 	}
-	vlog.Errorf("LoadBalance name %s is not found in DefaultExtentionFactory!\n", lbName)
+	vlog.Errorf("LoadBalance name %s is not found in DefaultExtensionFactory!\n", lbName)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetFilter(name string) Filter {
+func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
 	if newDefualt, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
 		return newDefualt()
 	}
-	vlog.Errorf("filter name %s is not found in DefaultExtentionFactory!\n", name)
+	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!\n", name)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetRegistry(url *URL) Registry {
+func (d *DefaultExtensionFactory) GetRegistry(url *URL) Registry {
 	key := url.GetIdentity()
 	if registry, exist := d.registries[key]; exist {
 		return registry
@@ -620,20 +624,20 @@ func (d *DefaultExtentionFactory) GetRegistry(url *URL) Registry {
 		d.registries[key] = registry
 		return registry
 	}
-	vlog.Errorf("Registry name %s is not found in DefaultExtentionFactory!\n", url.Protocol)
+	vlog.Errorf("Registry name %s is not found in DefaultExtensionFactory!\n", url.Protocol)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetEndPoint(url *URL) EndPoint {
+func (d *DefaultExtensionFactory) GetEndPoint(url *URL) EndPoint {
 	if newEp, ok := d.endpointFactories[url.Protocol]; ok {
 		endpoint := newEp(url)
 		return endpoint
 	}
-	vlog.Errorf("EndPoint(protocol) name %s is not found in DefaultExtentionFactory!\n", url.Protocol)
+	vlog.Errorf("EndPoint(protocol) name %s is not found in DefaultExtensionFactory!\n", url.Protocol)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetProvider(url *URL) Provider {
+func (d *DefaultExtensionFactory) GetProvider(url *URL) Provider {
 	pName := url.GetParam(ProviderKey, "")
 	if pName == "" {
 		if proxy := url.GetParam(ProxyKey, ""); proxy != "" {
@@ -645,11 +649,11 @@ func (d *DefaultExtentionFactory) GetProvider(url *URL) Provider {
 	if newProviderFunc, ok := d.providerFactories[pName]; ok {
 		return newProviderFunc(url)
 	}
-	vlog.Errorf("provider name %s is not found in DefaultExtentionFactory!\n", pName)
+	vlog.Errorf("provider name %s is not found in DefaultExtensionFactory!\n", pName)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetServer(url *URL) Server {
+func (d *DefaultExtensionFactory) GetServer(url *URL) Server {
 	sname := url.Protocol
 	if sname == "" {
 		sname = "motan2"
@@ -660,21 +664,21 @@ func (d *DefaultExtentionFactory) GetServer(url *URL) Server {
 		Initialize(s)
 		return s
 	}
-	vlog.Errorf("server name %s is not found in DefaultExtentionFactory!\n", sname)
+	vlog.Errorf("server name %s is not found in DefaultExtensionFactory!\n", sname)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetMessageHandler(name string) MessageHandler {
+func (d *DefaultExtensionFactory) GetMessageHandler(name string) MessageHandler {
 	if newMessageHandler, ok := d.messageHandlers[strings.TrimSpace(name)]; ok {
 		handler := newMessageHandler()
 		Initialize(handler)
 		return handler
 	}
-	vlog.Errorf("messageHandler name %s is not found in DefaultExtentionFactory!\n", name)
+	vlog.Errorf("messageHandler name %s is not found in DefaultExtensionFactory!\n", name)
 	return nil
 }
 
-func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serialization {
+func (d *DefaultExtensionFactory) GetSerialization(name string, id int) Serialization {
 	if name != "" {
 		if newSerialization, ok := d.serializations[strings.TrimSpace(name)]; ok {
 			return newSerialization()
@@ -687,45 +691,45 @@ func (d *DefaultExtentionFactory) GetSerialization(name string, id int) Serializ
 	return nil
 }
 
-func (d *DefaultExtentionFactory) RegistExtFilter(name string, newFilter DefaultFilterFunc) {
+func (d *DefaultExtensionFactory) RegistExtFilter(name string, newFilter DefaultFilterFunc) {
 	// 覆盖方式
 	d.filterFactories[name] = newFilter
 }
 
-func (d *DefaultExtentionFactory) RegistExtHa(name string, newHa NewHaFunc) {
+func (d *DefaultExtensionFactory) RegistExtHa(name string, newHa NewHaFunc) {
 	d.haFactories[name] = newHa
 }
 
-func (d *DefaultExtentionFactory) RegistExtLb(name string, newLb NewLbFunc) {
+func (d *DefaultExtensionFactory) RegistExtLb(name string, newLb NewLbFunc) {
 	d.lbFactories[name] = newLb
 }
 
-func (d *DefaultExtentionFactory) RegistExtEndpoint(name string, newEndpoint NewEndpointFunc) {
+func (d *DefaultExtensionFactory) RegistExtEndpoint(name string, newEndpoint NewEndpointFunc) {
 	d.endpointFactories[name] = newEndpoint
 }
 
-func (d *DefaultExtentionFactory) RegistExtProvider(name string, newProvider NewProviderFunc) {
+func (d *DefaultExtensionFactory) RegistExtProvider(name string, newProvider NewProviderFunc) {
 	d.providerFactories[name] = newProvider
 }
 
-func (d *DefaultExtentionFactory) RegistExtRegistry(name string, newRegistry NewRegistryFunc) {
+func (d *DefaultExtensionFactory) RegistExtRegistry(name string, newRegistry NewRegistryFunc) {
 	d.registryFactories[name] = newRegistry
 }
 
-func (d *DefaultExtentionFactory) RegistExtServer(name string, newServer NewServerFunc) {
+func (d *DefaultExtensionFactory) RegistExtServer(name string, newServer NewServerFunc) {
 	d.servers[name] = newServer
 }
 
-func (d *DefaultExtentionFactory) RegistryExtMessageHandler(name string, newMessage NewMessageHandlerFunc) {
+func (d *DefaultExtensionFactory) RegistryExtMessageHandler(name string, newMessage NewMessageHandlerFunc) {
 	d.messageHandlers[name] = newMessage
 }
 
-func (d *DefaultExtentionFactory) RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc) {
+func (d *DefaultExtensionFactory) RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc) {
 	d.serializations[name] = newSerialization
 	d.serializations[strconv.Itoa(id)] = newSerialization
 }
 
-func (d *DefaultExtentionFactory) Initialize() {
+func (d *DefaultExtensionFactory) Initialize() {
 	d.filterFactories = make(map[string]DefaultFilterFunc)
 	d.haFactories = make(map[string]NewHaFunc)
 	d.lbFactories = make(map[string]NewLbFunc)
@@ -768,6 +772,9 @@ func (l *lastEndPointFilter) NewFilter(url *URL) Filter {
 }
 
 func (l *lastEndPointFilter) Filter(caller Caller, request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: EpFilterEnd, Addr: caller.GetURL().GetAddressStr(), Time: time.Now()})
+	}
 	return caller.Call(request)
 }
 
@@ -798,6 +805,9 @@ func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 }
 
 func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: ClustFliter, Time: time.Now()})
+	}
 	return haStrategy.Call(request, loadBalance)
 }
 
@@ -825,6 +835,9 @@ type FilterEndPoint struct {
 }
 
 func (f *FilterEndPoint) Call(request Request) Response {
+	if request.GetRPCContext(true).Tc != nil {
+		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: EpFilterStart, Addr: f.GetURL().GetAddressStr(), Time: time.Now()})
+	}
 	return f.Filter.Filter(f.Caller, request)
 }
 func (f *FilterEndPoint) GetURL() *URL {

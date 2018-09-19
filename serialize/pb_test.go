@@ -2,12 +2,13 @@ package serialize
 
 import (
 	"fmt"
+	"math"
+	"testing"
+
 	"github.com/golang/protobuf/proto"
 	motan "github.com/weibocom/motan-go/core"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	"math"
-	"testing"
 )
 
 // ------- grpc-pb --------

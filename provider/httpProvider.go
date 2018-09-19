@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"io"
 	"io/ioutil"
 	"net"
@@ -14,6 +12,9 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 type sConfT map[string]string
@@ -47,7 +48,7 @@ func (h *HTTPProvider) Initialize() {
 		for confID, info := range urlConf {
 			srvConf := make(srvConfT)
 			for methodArrStr, getSrvConf := range info.(map[interface{}]interface{}) {
-				methodArr := strings.Split(methodArrStr.(string), ",")
+				methodArr := motan.TrimSplit(methodArrStr.(string), ",")
 				for _, method := range methodArr {
 					sconf := make(sConfT)
 					for k, v := range getSrvConf.(map[interface{}]interface{}) {

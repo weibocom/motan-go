@@ -250,11 +250,11 @@ func IsSame(m1 map[string]string, m2 map[string]string, key string, defaultValue
 	return v1 == v2
 }
 
-func GetURLFilters(url *URL, extFactory ExtentionFactory) (clusterFilter ClusterFilter, endpointFilters []Filter) {
+func GetURLFilters(url *URL, extFactory ExtensionFactory) (clusterFilter ClusterFilter, endpointFilters []Filter) {
 	if filters, ok := url.Parameters[FilterKey]; ok {
 		clusterFilters := make([]Filter, 0, 10)
 		endpointFilters = make([]Filter, 0, 10)
-		arr := strings.Split(filters, ",")
+		arr := TrimSplit(filters, ",")
 		for _, f := range arr {
 			filter := extFactory.GetFilter(f)
 			if filter != nil {
@@ -301,7 +301,7 @@ func (f filterSlice) Less(i, j int) bool {
 	return f[i].GetIndex() > f[j].GetIndex()
 }
 
-func GetSerialization(url *URL, extFactory ExtentionFactory) Serialization {
+func GetSerialization(url *URL, extFactory ExtensionFactory) Serialization {
 	s := url.Parameters[SerializationKey]
 	if s == "" {
 		s = defaultSerialize

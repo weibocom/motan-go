@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -18,7 +17,7 @@ import (
 type MSContext struct {
 	confFile     string
 	context      *motan.Context
-	extFactory   motan.ExtentionFactory
+	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
 	portServer   map[int]motan.Server
 	serviceImpls map[string]interface{}
@@ -66,11 +65,12 @@ func GetMotanServerContext(confFile string) *MSContext {
 			logdir = "."
 		}
 		initLog(logdir)
+		registerSwitchers(ms.context)
 	}
 	return ms
 }
 
-func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
+func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	m.extFactory = extfactory
@@ -92,7 +92,7 @@ func (m *MSContext) export(url *motan.URL) {
 		port := defaultServerPort
 		protocol := defaultProtocal
 		if export != "" {
-			s := strings.Split(export, ":")
+			s := motan.TrimSplit(export, ":")
 			if len(s) == 1 {
 				port = s[0]
 			} else if len(s) == 2 {
@@ -112,10 +112,11 @@ func (m *MSContext) export(url *motan.URL) {
 		if url.Host == "" {
 			url.Host = motan.GetLocalIP()
 		}
+		url.ClearCachedInfo()
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
 		motan.Initialize(provider)
-		provider = mserver.WarperWithFilter(provider, m.extFactory)
+		provider = mserver.WrapWithFilter(provider, m.extFactory, m.context)
 
 		exporter := &mserver.DefaultExporter{}
 		exporter.SetProvider(provider)

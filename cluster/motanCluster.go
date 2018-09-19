@@ -3,7 +3,6 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -19,7 +18,7 @@ type MotanCluster struct {
 	Refers         []motan.EndPoint
 	Filters        []motan.Filter
 	clusterFilter  motan.ClusterFilter
-	extFactory     motan.ExtentionFactory
+	extFactory     motan.ExtensionFactory
 	registryRefers map[string][]motan.EndPoint
 	notifyLock     sync.Mutex
 	available      bool
@@ -66,8 +65,6 @@ func (m *MotanCluster) InitCluster() bool {
 	m.LoadBalance = m.extFactory.GetLB(m.url)
 	//filter
 	m.initFilters()
-	// parse registry and subscribe
-	m.parseRegistry()
 
 	if m.clusterFilter == nil {
 		m.clusterFilter = motan.GetLastClusterFilter()
@@ -78,6 +75,10 @@ func (m *MotanCluster) InitCluster() bool {
 	//TODO weather has available refers
 	m.available = true
 	m.closed = false
+
+	// parse registry and subscribe
+	m.parseRegistry()
+
 	vlog.Infof("init MotanCluster %s\n", m.GetIdentity())
 
 	return true
@@ -142,7 +143,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 				ep.SetProxy(m.proxy)
 				serialization := motan.GetSerialization(newURL, m.extFactory)
 				if serialization == nil {
-					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtentionFactory! url:%+v\n", m.url)
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v\n", m.url)
 				} else {
 					ep.SetSerialization(serialization)
 				}
@@ -223,7 +224,7 @@ func (m *MotanCluster) Destroy() {
 	}
 }
 
-func (m *MotanCluster) SetExtFactory(factory motan.ExtentionFactory) {
+func (m *MotanCluster) SetExtFactory(factory motan.ExtensionFactory) {
 	m.extFactory = factory
 }
 
@@ -234,14 +235,14 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		err = errors.New(errInfo)
 		vlog.Errorln(errInfo)
 	}
-	arr := strings.Split(regs, ",")
+	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
 	for _, r := range arr {
 		if registryURL, ok := m.Context.RegistryURLs[r]; ok {
 			registry := m.extFactory.GetRegistry(registryURL)
 			if registry != nil {
 				if _, ok := registry.(motan.DiscoverCommand); ok {
-					registry = GetCommandRegistryWarper(m, registry)
+					registry = GetCommandRegistryWrapper(m, registry)
 				}
 				registry.Subscribe(m.url, m)
 				registries = append(registries, registry)

@@ -11,7 +11,7 @@ import (
 func TestWeightedLbWraper(t *testing.T) {
 	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Parameters[motan.Lbkey] = Roundrobin
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultLb(defaultExtFactory)
 	lb := defaultExtFactory.GetLB(url)

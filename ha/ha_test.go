@@ -11,7 +11,7 @@ func NewFailOver(url *motan.URL) motan.HaStrategy {
 }
 
 func TestGetHa(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultHa(defaultExtFactory)
 	p := make(map[string]string)

@@ -72,12 +72,12 @@ motan-service:
     path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
     registry: direct
     serialization: simple
-    basicRefer: mybasicService
+    basicService: mybasicService
     nodeType: server
     ref : "main.Motan2TestService"
     export: "motan2:8100"
 
-#conf of extentions
+#conf of extensions
 
 metrics:
   period: 5
