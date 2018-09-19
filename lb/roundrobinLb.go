@@ -1,8 +1,9 @@
 package lb
 
 import (
-	motan "github.com/weibocom/motan-go/core"
 	"sync/atomic"
+
+	motan "github.com/weibocom/motan-go/core"
 )
 
 type RoundrobinLB struct {

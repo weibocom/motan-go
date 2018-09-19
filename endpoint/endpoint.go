@@ -1,10 +1,11 @@
 package endpoint
 
 import (
-	motan "github.com/weibocom/motan-go/core"
-	mpro "github.com/weibocom/motan-go/protocol"
 	"sync/atomic"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	mpro "github.com/weibocom/motan-go/protocol"
 )
 
 // ext name

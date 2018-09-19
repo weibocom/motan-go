@@ -1,11 +1,12 @@
 package metrics
 
 import (
-	"github.com/rcrowley/go-metrics"
-	motan "github.com/weibocom/motan-go/core"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/rcrowley/go-metrics"
+	motan "github.com/weibocom/motan-go/core"
 )
 
 // go-metrics中的Meter的Rate相关计算的都是指数移动变化率(http://blog.sina.com.cn/s/blog_5069fdde0100g4ua.html),

@@ -5,12 +5,13 @@ package provider
 import (
 	"errors"
 	"fmt"
-	cgi "github.com/beberlei/fastcgi-serve/fcgiclient"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"strconv"
 	"strings"
 	"time"
+
+	cgi "github.com/beberlei/fastcgi-serve/fcgiclient"
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 	// "github.com/yangchenxing/go-nginx-conf-parser"
 )
 

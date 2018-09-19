@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	motan "github.com/weibocom/motan-go"
+	"github.com/weibocom/motan-go"
 	motancore "github.com/weibocom/motan-go/core"
 )
 

@@ -4,9 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	cfg "github.com/weibocom/motan-go/config"
 	"reflect"
 	"strings"
+
+	cfg "github.com/weibocom/motan-go/config"
 )
 
 const (

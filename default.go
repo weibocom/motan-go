@@ -1,6 +1,7 @@
 package motan
 
 import (
+	"net/http"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -12,7 +13,6 @@ import (
 	"github.com/weibocom/motan-go/registry"
 	"github.com/weibocom/motan-go/serialize"
 	"github.com/weibocom/motan-go/server"
-	"net/http"
 )
 
 var (

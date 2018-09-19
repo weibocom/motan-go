@@ -1,13 +1,12 @@
 package core
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
-
-	"errors"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/weibocom/motan-go/log"
