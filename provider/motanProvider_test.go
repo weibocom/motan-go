@@ -14,7 +14,7 @@ const (
 
 func TestGetName(t *testing.T) {
 	//init factory
-	factory := &motan.DefaultExtentionFactory{}
+	factory := &motan.DefaultExtensionFactory{}
 	factory.Initialize()
 	endpoint.RegistDefaultEndpoint(factory)
 	RegistDefaultProvider(factory)

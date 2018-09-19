@@ -18,7 +18,7 @@ import (
 var (
 	extOnce           sync.Once
 	handlerOnce       sync.Once
-	defaultExtFactory *motan.DefaultExtentionFactory
+	defaultExtFactory *motan.DefaultExtensionFactory
 	// all default manage handlers
 	defaultManageHandlers map[string]http.Handler
 	// PermissionCheck is default permission check for manage request
@@ -62,16 +62,16 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 	return defaultManageHandlers
 }
 
-func GetDefaultExtFactory() motan.ExtentionFactory {
+func GetDefaultExtFactory() motan.ExtensionFactory {
 	extOnce.Do(func() {
-		defaultExtFactory = &motan.DefaultExtentionFactory{}
+		defaultExtFactory = &motan.DefaultExtensionFactory{}
 		defaultExtFactory.Initialize()
 		AddDefaultExt(defaultExtFactory)
 	})
 	return defaultExtFactory
 }
 
-func AddDefaultExt(d motan.ExtentionFactory) {
+func AddDefaultExt(d motan.ExtensionFactory) {
 
 	// all default extension
 	filter.RegistDefaultFilters(d)

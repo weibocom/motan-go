@@ -17,7 +17,7 @@ import (
 type MSContext struct {
 	confFile     string
 	context      *motan.Context
-	extFactory   motan.ExtentionFactory
+	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
 	portServer   map[int]motan.Server
 	serviceImpls map[string]interface{}
@@ -70,7 +70,7 @@ func GetMotanServerContext(confFile string) *MSContext {
 	return ms
 }
 
-func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
+func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	m.extFactory = extfactory

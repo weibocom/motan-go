@@ -110,8 +110,8 @@ func TestDestroy(t *testing.T) {
 }
 
 //-------------test struct--------------------
-func getCustomExt() motan.ExtentionFactory {
-	ext := &motan.DefaultExtentionFactory{}
+func getCustomExt() motan.ExtensionFactory {
+	ext := &motan.DefaultExtensionFactory{}
 	ext.Initialize()
 	ha.RegistDefaultHa(ext)
 	lb.RegistDefaultLb(ext)

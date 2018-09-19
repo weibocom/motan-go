@@ -12,7 +12,7 @@ type MotanProvider struct {
 	url        *motan.URL
 	ep         motan.EndPoint
 	available  bool
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 }
 
 const (
@@ -32,7 +32,7 @@ func (m *MotanProvider) Initialize() {
 	host := m.url.GetParam(ProxyHostKey, DefaultHost)
 	m.ep = m.extFactory.GetEndPoint(&motan.URL{Protocol: protocol, Host: host, Port: port})
 	if m.ep == nil {
-		vlog.Errorf("Can not find %s endpoint in ExtentionFactory!\n", protocol)
+		vlog.Errorf("Can not find %s endpoint in ExtensionFactory!\n", protocol)
 		return
 	}
 	m.ep.SetProxy(true)

@@ -77,7 +77,7 @@ motan-service:
     ref : "main.Motan2TestService"
     export: "motan2:8100"
 
-#conf of extentions
+#conf of extensions
 
 metrics:
   period: 5
