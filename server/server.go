@@ -3,11 +3,11 @@ package server
 import (
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	"sync"
-	"time"
 )
 
 const (

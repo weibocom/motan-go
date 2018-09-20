@@ -6,7 +6,9 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/weibocom/motan-go/cluster"
@@ -15,8 +17,6 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
-	"path/filepath"
-	"sync"
 )
 
 const (

@@ -4,14 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 const dynamicConfigRegistrySnapshot = "registry.snap"
@@ -29,8 +30,8 @@ type DynamicConfigurer struct {
 }
 
 type registrySnapInfoStorage struct {
-	RegisterNodes  []core.URL `json:"register_nodes"`
-	SubscribeNodes []core.URL `json:"subscribe_nodes"`
+	RegisterNodes  []*core.URL `json:"register_nodes"`
+	SubscribeNodes []*core.URL `json:"subscribe_nodes"`
 }
 
 func NewDynamicConfigurer(agent *Agent) *DynamicConfigurer {
@@ -65,12 +66,12 @@ func (c *DynamicConfigurer) doRecover() error {
 	// recover just redo register and subscribe
 	for _, node := range registerSnapInfo.RegisterNodes {
 		vlog.Infof("Recover register node: %v", node)
-		c.doRegister(&node)
+		c.doRegister(node)
 	}
 
 	for _, node := range registerSnapInfo.SubscribeNodes {
 		vlog.Infof("Recover subscribe node: %v", node)
-		c.doSubscribe(&node)
+		c.doSubscribe(node)
 	}
 	return nil
 }
@@ -154,33 +155,34 @@ func (c *DynamicConfigurer) saveSnapshot() {
 func (c *DynamicConfigurer) getRegistryInfo() *registrySnapInfoStorage {
 	registrySnapInfo := registrySnapInfoStorage{}
 
-	registerNodes := make([]core.URL, 0, len(c.registerNodes))
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
+	registerNodes := make([]*core.URL, 0, len(c.registerNodes))
 	for _, node := range c.registerNodes {
-		registerNodes = append(registerNodes, *node)
+		registerNodes = append(registerNodes, node.Copy())
 	}
 
-	subscribeNodes := make([]core.URL, 0, len(c.subscribeNodes))
 	c.subLock.Lock()
 	defer c.subLock.Unlock()
+	subscribeNodes := make([]*core.URL, 0, len(c.subscribeNodes))
 	for _, node := range c.subscribeNodes {
-		subscribeNodes = append(subscribeNodes, *node)
+		subscribeNodes = append(subscribeNodes, node.Copy())
 	}
+
 	registrySnapInfo.RegisterNodes = registerNodes
 	registrySnapInfo.SubscribeNodes = subscribeNodes
 	return &registrySnapInfo
 }
 
-type DynamicConfigurerHTTPHandler struct {
+type DynamicConfigurerHandler struct {
 	agent *Agent
 }
 
-func (h *DynamicConfigurerHTTPHandler) SetAgent(agent *Agent) {
+func (h *DynamicConfigurerHandler) SetAgent(agent *Agent) {
 	h.agent = agent
 }
 
-func (h *DynamicConfigurerHTTPHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
+func (h *DynamicConfigurerHandler) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json;charset=utf-8")
 	switch req.RequestURI {
 	case "/registry/register":
@@ -196,7 +198,7 @@ func (h *DynamicConfigurerHTTPHandler) ServeHTTP(res http.ResponseWriter, req *h
 	}
 }
 
-func (h *DynamicConfigurerHTTPHandler) getURL(req *http.Request) (*core.URL, error) {
+func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) {
 	bytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
@@ -250,7 +252,7 @@ func (h *DynamicConfigurerHTTPHandler) getURL(req *http.Request) (*core.URL, err
 	return url, nil
 }
 
-func (h *DynamicConfigurerHTTPHandler) register(res http.ResponseWriter, req *http.Request) {
+func (h *DynamicConfigurerHandler) register(res http.ResponseWriter, req *http.Request) {
 	url, err := h.getURL(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
@@ -267,7 +269,7 @@ func (h *DynamicConfigurerHTTPHandler) register(res http.ResponseWriter, req *ht
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
-func (h *DynamicConfigurerHTTPHandler) unregister(res http.ResponseWriter, req *http.Request) {
+func (h *DynamicConfigurerHandler) unregister(res http.ResponseWriter, req *http.Request) {
 	url, err := h.getURL(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
@@ -284,7 +286,7 @@ func (h *DynamicConfigurerHTTPHandler) unregister(res http.ResponseWriter, req *
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
-func (h *DynamicConfigurerHTTPHandler) subscribe(res http.ResponseWriter, req *http.Request) {
+func (h *DynamicConfigurerHandler) subscribe(res http.ResponseWriter, req *http.Request) {
 	url, err := h.getURL(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
@@ -300,7 +302,7 @@ func (h *DynamicConfigurerHTTPHandler) subscribe(res http.ResponseWriter, req *h
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
-func (h *DynamicConfigurerHTTPHandler) list(res http.ResponseWriter, req *http.Request) {
+func (h *DynamicConfigurerHandler) list(res http.ResponseWriter, req *http.Request) {
 	writeHandlerResponse(res, http.StatusOK, "ok", h.agent.configurer.getRegistryInfo())
 }
 

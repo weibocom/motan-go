@@ -1,10 +1,11 @@
 package core
 
 import (
-	"github.com/stretchr/testify/assert"
 	"math/rand"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStringMap(t *testing.T) {

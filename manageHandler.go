@@ -91,8 +91,8 @@ func (i *InfoHandler) getReferService() []byte {
 		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
 		return true
 	})
-	retData := &jsonRetData{Code: 200, Body: mbody}
-	data, _ := json.Marshal(&retData)
+	retData := jsonRetData{Code: 200, Body: mbody}
+	data, _ := json.Marshal(retData)
 	return data
 }
 
@@ -249,9 +249,9 @@ func (c *CustomTrace) Trace(rid uint64, ext *motan.StringMap) *motan.TraceContex
 	return motan.NewTraceContext(rid)
 }
 
-type SwitcherHandle struct{}
+type SwitcherHandler struct{}
 
-func (s *SwitcherHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *SwitcherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	name := r.FormValue("name")
 	value := r.FormValue("value")
 	switcher := motan.GetSwitcherManager()

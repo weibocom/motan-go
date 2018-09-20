@@ -2,14 +2,14 @@ package registry
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
-	"strconv"
 )
 
 func TestGetMeshRegistry(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultRegistry(defaultExtFactory)
 	regURL := &motan.URL{Protocol: "mesh", Host: "localhost", Port: 8001}

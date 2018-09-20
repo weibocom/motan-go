@@ -4,7 +4,7 @@ motan-agent:
   port: 9981 # agent serve port.
   eport: 9982 # service export port when as a reverse proxy
   mport: 8002 # agent manage port
-  log_dir: "./demologs"
+  log_dir: "./agentlogs"
   registry: "direct-registry" # registry id for registering agent info
   application: "agent-test" # agent identify. for agent command notify and so on
 
@@ -16,38 +16,12 @@ motan-registry:
     port: 9982 #direct server port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
-  # zk-registry:
-  #   protocol: zookeeper
-  #   host: 10.210.235.157
-  #   port: 2181
-  #   registrySessionTimeout: 10000
-  #   requestTimeout: 5000 
-
-#conf of basic refers
-motan-basicRefer:
-  mybasicRefer: # basic refer id
-    group: motan-demo-rpc # group name
-    protocol: motan2 # rpc protocol
-    registry: "direct-registry" # registry id
-    requestTimeout: 1000
-    haStrategy: failover
-    loadbalance: roundrobin
-    serialization: simple
-    filter: "accessLog, myfilter" # filter registed in extFactory
-    retries: 0
-
-#conf of refers
-motan-refer:
-  mytest-motan2:
-    path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
-    registry: direct-registry
-    serialization: simple
-    basicRefer: mybasicRefer # basic refer id
-
-  mytest-demo:
-    path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
-    registry: direct-registry    
-    basicRefer: mybasicRefer # basic refer id
+  zk-registry:
+    protocol: zookeeper
+    host: localhost
+    port: 2181
+    registrySessionTimeout: 10000
+    requestTimeout: 5000
 
 
 #conf of extensions. any custom config

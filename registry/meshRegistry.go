@@ -3,12 +3,13 @@ package registry
 import (
 	"bytes"
 	"encoding/json"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 )
 
 const defaultMeshPort = 9981

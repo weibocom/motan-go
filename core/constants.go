@@ -43,7 +43,6 @@ const (
 	GzipSizeKey       = "mingzSize"
 	HostKey           = "host"
 	RemoteIPKey       = "remoteIP"
-	RetriesKey        = "retries"
 	MeshPortKey       = "meshPort"
 	ProxyRegistryKey  = "proxyRegistry"
 )
