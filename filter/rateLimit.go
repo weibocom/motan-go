@@ -7,26 +7,19 @@ import (
 	"github.com/juju/ratelimit"
 	"github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
-	defaultCapacity    = 500 //todo：初始可以调用次数
+	defaultCapacity    = 5 //todo：初始最大调用次数
 	methodConfigPrefix = "rateLimit."
-	applicationWeight  = "appWeight." //todo：权重取值范围是1～9，默认是5，权重越大，调用概率越高
-	defaultWeight      = 5            //todo: 默认权重
 )
 
 type RateLimitFilter struct {
-	available     bool                         //todo: 如果配置错误或没配置，如何处理，现在是不限流
+	available     bool
 	bucket        *ratelimit.Bucket            //limit each service
 	methodBuckets map[string]*ratelimit.Bucket //limit each method
-	appWeights    map[string]int64             //todo: 运行中只有读操作，所以不需要锁
 	next          core.EndPointFilter
 }
-
-var zha = 0
-var ray = 0
 
 func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	ret := &RateLimitFilter{}
@@ -43,20 +36,7 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	for key, value := range url.Parameters {
 		if temp := strings.Split(key, methodConfigPrefix); len(temp) == 2 {
 			if methodRate, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" {
-				methodBuckets[temp[1]] = ratelimit.NewBucketWithRate(methodRate*defaultWeight, defaultCapacity)
-			} else {
-				vlog.Errorf("[rateLimit] parse %s config error:%s\n", key, err.Error())
-				return nil
-			}
-		}
-	}
-
-	//init application weight
-	appWeights := make(map[string]int64)
-	for key, value := range url.Parameters {
-		if temp := strings.Split(key, applicationWeight); len(temp) == 2 {
-			if weight, err := strconv.ParseInt(value, 0, 64); err == nil && temp[1] != "" {
-				appWeights[temp[1]] = 10 - weight
+				methodBuckets[temp[1]] = ratelimit.NewBucketWithRate(methodRate, defaultCapacity)
 			} else {
 				vlog.Errorf("[rateLimit] parse %s config error:%s\n", key, err.Error())
 				return nil
@@ -65,32 +45,16 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	}
 
 	ret.bucket = ratelimit.NewBucketWithRate(rate, defaultCapacity)
-	ret.appWeights = appWeights
 	ret.methodBuckets = methodBuckets
 	ret.available = true
 	return ret
 }
 
 func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.Response {
-	if r.available {
+	if r.available { //todo: 如果配置错误或没配置，如何处理，现在是不限流
 		r.bucket.Wait(1)
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
-			if app := request.GetAttachment(protocol.MSource); app != "" {
-				if appWeight, ok := r.appWeights[app]; ok {
-					methodBucket.Wait(appWeight)
-
-					//todo: 测试，次数相同，响应时间有差异>>>>>>>>>>>>>>>
-					if app == "zha" {
-						zha++
-						println("zha:", zha)
-					}
-					if app == "ray" {
-						ray++
-						println("ray:", ray)
-					}
-					//todo: <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-				}
-			}
+			methodBucket.Wait(1)
 		}
 	}
 	return r.GetNext().Filter(caller, request)
