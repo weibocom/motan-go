@@ -260,7 +260,12 @@ func (s *SwitcherHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "Invalid switcher value(must be Bool): %s", value)
 			return
 		}
-		switcher.GetSwitcher(name).SetValue(valueBool)
+		s := switcher.GetSwitcher(name)
+		if s == nil {
+			fmt.Fprintf(w, "Not a registered switcher, name: %s", name)
+			return
+		}
+		s.SetValue(valueBool)
 		fmt.Fprintf(w, "Set switcher %s value to %s !", name, value)
 	case "/switcher/get":
 		if name == "" {

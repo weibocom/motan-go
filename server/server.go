@@ -179,10 +179,12 @@ func WrapWithFilter(provider motan.Provider, extFactory motan.ExtensionFactory, 
 	lastf = motan.GetLastEndPointFilter()
 	_, filters := motan.GetURLFilters(provider.GetURL(), extFactory)
 	for _, f := range filters {
-		if ef, ok := f.NewFilter(provider.GetURL()).(motan.EndPointFilter); ok {
-			motan.CanSetContext(ef, context)
-			ef.SetNext(lastf)
-			lastf = ef
+		if filter := f.NewFilter(provider.GetURL()); filter != nil {
+			if ef, ok := filter.(motan.EndPointFilter); ok {
+				motan.CanSetContext(ef, context)
+				ef.SetNext(lastf)
+				lastf = ef
+			}
 		}
 	}
 	return &FilterProviderWarper{provider: provider, filter: lastf}

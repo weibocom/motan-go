@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	defaultCapacity    = 5 //todo：初始最大调用次数
+	defaultCapacity    = 1000
 	methodConfigPrefix = "rateLimit."
 )
 
 type RateLimitFilter struct {
-	available     bool
-	bucket        *ratelimit.Bucket            //limit each service
-	methodBuckets map[string]*ratelimit.Bucket //limit each method
+	switcher      *core.Switcher
+	bucket        *ratelimit.Bucket            //limit service
+	methodBuckets map[string]*ratelimit.Bucket //limit method
 	next          core.EndPointFilter
 }
 
@@ -25,10 +25,10 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	ret := &RateLimitFilter{}
 
 	//init bucket
-	rate, err := strconv.ParseFloat(url.GetParam(RateLimit, ""), 64)
-	if err != nil {
-		vlog.Errorf("[rateLimit] parse %s config error:%v\n", RateLimit, err)
-		return nil
+	if rate, err := strconv.ParseFloat(url.GetParam(RateLimit, ""), 64); err == nil {
+		ret.bucket = ratelimit.NewBucketWithRate(rate, defaultCapacity)
+	} else {
+		vlog.Warningf("[rateLimit] parse %s config error:%v\n", RateLimit, err)
 	}
 
 	//init methodBucket
@@ -38,26 +38,36 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 			if methodRate, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" {
 				methodBuckets[temp[1]] = ratelimit.NewBucketWithRate(methodRate, defaultCapacity)
 			} else {
-				vlog.Errorf("[rateLimit] parse %s config error:%s\n", key, err.Error())
-				return nil
+				vlog.Warningf("[rateLimit] parse %s config error:%s\n", key, err.Error())
 			}
+		} else {
+			vlog.Warningf("[rateLimit] parse %s config error\n", key)
 		}
 	}
-
-	ret.bucket = ratelimit.NewBucketWithRate(rate, defaultCapacity)
 	ret.methodBuckets = methodBuckets
-	ret.available = true
+
+	//init switcher
+	switcherName := GetRateLimitSwitcherName(url)
+	core.GetSwitcherManager().Register(switcherName, true)
+	ret.switcher = core.GetSwitcherManager().GetSwitcher(switcherName)
+
 	return ret
 }
 
 func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.Response {
-	if r.available { //todo: 如果配置错误或没配置，如何处理，现在是不限流
-		r.bucket.Wait(1)
+	if r.switcher.IsOpen() {
+		if r.bucket != nil {
+			r.bucket.Wait(1)
+		}
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
 			methodBucket.Wait(1)
 		}
 	}
 	return r.GetNext().Filter(caller, request)
+}
+
+func GetRateLimitSwitcherName(url *core.URL) string {
+	return url.GetParam("conf-id", "") + "_rateLimit"
 }
 
 func (r *RateLimitFilter) SetNext(nextFilter core.EndPointFilter) {
