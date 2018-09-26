@@ -191,12 +191,14 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 	var lastf motan.EndPointFilter
 	lastf = motan.GetLastEndPointFilter()
 	for _, f := range filters {
-		if ef, ok := f.NewFilter(ep.GetURL()).(motan.EndPointFilter); ok {
-			motan.CanSetContext(ef, m.Context)
-			ef.SetNext(lastf)
-			lastf = ef
-			if sf, ok := ef.(motan.Status); ok {
-				statusFilters = append(statusFilters, sf)
+		if filter := f.NewFilter(ep.GetURL()); filter != nil {
+			if ef, ok := filter.(motan.EndPointFilter); ok {
+				motan.CanSetContext(ef, m.Context)
+				ef.SetNext(lastf)
+				lastf = ef
+				if sf, ok := ef.(motan.Status); ok {
+					statusFilters = append(statusFilters, sf)
+				}
 			}
 		}
 	}

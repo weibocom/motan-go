@@ -260,8 +260,9 @@ func GetURLFilters(url *URL, extFactory ExtensionFactory) (clusterFilter Cluster
 			if filter != nil {
 				if filter.GetType() == ClusterFilterType {
 					// filter should use new instance
-					filter = filter.NewFilter(url)
-					clusterFilters = append(clusterFilters, filter)
+					if filter = filter.NewFilter(url); filter != nil {
+						clusterFilters = append(clusterFilters, filter)
+					}
 				} else {
 					endpointFilters = append(endpointFilters, filter)
 				}
