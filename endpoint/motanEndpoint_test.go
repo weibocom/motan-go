@@ -9,13 +9,14 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
-	serialize "github.com/weibocom/motan-go/serialize"
+	"github.com/weibocom/motan-go/serialize"
 )
 
 //TODO more UT
 func TestGetName(t *testing.T) {
 	m := StartTestServer(8989)
 	defer m.Close()
+	time.Sleep(20 * time.Millisecond)
 
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	ep := &MotanEndpoint{}
@@ -63,7 +64,7 @@ func handle(netListen net.Listener) {
 		conn, err := netListen.Accept()
 		if err != nil {
 			fmt.Printf("accept connection fail. err:%v", err)
-			continue
+			return
 		}
 
 		go handleConnection(conn, 5000)

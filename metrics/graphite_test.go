@@ -1,15 +1,11 @@
 package metrics
 
 import (
-	"fmt"
-	"testing"
-
 	"bytes"
-
-	"strings"
-
+	"fmt"
 	"net"
-
+	"strings"
+	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -21,17 +17,20 @@ var (
 	methodPerfix = "method"
 	localhost    = "localhost"
 	keyPerfix    = fmt.Sprintf("%s:%s:%s", role, application, methodPerfix) // key include three parts >> role + ":" + application + ":" + method
-
 )
 
 func Test_graphite_Write(t *testing.T) {
-	server := &udpserver{port: 3456}
+	server := &udpserver{port: "3456"}
 	go server.start()
+	time.Sleep(100 * time.Millisecond)
 	g := newGraphite("127.0.0.1", "testpool", 3456)
 	item := NewStatItem(group, service)
 	item.AddCounter(keyPerfix+"c1", 1)
 	item.AddHistograms(keyPerfix+" h1", 100)
-	g.Write([]Snapshot{item.SnapshotAndClear()})
+	err := g.Write([]Snapshot{item.SnapshotAndClear()})
+	if err != nil {
+		fmt.Printf("write graphit fail. err:%s\n", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 	server.stop()
 	assert.Equal(t, 589, server.data.Len(), "send data size")
@@ -101,16 +100,18 @@ func TestGenGraphiteMessages(t *testing.T) {
 }
 
 type udpserver struct {
-	port   int
+	port   string
 	stoped bool
 	data   bytes.Buffer
 }
 
 func (u *udpserver) start() {
-	socket, err := net.ListenUDP("udp4", &net.UDPAddr{
-		IP:   net.IPv4(0, 0, 0, 0),
-		Port: u.port,
-	})
+	ServerAddr, err := net.ResolveUDPAddr("udp", ":"+u.port)
+	if err != nil {
+		fmt.Printf("upd listen fail, Err:%s\n", err.Error())
+		return
+	}
+	socket, err := net.ListenUDP("udp", ServerAddr)
 	if err != nil {
 		fmt.Printf("upd listen fail, Err:%s\n", err.Error())
 		return

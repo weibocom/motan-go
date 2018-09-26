@@ -12,9 +12,10 @@ const (
 	FailFast       = "failfast"
 	ClusterMetrics = "clusterMetrics"
 	Trace          = "trace"
+	RateLimit      = "rateLimit"
 )
 
-func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
+func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtFilter(AccessLog, func() motan.Filter {
 		return &AccessLogEndPointFilter{}
 	})
@@ -37,5 +38,9 @@ func RegistDefaultFilters(extFactory motan.ExtentionFactory) {
 
 	extFactory.RegistExtFilter(Trace, func() motan.Filter {
 		return &TracingFilter{}
+	})
+
+	extFactory.RegistExtFilter(RateLimit, func() motan.Filter {
+		return &RateLimitFilter{}
 	})
 }

@@ -91,7 +91,7 @@ func addMetric(group string, service string, key string, cost int64, response mo
 			metrics.AddCounter(group, service, key+".other_error_count", 1)
 		}
 	}
-	metrics.AddCounter(group, service, key+"."+metrics.ElapseTimeString(cost), 1)
+	metrics.AddCounter(group, service, key+metrics.ElapseTimeSuffix(cost), 1)
 	if cost > 200 {
 		metrics.AddCounter(group, service, key+".slow_count", 1)
 	}

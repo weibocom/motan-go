@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/protocol"
 	"html/template"
 	"io"
 	"log"
@@ -19,6 +17,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 // SetAgent : if need agent to do sth, the handler can implement this interface,
@@ -80,8 +81,8 @@ func (i *InfoHandler) getReferService() []byte {
 		available := cls.IsAvailable()
 		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
 	}
-	retData := &jsonRetData{Code: 200, Body: mbody}
-	data, _ := json.Marshal(&retData)
+	retData := jsonRetData{Code: 200, Body: mbody}
+	data, _ := json.Marshal(retData)
 	return data
 }
 
@@ -133,7 +134,6 @@ func (d *DebugHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			Index(rw, req)
 		}
 	}
-
 }
 
 func MeshTrace(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +162,7 @@ func formatTc(tc *motan.TraceContext) string {
 	processReqSpan(tc.ReqSpans)
 	processResSpan(tc.ResSpans)
 	if len(tc.ReqSpans) > 0 && len(tc.ResSpans) > 0 {
-		tc.Values["totalTime"] = strconv.FormatInt((tc.ResSpans[len(tc.ResSpans)-1].Time.UnixNano() - tc.ReqSpans[0].Time.UnixNano()), 10)
+		tc.Values["totalTime"] = strconv.FormatInt(tc.ResSpans[len(tc.ResSpans)-1].Time.UnixNano()-tc.ReqSpans[0].Time.UnixNano(), 10)
 	}
 	data, _ := json.MarshalIndent(tc, "", "    ")
 	return string(data)
@@ -174,16 +174,16 @@ func processReqSpan(spans []*motan.Span) {
 	for _, rqs := range spans {
 		if rqs.Addr == "" {
 			if defaultLastTime > 0 {
-				rqs.Duration = (rqs.Time.UnixNano() - defaultLastTime)
+				rqs.Duration = rqs.Time.UnixNano() - defaultLastTime
 			} else {
 				rqs.Duration = 0
 			}
 			defaultLastTime = rqs.Time.UnixNano()
 		} else {
 			if t, ok := m[rqs.Addr]; ok {
-				rqs.Duration = (rqs.Time.UnixNano() - t)
+				rqs.Duration = rqs.Time.UnixNano() - t
 			} else if defaultLastTime > 0 {
-				rqs.Duration = (rqs.Time.UnixNano() - defaultLastTime)
+				rqs.Duration = rqs.Time.UnixNano() - defaultLastTime
 			} else {
 				rqs.Duration = 0
 			}
@@ -196,7 +196,7 @@ func processResSpan(spans []*motan.Span) {
 	var lastTime int64
 	for _, rqs := range spans {
 		if lastTime > 0 {
-			rqs.Duration = (rqs.Time.UnixNano() - lastTime)
+			rqs.Duration = rqs.Time.UnixNano() - lastTime
 		} else {
 			rqs.Duration = 0
 		}
@@ -213,20 +213,20 @@ type CustomTrace struct {
 
 func (c *CustomTrace) Trace(rid uint64, ext *motan.StringMap) *motan.TraceContext {
 	if c.addr != "" {
-		addr, ok := ext.Load(motan.HostKey)
-		if !ok || !strings.HasPrefix(addr, c.addr) {
+		addr := ext.LoadOrEmpty(motan.HostKey)
+		if !strings.HasPrefix(addr, c.addr) {
 			return nil
 		}
 	}
 	if c.group != "" {
-		group, ok := ext.Load(protocol.MGroup)
-		if !ok || group != c.group {
+		group := ext.LoadOrEmpty(protocol.MGroup)
+		if group != c.group {
 			return nil
 		}
 	}
 	if c.path != "" {
-		path, ok := ext.Load(protocol.MPath)
-		if !ok || path != c.path {
+		path := ext.LoadOrEmpty(protocol.MPath)
+		if path != c.path {
 			return nil
 		}
 	}
@@ -237,6 +237,53 @@ func (c *CustomTrace) Trace(rid uint64, ext *motan.StringMap) *motan.TraceContex
 		}
 	}
 	return motan.NewTraceContext(rid)
+}
+
+type SwitcherHandle struct{}
+
+func (s *SwitcherHandle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	name := r.FormValue("name")
+	value := r.FormValue("value")
+	switcher := motan.GetSwitcherManager()
+	switch r.URL.Path {
+	case "/switcher/set":
+		if name == "" {
+			fmt.Fprintf(w, "Please specify a switcher name!")
+			return
+		}
+		if value == "" {
+			fmt.Fprintf(w, "Please specify a switcher value!")
+			return
+		}
+		valueBool, err := strconv.ParseBool(value)
+		if err != nil {
+			fmt.Fprintf(w, "Invalid switcher value(must be Bool): %s", value)
+			return
+		}
+		s := switcher.GetSwitcher(name)
+		if s == nil {
+			fmt.Fprintf(w, "Not a registered switcher, name: %s", name)
+			return
+		}
+		s.SetValue(valueBool)
+		fmt.Fprintf(w, "Set switcher %s value to %s !", name, value)
+	case "/switcher/get":
+		if name == "" {
+			fmt.Fprintf(w, "Please specify a switcher name!")
+			return
+		}
+		s := switcher.GetSwitcher(name)
+		if s == nil {
+			fmt.Fprintf(w, "Not a registered switcher, name: %s", name)
+			return
+		}
+		value := s.IsOpen()
+		fmt.Fprintf(w, "Switcher value for %s is %v!", name, value)
+	case "/switcher/getAll":
+		result := switcher.GetAllSwitchers()
+		b, _ := json.Marshal(result)
+		w.Write(b)
+	}
 }
 
 //------------ below code is copied from net/http/pprof -------------

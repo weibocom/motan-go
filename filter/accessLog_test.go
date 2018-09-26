@@ -31,8 +31,8 @@ func TestFilter(t *testing.T) {
 	fmt.Printf("res:%+v", res)
 }
 
-func initFactory() motan.ExtentionFactory {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+func initFactory() motan.ExtensionFactory {
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 
 	RegistDefaultFilters(defaultExtFactory)

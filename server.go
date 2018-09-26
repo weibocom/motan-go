@@ -17,7 +17,7 @@ import (
 type MSContext struct {
 	confFile     string
 	context      *motan.Context
-	extFactory   motan.ExtentionFactory
+	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
 	portServer   map[int]motan.Server
 	serviceImpls map[string]interface{}
@@ -65,11 +65,12 @@ func GetMotanServerContext(confFile string) *MSContext {
 			logdir = "."
 		}
 		initLog(logdir)
+		registerSwitchers(ms.context)
 	}
 	return ms
 }
 
-func (m *MSContext) Start(extfactory motan.ExtentionFactory) {
+func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	m.extFactory = extfactory
@@ -115,7 +116,7 @@ func (m *MSContext) export(url *motan.URL) {
 		provider := GetDefaultExtFactory().GetProvider(url)
 		provider.SetService(service)
 		motan.Initialize(provider)
-		provider = mserver.WarperWithFilter(provider, m.extFactory)
+		provider = mserver.WrapWithFilter(provider, m.extFactory, m.context)
 
 		exporter := &mserver.DefaultExporter{}
 		exporter.SetProvider(provider)

@@ -18,7 +18,7 @@ type MotanCluster struct {
 	Refers         []motan.EndPoint
 	Filters        []motan.Filter
 	clusterFilter  motan.ClusterFilter
-	extFactory     motan.ExtentionFactory
+	extFactory     motan.ExtensionFactory
 	registryRefers map[string][]motan.EndPoint
 	notifyLock     sync.Mutex
 	available      bool
@@ -143,7 +143,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 				ep.SetProxy(m.proxy)
 				serialization := motan.GetSerialization(newURL, m.extFactory)
 				if serialization == nil {
-					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtentionFactory! url:%+v\n", m.url)
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v\n", m.url)
 				} else {
 					ep.SetSerialization(serialization)
 				}
@@ -191,12 +191,14 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 	var lastf motan.EndPointFilter
 	lastf = motan.GetLastEndPointFilter()
 	for _, f := range filters {
-		if ef, ok := f.NewFilter(ep.GetURL()).(motan.EndPointFilter); ok {
-			motan.CanSetContext(ef, m.Context)
-			ef.SetNext(lastf)
-			lastf = ef
-			if sf, ok := ef.(motan.Status); ok {
-				statusFilters = append(statusFilters, sf)
+		if filter := f.NewFilter(ep.GetURL()); filter != nil {
+			if ef, ok := filter.(motan.EndPointFilter); ok {
+				motan.CanSetContext(ef, m.Context)
+				ef.SetNext(lastf)
+				lastf = ef
+				if sf, ok := ef.(motan.Status); ok {
+					statusFilters = append(statusFilters, sf)
+				}
 			}
 		}
 	}
@@ -224,7 +226,7 @@ func (m *MotanCluster) Destroy() {
 	}
 }
 
-func (m *MotanCluster) SetExtFactory(factory motan.ExtentionFactory) {
+func (m *MotanCluster) SetExtFactory(factory motan.ExtensionFactory) {
 	m.extFactory = factory
 }
 
@@ -242,7 +244,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 			registry := m.extFactory.GetRegistry(registryURL)
 			if registry != nil {
 				if _, ok := registry.(motan.DiscoverCommand); ok {
-					registry = GetCommandRegistryWarper(m, registry)
+					registry = GetCommandRegistryWrapper(m, registry)
 				}
 				registry.Subscribe(m.url, m)
 				registries = append(registries, registry)

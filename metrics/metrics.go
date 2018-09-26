@@ -1,10 +1,9 @@
 package metrics
 
 import (
+	"strings"
 	"sync"
 	"time"
-
-	"strings"
 
 	"github.com/rcrowley/go-metrics"
 	motan "github.com/weibocom/motan-go/core"
@@ -114,7 +113,7 @@ func GetStatItem(group string, service string) StatItem {
 }
 
 func NewDefaultStatItem(group string, service string) StatItem {
-	return &DefaultStatItem{group: group, service: Escape(service), registry: metrics.NewRegistry(), isreport: true}
+	return &DefaultStatItem{group: group, service: Escape(service), registry: metrics.NewRegistry(), isReport: true}
 }
 
 func RMStatItem(group string, service string) {
@@ -188,7 +187,7 @@ func sendEvent(eventType int32, group string, service string, key string, value 
 	}
 }
 
-func ElapseTimeString(t int64) string {
+func ElapseTimeSuffix(t int64) string {
 	switch {
 	case t < 50:
 		return elapseLess50ms
@@ -215,8 +214,8 @@ type DefaultStatItem struct {
 	group        string
 	service      string
 	registry     metrics.Registry
-	isreport     bool
-	lastSanpshot Snapshot
+	isReport     bool
+	lastSnapshot Snapshot
 	lock         sync.Mutex
 }
 
@@ -254,7 +253,7 @@ func (d *DefaultStatItem) AddHistograms(key string, duration int64) {
 
 func (d *DefaultStatItem) Snapshot() Snapshot {
 	// TODO need real-time snapshot?
-	return d.lastSanpshot
+	return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
@@ -262,20 +261,20 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	defer d.lock.Unlock()
 	registry := d.registry
 	d.registry = metrics.NewRegistry()
-	d.lastSanpshot = &DefaultStatItem{group: d.group, service: d.service, isreport: d.isreport, registry: registry}
-	return d.lastSanpshot
+	d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, registry: registry}
+	return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) LastSnapshot() Snapshot {
-	return d.lastSanpshot
+	return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) SetReport(b bool) {
-	d.isreport = b
+	d.isReport = b
 }
 
 func (d *DefaultStatItem) IsReport() bool {
-	return d.isreport
+	return d.isReport
 }
 
 func (d *DefaultStatItem) Remove(key string) {
@@ -468,7 +467,7 @@ func (r *reporter) sink() {
 				defer r.writersLock.RUnlock()
 				for name, writer := range r.writers {
 					if err := writer.Write(snap); err != nil {
-						vlog.Errorln("write metrics error. name:%s, err:%v", name, err)
+						vlog.Errorf("write metrics error. name:%s, err:%v\n", name, err)
 					}
 				}
 			}

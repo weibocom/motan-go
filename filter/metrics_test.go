@@ -1,11 +1,9 @@
 package filter
 
 import (
-	"testing"
-
-	"time"
-
 	"fmt"
+	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/config"
@@ -77,6 +75,7 @@ func TestAddMetric(t *testing.T) {
 		{name: "biz exception", response: response2, keys: []string{".total_count", ".biz_error_count"}},
 		{name: "other exception", response: response3, keys: []string{".total_count", ".other_error_count"}},
 		{name: "slow count", response: response4, keys: []string{".total_count", ".slow_count"}},
+		{name: "time", response: response1, keys: []string{".total_count", ".Less200ms"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

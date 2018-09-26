@@ -4,9 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	cfg "github.com/weibocom/motan-go/config"
 	"reflect"
 	"strings"
+
+	cfg "github.com/weibocom/motan-go/config"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	serverSection        = "motan-server"
 	importSection        = "import-refer"
 	dynamicSection       = "dynamic-param"
+	SwitcherSection      = "switcher"
 
 	// URLConfKey is config id
 	// config Keys

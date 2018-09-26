@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetRegistry(t *testing.T) {
-	defaultExtFactory := &motan.DefaultExtentionFactory{}
+	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultRegistry(defaultExtFactory)
 	url := &motan.URL{

@@ -1,8 +1,9 @@
 package lb
 
 import (
-	motan "github.com/weibocom/motan-go/core"
 	"testing"
+
+	motan "github.com/weibocom/motan-go/core"
 )
 
 func TestRandomLB(t *testing.T) {

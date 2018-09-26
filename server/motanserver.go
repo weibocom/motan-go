@@ -6,7 +6,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -18,11 +17,11 @@ type MotanServer struct {
 	URL        *motan.URL
 	handler    motan.MessageHandler
 	listener   net.Listener
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 	proxy      bool
 }
 
-func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtentionFactory) error {
+func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	lis, err := net.Listen("tcp", ":"+strconv.Itoa(int(m.URL.Port)))
 	if err != nil {
 		vlog.Errorf("listen port:%d fail. err: %v\n", m.URL.Port, err)
@@ -109,7 +108,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			trace = motan.TracePolicy(request.Header.RequestID, request.Metadata)
 			if trace != nil {
 				trace.Addr = ip
-				trace.PutReqSpan(&motan.Span{Name: motan.Recieve, Time: t})
+				trace.PutReqSpan(&motan.Span{Name: motan.Receive, Time: t})
 				trace.PutReqSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 			}
 		}

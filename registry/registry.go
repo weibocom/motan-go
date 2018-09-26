@@ -90,7 +90,7 @@ func GetSnapshotConf() *motan.SnapshotConf {
 	return snapshotConf
 }
 
-func RegistDefaultRegistry(extFactory motan.ExtentionFactory) {
+func RegistDefaultRegistry(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtRegistry(Direct, func(url *motan.URL) motan.Registry {
 		return &DirectRegistry{url: url}
 	})

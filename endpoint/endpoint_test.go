@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetEndPoint(t *testing.T) {
-	ext := &motan.DefaultExtentionFactory{}
+	ext := &motan.DefaultExtensionFactory{}
 	ext.Initialize()
 	RegistDefaultEndpoint(ext)
 	url := &motan.URL{Protocol: "motan2", Host: "localhost", Port: 8002}

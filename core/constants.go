@@ -54,14 +54,14 @@ const (
 
 // trace span name
 const (
-	Recieve        = "recieve"
-	Decode         = "decode"
-	Convert        = "convert"
-	ClustFliterEnd = "clustFilter"
-	EpFilterStart  = "epFilterStart"
-	EpFilterEnd    = "epFilterEnd"
-	Encode         = "encode"
-	Send           = "send"
+	Receive       = "receive"
+	Decode        = "decode"
+	Convert       = "convert"
+	ClustFliter   = "clustFilter"
+	EpFilterStart = "selectEp"
+	EpFilterEnd   = "epFilter"
+	Encode        = "encode"
+	Send          = "send"
 )
 
 const (

@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -16,7 +17,7 @@ const (
 	Default = "default"
 )
 
-func RegistDefaultServers(extFactory motan.ExtentionFactory) {
+func RegistDefaultServers(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtServer(Motan2, func(url *motan.URL) motan.Server {
 		return &MotanServer{URL: url}
 	})
@@ -25,7 +26,7 @@ func RegistDefaultServers(extFactory motan.ExtentionFactory) {
 	})
 }
 
-func RegistDefaultMessageHandlers(extFactory motan.ExtentionFactory) {
+func RegistDefaultMessageHandlers(extFactory motan.ExtensionFactory) {
 	extFactory.RegistryExtMessageHandler(Default, func() motan.MessageHandler {
 		return &DefaultMessageHandler{}
 	})
@@ -34,14 +35,14 @@ func RegistDefaultMessageHandlers(extFactory motan.ExtentionFactory) {
 type DefaultExporter struct {
 	url        *motan.URL
 	Registrys  []motan.Registry
-	extFactory motan.ExtentionFactory
+	extFactory motan.ExtensionFactory
 	server     motan.Server
 	provider   motan.Provider
 
 	// 服务管理单位，负责服务注册、心跳、导出和销毁，内部包含provider，与provider是一对一关系
 }
 
-func (d *DefaultExporter) Export(server motan.Server, extFactory motan.ExtentionFactory, context *motan.Context) (err error) {
+func (d *DefaultExporter) Export(server motan.Server, extFactory motan.ExtensionFactory, context *motan.Context) (err error) {
 	if d.provider == nil {
 		err = errors.New("no provider for export")
 		return err
@@ -173,14 +174,17 @@ func (f *FilterProviderWarper) Call(request motan.Request) (res motan.Response) 
 	return f.filter.Filter(f.provider, request)
 }
 
-func WarperWithFilter(provider motan.Provider, extFactory motan.ExtentionFactory) motan.Provider {
+func WrapWithFilter(provider motan.Provider, extFactory motan.ExtensionFactory, context *motan.Context) motan.Provider {
 	var lastf motan.EndPointFilter
 	lastf = motan.GetLastEndPointFilter()
 	_, filters := motan.GetURLFilters(provider.GetURL(), extFactory)
 	for _, f := range filters {
-		if ef, ok := f.NewFilter(provider.GetURL()).(motan.EndPointFilter); ok {
-			ef.SetNext(lastf)
-			lastf = ef
+		if filter := f.NewFilter(provider.GetURL()); filter != nil {
+			if ef, ok := filter.(motan.EndPointFilter); ok {
+				motan.CanSetContext(ef, context)
+				ef.SetNext(lastf)
+				lastf = ef
+			}
 		}
 	}
 	return &FilterProviderWarper{provider: provider, filter: lastf}

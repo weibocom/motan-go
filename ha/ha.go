@@ -10,7 +10,7 @@ const (
 	BackupRequest = "backupRequest"
 )
 
-func RegistDefaultHa(extFactory motan.ExtentionFactory) {
+func RegistDefaultHa(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtHa(FailOver, func(url *motan.URL) motan.HaStrategy {
 		return &FailOverHA{url: url}
 	})

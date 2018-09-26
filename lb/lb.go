@@ -1,13 +1,13 @@
 package lb
 
 import (
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	motan "github.com/weibocom/motan-go/core"
-	"math/rand"
 )
 
 // ext name
@@ -25,7 +25,7 @@ var (
 	lbmutex sync.Mutex
 )
 
-func RegistDefaultLb(extFactory motan.ExtentionFactory) {
+func RegistDefaultLb(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtLb(Random, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
 		return &RandomLB{url: url}
 	}))

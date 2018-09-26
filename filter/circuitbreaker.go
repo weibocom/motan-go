@@ -1,9 +1,8 @@
 package filter
 
 import (
-	"strconv"
-
 	"errors"
+	"strconv"
 
 	"github.com/afex/hystrix-go/hystrix"
 	motan "github.com/weibocom/motan-go/core"

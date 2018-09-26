@@ -99,9 +99,9 @@ func TestDefaultStatItem(t *testing.T) {
 	})
 	assert.Equal(t, 2, count, "key size")
 	item.SetReport(true)
-	assert.True(t, item.IsReport(), "isreport")
+	assert.True(t, item.IsReport(), "isReport")
 	item.SetReport(false)
-	assert.False(t, item.IsReport(), "isreport")
+	assert.False(t, item.IsReport(), "isReport")
 	snap.Clear()
 	count = 0
 	snap.RangeKey(func(k string) {

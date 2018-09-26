@@ -1,10 +1,11 @@
 package endpoint
 
 import (
-	motan "github.com/weibocom/motan-go/core"
-	mpro "github.com/weibocom/motan-go/protocol"
 	"sync/atomic"
 	"time"
+
+	motan "github.com/weibocom/motan-go/core"
+	mpro "github.com/weibocom/motan-go/protocol"
 )
 
 // ext name
@@ -21,7 +22,7 @@ const (
 
 var idOffset uint64 // id generator offset
 
-func RegistDefaultEndpoint(extFactory motan.ExtentionFactory) {
+func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
 		return &MotanEndpoint{url: url}
 	})
