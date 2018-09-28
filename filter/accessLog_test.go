@@ -19,7 +19,7 @@ func TestFilter(t *testing.T) {
 	factory := initFactory()
 	f := factory.GetFilter(AccessLog)
 	if f == nil {
-		t.Fatal("can not find accesslog filter!")
+		t.Fatal("can not find accessLog filter!")
 	}
 	url := mockURL()
 	f = f.NewFilter(url)

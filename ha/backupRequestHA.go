@@ -121,13 +121,13 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 }
 
 func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint) motan.Response {
-	respnose := endpoint.Call(request)
-	if respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException {
-		return respnose
+	response := endpoint.Call(request)
+	if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
+		return response
 	}
-	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", endpoint.GetURL().GetIdentity(), respnose.GetException())
+	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", endpoint.GetURL().GetIdentity(), response.GetException())
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
-		"call backup request fail.Exception:%s", respnose.GetException().ErrMsg), ErrType: motan.ServiceException})
+		"call backup request fail.Exception:%s", response.GetException().ErrMsg), ErrType: motan.ServiceException})
 }
 
 func (br *BackupRequestHA) updateCallRecord(thresholdLimit int) {

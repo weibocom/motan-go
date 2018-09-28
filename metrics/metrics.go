@@ -40,7 +40,7 @@ var (
 		'/': true}
 
 	items     = make(map[string]StatItem, 64)
-	itemslock sync.RWMutex
+	itemsLock sync.RWMutex
 	start     sync.Once
 	rp        = &reporter{
 		interval:  defaultSinkDuration,
@@ -90,25 +90,25 @@ type StatWriter interface {
 }
 
 func GetOrRegisterStatItem(group string, service string) StatItem {
-	itemslock.RLock()
+	itemsLock.RLock()
 	item := items[group+service]
-	itemslock.RUnlock()
+	itemsLock.RUnlock()
 	if item != nil {
 		return item
 	}
-	itemslock.Lock()
+	itemsLock.Lock()
 	item = items[group+service]
 	if item == nil {
 		item = NewStatItem(group, service)
 		items[group+service] = item
 	}
-	itemslock.Unlock()
+	itemsLock.Unlock()
 	return item
 }
 
 func GetStatItem(group string, service string) StatItem {
-	itemslock.RLock()
-	defer itemslock.RUnlock()
+	itemsLock.RLock()
+	defer itemsLock.RUnlock()
 	return items[group+service]
 }
 
@@ -117,22 +117,22 @@ func NewDefaultStatItem(group string, service string) StatItem {
 }
 
 func RMStatItem(group string, service string) {
-	itemslock.RLock()
+	itemsLock.RLock()
 	i := items[group+service]
-	itemslock.RUnlock()
+	itemsLock.RUnlock()
 	if i != nil {
 		i.Clear()
-		itemslock.Lock()
+		itemsLock.Lock()
 		delete(items, group+service)
-		itemslock.Unlock()
+		itemsLock.Unlock()
 	}
 }
 
 func ClearStatItems() {
-	itemslock.Lock()
+	itemsLock.Lock()
 	old := items
 	items = make(map[string]StatItem, 64)
-	itemslock.Unlock()
+	itemsLock.Unlock()
 	for _, item := range old {
 		item.Clear()
 	}
@@ -140,8 +140,8 @@ func ClearStatItems() {
 
 func RangeAllStatItem(f func(k string, v StatItem) bool) {
 	if len(items) > 0 {
-		itemslock.RLock()
-		defer itemslock.RUnlock()
+		itemsLock.RLock()
+		defer itemsLock.RUnlock()
 		var b bool
 		for k, i := range items {
 			b = f(k, i)

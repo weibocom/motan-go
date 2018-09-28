@@ -14,19 +14,19 @@ import (
 var (
 	role         = "role"
 	application  = "application"
-	methodPerfix = "method"
+	methodPrefix = "method"
 	localhost    = "localhost"
-	keyPerfix    = fmt.Sprintf("%s:%s:%s", role, application, methodPerfix) // key include three parts >> role + ":" + application + ":" + method
+	keyPrefix    = fmt.Sprintf("%s:%s:%s", role, application, methodPrefix) // key include three parts >> role + ":" + application + ":" + method
 )
 
 func Test_graphite_Write(t *testing.T) {
-	server := &udpserver{port: "3456"}
+	server := &udpServer{port: "3456"}
 	go server.start()
 	time.Sleep(100 * time.Millisecond)
-	g := newGraphite("127.0.0.1", "testpool", 3456)
+	g := newGraphite("127.0.0.1", "test pool", 3456)
 	item := NewStatItem(group, service)
-	item.AddCounter(keyPerfix+"c1", 1)
-	item.AddHistograms(keyPerfix+" h1", 100)
+	item.AddCounter(keyPrefix+"c1", 1)
+	item.AddHistograms(keyPrefix+" h1", 100)
 	err := g.Write([]Snapshot{item.SnapshotAndClear()})
 	if err != nil {
 		fmt.Printf("write graphit fail. err:%s\n", err)
@@ -40,22 +40,22 @@ func TestGenGraphiteMessages(t *testing.T) {
 	item1 := NewDefaultStatItem(group, service)
 
 	// counter message
-	item1.AddCounter(keyPerfix+"c1", 1)
+	item1.AddCounter(keyPrefix+"c1", 1)
 	messages := GenGraphiteMessages(localhost, []Snapshot{item1.SnapshotAndClear()})
 	assert.Equal(t, 1, len(messages), "message size")
-	expect := fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n", role, application, group, localhost, service, methodPerfix+"c1", 1)
+	expect := fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n", role, application, group, localhost, service, methodPrefix+"c1", 1)
 	assert.Equal(t, expect, messages[0], "counter message")
 
 	// histogram message
-	item1.AddHistograms(keyPerfix+"h1", 100)
+	item1.AddHistograms(keyPrefix+"h1", 100)
 	messages = GenGraphiteMessages(localhost, []Snapshot{item1.SnapshotAndClear()})
 	assert.Equal(t, 1, len(messages), "message size")
-	for slak := range sla {
+	for slaK := range sla {
 		assert.True(t, strings.Contains(messages[0], fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-			role, application, group, localhost, service, methodPerfix+"h1", slak, float32(100))), "histogram message")
+			role, application, group, localhost, service, methodPrefix+"h1", slaK, float32(100))), "histogram message")
 	}
 	assert.True(t, strings.Contains(messages[0], fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
-		role, application, group, localhost, service, methodPerfix+"h1", "avg_time", float32(100))), "histogram message")
+		role, application, group, localhost, service, methodPrefix+"h1", "avg_time", float32(100))), "histogram message")
 
 	// multi items
 	item2 := NewDefaultStatItem(group+"2", service+"2")
@@ -64,12 +64,12 @@ func TestGenGraphiteMessages(t *testing.T) {
 
 	length := 10
 	for i := 0; i < length; i++ {
-		item1.AddCounter(keyPerfix+"c1", 1)
-		item1.AddHistograms(keyPerfix+"h1", 100)
-		item2.AddCounter(keyPerfix+"c2", 1)
-		item2.AddHistograms(keyPerfix+"h2", 100)
-		item3.AddCounter(keyPerfix+"c3", 1)
-		item3.AddHistograms(keyPerfix+"h3", 100)
+		item1.AddCounter(keyPrefix+"c1", 1)
+		item1.AddHistograms(keyPrefix+"h1", 100)
+		item2.AddCounter(keyPrefix+"c2", 1)
+		item2.AddHistograms(keyPrefix+"h2", 100)
+		item3.AddCounter(keyPrefix+"c3", 1)
+		item3.AddHistograms(keyPrefix+"h3", 100)
 	}
 
 	snapshots := make([]Snapshot, 0, 10)
@@ -88,24 +88,24 @@ func TestGenGraphiteMessages(t *testing.T) {
 
 	// large message
 	var buf bytes.Buffer
-	buf.WriteString(keyPerfix)
+	buf.WriteString(keyPrefix)
 	for i := 0; i < messageMaxLen/10; i++ {
-		buf.WriteString("mmmmmmmmmm")
+		buf.WriteString("1111111111")
 	}
 	item1.AddCounter(buf.String(), 1)
 	item1.AddCounter(buf.String()+"c2", 1)
-	item1.AddHistograms(keyPerfix+"h1", 100)
+	item1.AddHistograms(keyPrefix+"h1", 100)
 	messages = GenGraphiteMessages(localhost, []Snapshot{item1.SnapshotAndClear()})
 	assert.Equal(t, 3, len(messages), "message size")
 }
 
-type udpserver struct {
-	port   string
-	stoped bool
-	data   bytes.Buffer
+type udpServer struct {
+	port    string
+	stopped bool
+	data    bytes.Buffer
 }
 
-func (u *udpserver) start() {
+func (u *udpServer) start() {
 	ServerAddr, err := net.ResolveUDPAddr("udp", ":"+u.port)
 	if err != nil {
 		fmt.Printf("upd listen fail, Err:%s\n", err.Error())
@@ -119,7 +119,7 @@ func (u *udpserver) start() {
 	defer socket.Close()
 
 	for {
-		if u.stoped {
+		if u.stopped {
 			break
 		}
 		data := make([]byte, 4096)
@@ -128,10 +128,11 @@ func (u *udpserver) start() {
 			fmt.Printf("read fail, Err:%s\n", err.Error())
 			continue
 		}
+		println(string(data[:read]))
 		u.data.Write(data[:read])
 	}
 }
 
-func (u *udpserver) stop() {
-	u.stoped = true
+func (u *udpServer) stop() {
+	u.stopped = true
 }
