@@ -30,7 +30,7 @@ func TestMetricsFilter(t *testing.T) {
 	request.GetRPCContext(true).Proxy = true
 	request.SetAttachment("M_s", application)
 	request.SetAttachment("M_p", testService)
-	assert.Nil(t, metrics.GetStatItem(testGroup, testService), "metirc stat")
+	assert.Nil(t, metrics.GetStatItem(testGroup, testService), "metric stat")
 	ep := factory.GetEndPoint(url)
 	provider := factory.GetProvider(url)
 

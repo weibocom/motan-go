@@ -75,9 +75,9 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 					return
 				}
 				if snap.IsHistogram(k) { //histogram
-					for slak, slav := range sla {
+					for slaK, slaV := range sla {
 						segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-							pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], slak, snap.Percentile(k, slav))
+							pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], slaK, snap.Percentile(k, slaV))
 					}
 					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
 						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
