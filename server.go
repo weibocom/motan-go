@@ -140,7 +140,7 @@ func (m *MSContext) export(url *motan.URL) {
 		if err != nil {
 			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
 		} else {
-			vlog.Infof("service export success. url:%v\n", url)
+			vlog.Infof("service export success. url:%s\n", url.GetIdentity())
 			for _, r := range exporter.Registrys {
 				rid := r.GetURL().GetIdentity()
 				if _, ok := m.registries[rid]; !ok {

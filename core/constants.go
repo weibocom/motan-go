@@ -57,7 +57,7 @@ const (
 	Receive       = "receive"
 	Decode        = "decode"
 	Convert       = "convert"
-	ClustFliter   = "clustFilter"
+	ClFilter      = "clusterFilter"
 	EpFilterStart = "selectEp"
 	EpFilterEnd   = "epFilter"
 	Encode        = "encode"
