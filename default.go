@@ -64,6 +64,7 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/registry/unregister"] = dynamicConfigurer
 		defaultManageHandlers["/registry/subscribe"] = dynamicConfigurer
 		defaultManageHandlers["/registry/list"] = dynamicConfigurer
+		defaultManageHandlers["/registry/info"] = dynamicConfigurer
 	})
 	return defaultManageHandlers
 }

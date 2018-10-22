@@ -193,6 +193,8 @@ func (h *DynamicConfigurerHandler) ServeHTTP(res http.ResponseWriter, req *http.
 		h.subscribe(res, req)
 	case "/registry/list":
 		h.list(res, req)
+	case "/registry/info":
+		h.info(res, req)
 	default:
 		res.WriteHeader(http.StatusNotFound)
 	}
@@ -304,6 +306,12 @@ func (h *DynamicConfigurerHandler) subscribe(res http.ResponseWriter, req *http.
 
 func (h *DynamicConfigurerHandler) list(res http.ResponseWriter, req *http.Request) {
 	writeHandlerResponse(res, http.StatusOK, "ok", h.agent.configurer.getRegistryInfo())
+}
+
+func (h *DynamicConfigurerHandler) info(res http.ResponseWriter, req *http.Request) {
+	writeHandlerResponse(res, http.StatusOK, "ok", struct {
+		MeshPort int `json:"mesh_port"`
+	}{MeshPort: h.agent.port})
 }
 
 func writeHandlerResponse(res http.ResponseWriter, code int, message string, body interface{}) {

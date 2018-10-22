@@ -12,7 +12,6 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-const defaultMeshPort = 9981
 const defaultMeshRegistryHost = "localhost"
 const defaultMeshRegistryPort = 8002
 const meshRegistryRequestContentType = "application/json;charset=utf-8"
@@ -42,10 +41,27 @@ func (r *MeshRegistry) Initialize() {
 	if r.url.Port == 0 {
 		r.url.Port = defaultMeshRegistryPort
 	}
-	r.meshPort = int(r.url.GetIntValue(motan.MeshPortKey, defaultMeshPort))
 	r.proxyRegistry = r.url.GetParam(motan.ProxyRegistryKey, "")
 	if r.proxyRegistry == "" {
 		panic("Mesh registry should specify the proxyRegistry")
+	}
+
+	var info struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Body    struct {
+			MeshPort int `json:"mesh_port"`
+		} `json:"body"`
+	}
+
+	for i := 0; i < 3; i++ {
+		resp, err := http.Get("http://" + r.url.Host + ":" + r.url.GetPortStr() + "/registry/info")
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		r.readMeshRegistryResponseStruct(resp, &info)
+		r.meshPort = info.Body.MeshPort
 	}
 }
 
@@ -170,15 +186,19 @@ func (r *MeshRegistry) initRegistryRequest(url *motan.URL) ([]byte, error) {
 }
 
 func (r *MeshRegistry) readMeshRegistryResponse(resp *http.Response) (*dynamicConfigResponse, error) {
+	response := new(dynamicConfigResponse)
+	err := r.readMeshRegistryResponseStruct(resp, response)
+	return response, err
+}
+
+func (r *MeshRegistry) readMeshRegistryResponseStruct(resp *http.Response, v interface{}) error {
 	body := resp.Body
 	defer body.Close()
 	resData, err := ioutil.ReadAll(body)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	response := new(dynamicConfigResponse)
-	err = json.Unmarshal(resData, &response)
-	return response, err
+	return json.Unmarshal(resData, v)
 }
 
 func (r *MeshRegistry) Available(serverURL *motan.URL) {
