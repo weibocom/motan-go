@@ -16,7 +16,7 @@ func (t *AccessLogEndPointFilter) GetIndex() int {
 }
 
 func (t *AccessLogEndPointFilter) GetName() string {
-	return "accessLog"
+	return AccessLog
 }
 
 func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {

@@ -1,12 +1,9 @@
 package filter
 
 import (
-	"fmt"
-	"strings"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/metrics"
 )
 
 type ClusterMetricsFilter struct {
@@ -22,7 +19,7 @@ func (c *ClusterMetricsFilter) NewFilter(url *motan.URL) motan.Filter {
 }
 
 func (c *ClusterMetricsFilter) GetName() string {
-	return "clusterMetrics"
+	return ClusterMetrics
 }
 
 func (c *ClusterMetricsFilter) HasNext() bool {
@@ -53,30 +50,12 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 
 	response := c.GetNext().Filter(haStrategy, loadBalance, request)
 
-	mP := strings.Replace(request.GetAttachment("M_p"), ".", "_", -1)
-	key := fmt.Sprintf("motan-client-agent:%s:%s.cluster:%s:%s", request.GetAttachment("M_s"), request.GetAttachment("M_g"), mP, request.GetMethod())
-	keyCount := key + ".total_count"
-	metrics.AddCounter(keyCount, 1) //total_count
-
-	if response.GetException() != nil { //err_count
-		exception := response.GetException()
-		if exception.ErrType == motan.BizException {
-			bizErrCountKey := key + ".biz_error_count"
-			metrics.AddCounter(bizErrCountKey, 1)
-		} else {
-			otherErrCountKey := key + ".other_error_count"
-			metrics.AddCounter(otherErrCountKey, 1)
-		}
+	role := "motan-client"
+	ctx := request.GetRPCContext(false)
+	if ctx != nil && ctx.Proxy {
+		role = "motan-client-agent"
 	}
-
-	end := time.Now()
-	cost := end.Sub(start).Nanoseconds() / 1e6
-	metrics.AddCounter(key+"."+metrics.ElapseTimeString(cost), 1)
-
-	if cost > 200 {
-		metrics.AddCounter(key+".slow_count", 1)
-	}
-
-	metrics.AddHistograms(key, cost)
+	key := role + ":" + request.GetAttachment("M_s") + ":" + request.GetMethod()
+	addMetric(request.GetAttachment("M_g")+".cluster", request.GetAttachment("M_p"), key, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }

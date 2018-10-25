@@ -26,7 +26,7 @@ var (
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
-	panicErr = errors.New("panic error")
+	errPanic = errors.New("panic error")
 )
 
 type MotanEndpoint struct {
@@ -444,7 +444,7 @@ func (c *Channel) IsClosed() bool {
 
 func (c *Channel) recv() {
 	defer motan.HandlePanic(func() {
-		c.closeOnErr(panicErr)
+		c.closeOnErr(errPanic)
 	})
 	if err := c.recvLoop(); err != nil {
 		c.closeOnErr(err)
@@ -472,7 +472,7 @@ func (c *Channel) recvLoop() error {
 
 func (c *Channel) send() {
 	defer motan.HandlePanic(func() {
-		c.closeOnErr(panicErr)
+		c.closeOnErr(errPanic)
 	})
 	for {
 		select {

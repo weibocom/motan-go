@@ -34,7 +34,7 @@ func (t *CircuitBreakerEndPointFilter) GetIndex() int {
 }
 
 func (t *CircuitBreakerEndPointFilter) GetName() string {
-	return "circuitbreaker"
+	return CircuitBreaker
 }
 
 func (t *CircuitBreakerEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
