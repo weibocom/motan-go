@@ -1,5 +1,5 @@
 package motan
 
 const (
-	Version = "1.0.0-beta3"
+	Version = "1.0.0-beta4"
 )
