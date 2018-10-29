@@ -41,7 +41,27 @@ const (
 
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
-	h.httpClient = http.Client{Timeout: 1 * time.Second}
+	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000*time.Millisecond)
+	h.httpClient = http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        500,
+			MaxIdleConnsPerHost: 100,
+			DialContext: (&net.Dialer{
+				Timeout:   1 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			Dial: func(netw, addr string) (net.Conn, error) {
+				deadline := time.Now().Add(timeout)
+				c, err := net.DialTimeout(netw, addr, timeout)
+				if err != nil {
+					return nil, err
+				}
+				c.SetDeadline(deadline)
+				return c, nil
+			},
+		},
+	}
 	h.srvURLMap = make(srvURLMapT)
 	urlConf, _ := h.gctx.Config.GetSection("http-service")
 	if urlConf != nil {
@@ -123,11 +143,12 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 
 func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res string, err error) {
 	paramsTmp := request.GetArguments()
+
 	var buffer bytes.Buffer
-	if paramsTmp != nil && len(paramsTmp) > 0 {
-		// @if is simple, then only have paramsTmp[0]
-		// @TODO multi value support
+	if paramsTmp[0] != nil && len(paramsTmp) > 0 {
+		// @if is simple serialization, only have paramsTmp[0]
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
+
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
 		buffer.WriteString("requestIdFromClient=")
 		buffer.WriteString(fmt.Sprintf("%d", request.GetRequestID()))
@@ -212,30 +233,16 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	req.Header.Add("x-forwarded-for", ip)
 	req.Header.Set("Accept-Encoding", "") //强制不走gzip
 
-	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000*time.Millisecond)
-	c := http.Client{
-		Transport: &http.Transport{
-			Dial: func(netw, addr string) (net.Conn, error) {
-				deadline := time.Now().Add(timeout)
-				c, err := net.DialTimeout(netw, addr, timeout)
-				if err != nil {
-					return nil, err
-				}
-				c.SetDeadline(deadline)
-				return c, nil
-			},
-		},
-	}
-
-	httpResp, err := c.Do(req)
+	httpResp, err := h.httpClient.Do(req)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Do HTTP Call err: %v", err)
 		fillException(resp, t, err)
 		return resp
 	}
+	defer httpResp.Body.Close()
 	headers := httpResp.Header
 	statusCode := httpResp.StatusCode
-	defer httpResp.Body.Close()
+
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
