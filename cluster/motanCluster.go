@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -418,9 +419,15 @@ func getBestGroup(groupNodes map[string][]*motan.URL) string {
 	}
 	var lastGroup string
 	groupRtt := make(map[string]time.Duration, len(groupNodes))
+	// TODO: if we do not have root privilege on linux, we need another policy to get network latency
+	// For linux we need root privilege to do ping, but darwin no need
+	pingPrivileged := true
+	if runtime.GOOS == "darwin" {
+		pingPrivileged = false
+	}
 	for group, nodes := range groupNodes {
 		lastGroup = group
-		pinger, err := motan.NewPinger(nodes[rand.Intn(len(nodes))].Host, 5, 1*time.Second, 1024)
+		pinger, err := motan.NewPinger(nodes[rand.Intn(len(nodes))].Host, 5, 1*time.Second, 1024, pingPrivileged)
 		if err != nil {
 			continue
 		}

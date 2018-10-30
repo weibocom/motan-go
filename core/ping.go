@@ -20,7 +20,7 @@ const (
 	protocolIPv6ICMP = 58
 )
 
-func NewPinger(addr string, count int, timeout time.Duration, size int) (*Pinger, error) {
+func NewPinger(addr string, count int, timeout time.Duration, size int, privileged bool) (*Pinger, error) {
 	ipAddr, err := net.ResolveIPAddr("ip", addr)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,6 @@ func NewPinger(addr string, count int, timeout time.Duration, size int) (*Pinger
 	pinger := &Pinger{
 		ipAddr: ipAddr,
 		addr:   addr,
-		dst:    &net.UDPAddr{IP: ipAddr.IP, Zone: ipAddr.Zone},
 
 		Interval: 1 * time.Millisecond,
 		Count:    count,
@@ -48,6 +47,21 @@ func NewPinger(addr string, count int, timeout time.Duration, size int) (*Pinger
 		pinger.proto = protocolIPv6ICMP
 		pinger.ipv4 = false
 	}
+
+	if privileged {
+		pinger.dst = ipAddr
+		pinger.netProto = "ip4:icmp"
+		if !pinger.ipv4 {
+			pinger.netProto = "ip6:ipv6-icmp"
+		}
+	} else {
+		pinger.dst = &net.UDPAddr{IP: ipAddr.IP, Zone: ipAddr.Zone}
+		pinger.netProto = "udp4"
+		if !pinger.ipv4 {
+			pinger.netProto = "udp6"
+		}
+	}
+
 	return pinger, nil
 }
 
@@ -63,7 +77,8 @@ type Pinger struct {
 	done     chan bool
 	ipAddr   *net.IPAddr
 	addr     string
-	dst      *net.UDPAddr
+	netProto string
+	dst      net.Addr
 	icmpType icmp.Type
 	proto    int
 	ipv4     bool
@@ -87,11 +102,7 @@ func (p *Pinger) Addr() string {
 
 func (p *Pinger) Ping() error {
 	var conn *icmp.PacketConn
-	netProto := "udp4"
-	if !p.ipv4 {
-		netProto = "udp6"
-	}
-	if c, err := p.listen(netProto); err != nil {
+	if c, err := p.listen(); err != nil {
 		return err
 	} else {
 		conn = c
@@ -244,8 +255,8 @@ func (p *Pinger) processPacket(recv *packet) error {
 	return nil
 }
 
-func (p *Pinger) listen(netProto string) (*icmp.PacketConn, error) {
-	conn, err := icmp.ListenPacket(netProto, "")
+func (p *Pinger) listen() (*icmp.PacketConn, error) {
+	conn, err := icmp.ListenPacket(p.netProto, "")
 	if err != nil {
 		vlog.Errorf("Error listening for ICMP packets: %s", err.Error())
 		close(p.done)

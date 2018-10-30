@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewPinger(t *testing.T) {
-	pinger, err := NewPinger("127.0.0.1", 5, 5*time.Second, 56)
+	pinger, err := NewPinger("127.0.0.1", 5, 5*time.Second, 56, false)
 	if err != nil {
 		t.Errorf(err.Error())
 	}
