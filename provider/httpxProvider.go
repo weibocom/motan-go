@@ -16,7 +16,7 @@ import (
 // Default options for httpxProvider confs
 const (
 	ExtConfSection             = "http-service"
-	DefaultClientName          = "weibo-mesh-http"
+	ClientName                 = "weibo-mesh-http"
 	DefaultWriteTimeout        = 1 * time.Second
 	DefaultReadTimeout         = 1 * time.Second
 	DefaultMaxConnsPerHost     = 1024
@@ -35,7 +35,7 @@ type HTTPXProvider struct {
 // Initialize http provider
 func (h *HTTPXProvider) Initialize() {
 	h.httpClient = &fasthttp.Client{
-		Name:                DefaultClientName,
+		Name:                ClientName,
 		WriteTimeout:        DefaultWriteTimeout,
 		ReadTimeout:         DefaultReadTimeout,
 		MaxConnsPerHost:     DefaultMaxConnsPerHost,
