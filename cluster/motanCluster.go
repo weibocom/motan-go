@@ -397,8 +397,10 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	}
 
 	groupNodes := make(map[string][]*motan.URL)
+	matchedGroups := make([]string, 0, 3)
 	for _, group := range groups {
 		if regex.Match([]byte(group)) {
+			matchedGroups = append(matchedGroups, group)
 			groupDetectUrl.Group = group
 			nodes := registry.Discover(groupDetectUrl)
 			if len(nodes) > 0 {
@@ -406,17 +408,20 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 			}
 		}
 	}
-	group := getBestGroup(groupNodes)
-	if group == "" {
-		return url.Group
+	if len(groupNodes) != 0 {
+		return getBestGroup(groupNodes)
 	}
-	return group
+	if len(matchedGroups) == 0 {
+		vlog.Errorf("No group found for %s", url.Group)
+		return url.Group
+	} else {
+		group := matchedGroups[len(matchedGroups)-1]
+		vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
+		return group
+	}
 }
 
 func getBestGroup(groupNodes map[string][]*motan.URL) string {
-	if len(groupNodes) == 0 {
-		return ""
-	}
 	var lastGroup string
 	groupRtt := make(map[string]time.Duration, len(groupNodes))
 	// TODO: if we do not have root privilege on linux, we need another policy to get network latency
