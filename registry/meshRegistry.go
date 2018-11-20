@@ -114,10 +114,10 @@ func (r *MeshRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener
 }
 
 func (r *MeshRegistry) Discover(url *motan.URL) []*motan.URL {
-	newUrl := url.Copy()
-	newUrl.Host = r.url.Host
-	newUrl.Port = r.meshPort
-	return []*motan.URL{newUrl}
+	newURL := url.Copy()
+	newURL.Host = r.url.Host
+	newURL.Port = r.meshPort
+	return []*motan.URL{newURL}
 }
 
 func (r *MeshRegistry) Register(url *motan.URL) {
