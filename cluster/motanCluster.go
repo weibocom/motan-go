@@ -372,13 +372,13 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 		appendPreDetectGroups(upperGroup)
 	}
 
-	groupDetectUrl := url.Copy()
+	groupDetectURL := url.Copy()
 	gr, canDiscoverGroup := registry.(groupDiscoverableRegistry)
 	if !canDiscoverGroup {
 		// registry can not discover groups, we just try prepared groups
 		for _, g := range preDetectGroups {
-			groupDetectUrl.Group = g
-			if len(registry.Discover(groupDetectUrl)) > 0 {
+			groupDetectURL.Group = g
+			if len(registry.Discover(groupDetectURL)) > 0 {
 				return g
 			}
 		}
@@ -389,8 +389,8 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	groups := getAllGroups(gr)
 	for _, g := range preDetectGroups {
 		for _, group := range groups {
-			groupDetectUrl.Group = g
-			if group == g && len(registry.Discover(groupDetectUrl)) > 0 {
+			groupDetectURL.Group = g
+			if group == g && len(registry.Discover(groupDetectURL)) > 0 {
 				return g
 			}
 		}
@@ -407,8 +407,8 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	for _, group := range groups {
 		if regex.Match([]byte(group)) {
 			matchedGroups = append(matchedGroups, group)
-			groupDetectUrl.Group = group
-			nodes := registry.Discover(groupDetectUrl)
+			groupDetectURL.Group = group
+			nodes := registry.Discover(groupDetectURL)
 			if len(nodes) > 0 {
 				groupNodes[group] = nodes
 			}
@@ -420,11 +420,10 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	if len(matchedGroups) == 0 {
 		vlog.Errorf("No group found for %s", url.Group)
 		return url.Group
-	} else {
-		group := matchedGroups[len(matchedGroups)-1]
-		vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
-		return group
 	}
+	group := matchedGroups[len(matchedGroups)-1]
+	vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
+	return group
 }
 
 func getBestGroup(groupNodes map[string][]*motan.URL) string {

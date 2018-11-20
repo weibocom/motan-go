@@ -101,11 +101,9 @@ func (p *Pinger) Addr() string {
 }
 
 func (p *Pinger) Ping() error {
-	var conn *icmp.PacketConn
-	if c, err := p.listen(); err != nil {
+	conn, err := p.listen()
+	if err != nil {
 		return err
-	} else {
-		conn = c
 	}
 
 	defer conn.Close()
@@ -117,7 +115,7 @@ func (p *Pinger) Ping() error {
 	recv := make(chan *packet, 5)
 	go p.recvICMP(conn, recv, &wg)
 
-	err := p.sendICMP(conn)
+	err = p.sendICMP(conn)
 	if err != nil {
 		vlog.Errorf("Send ping packet error: %s", err.Error())
 	}
