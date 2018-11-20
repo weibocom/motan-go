@@ -124,6 +124,10 @@ type DiscoverService interface {
 	Discover(url *URL) []*URL
 }
 
+type GroupDiscoverService interface {
+	DiscoverAllGroups() ([]string, error)
+}
+
 // DiscoverCommand : discover command for client or agent
 type DiscoverCommand interface {
 	SubscribeCommand(url *URL, listener CommandNotifyListener)

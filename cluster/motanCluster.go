@@ -3,7 +3,12 @@ package cluster
 import (
 	"errors"
 	"fmt"
+	"math/rand"
+	"regexp"
+	"runtime"
+	"strings"
 	"sync"
+	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -242,15 +247,18 @@ func (m *MotanCluster) parseRegistry() (err error) {
 	for _, r := range arr {
 		if registryURL, ok := m.Context.RegistryURLs[r]; ok {
 			registry := m.extFactory.GetRegistry(registryURL)
-			if registry != nil {
-				if _, ok := registry.(motan.DiscoverCommand); ok {
-					registry = GetCommandRegistryWrapper(m, registry)
-				}
-				registry.Subscribe(m.url, m)
-				registries = append(registries, registry)
-				urls := registry.Discover(m.url)
-				m.Notify(registryURL, urls)
+			if registry == nil {
+				continue
 			}
+			m.url.Group = getSubscribeGroup(m.url, registry)
+			m.url.ClearCachedInfo()
+			if _, ok := registry.(motan.DiscoverCommand); ok {
+				registry = GetCommandRegistryWrapper(m, registry)
+			}
+			registry.Subscribe(m.url, m)
+			registries = append(registries, registry)
+			urls := registry.Discover(m.url)
+			m.Notify(registryURL, urls)
 		} else {
 			err = errors.New("registry is invalid: " + r)
 			vlog.Errorln("registry is invalid: " + r)
@@ -277,4 +285,190 @@ func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
 			notifyRegisry.NotifyCommand(m.url, AgentCmd, commandInfo)
 		}
 	}
+}
+
+const (
+	clusterIdcPlaceHolder         = "${idc}"
+	registryGroupInfoMaxCacheTime = time.Hour
+)
+
+var globalRegistryGroupCache = &registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
+
+type groupDiscoverableRegistry interface {
+	motan.Registry
+	motan.GroupDiscoverService
+}
+
+type registryGroupCacheInfo struct {
+	gr          groupDiscoverableRegistry
+	lastUpdTime time.Time
+	groups      []string
+	lock        sync.Mutex
+}
+
+type registryGroupCache struct {
+	cachedGroups map[string]*registryGroupCacheInfo
+	lock         sync.Mutex
+}
+
+func (c *registryGroupCacheInfo) getGroups() []string {
+	if time.Now().Sub(c.lastUpdTime) > registryGroupInfoMaxCacheTime {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		groups, err := c.gr.DiscoverAllGroups()
+		if err != nil {
+			return c.groups
+		}
+		c.lastUpdTime = time.Now()
+		c.groups = groups
+	}
+	return c.groups
+}
+
+func (rc *registryGroupCache) getGroups(gr groupDiscoverableRegistry) []string {
+	key := gr.GetURL().GetIdentity()
+	rc.lock.Lock()
+	cacheInfo := rc.cachedGroups[key]
+	if cacheInfo == nil {
+		cacheInfo = &registryGroupCacheInfo{gr: gr}
+		rc.cachedGroups[key] = cacheInfo
+	}
+	rc.lock.Unlock()
+	return cacheInfo.getGroups()
+}
+
+func getAllGroups(gr groupDiscoverableRegistry) []string {
+	return globalRegistryGroupCache.getGroups(gr)
+}
+
+func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
+	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
+		return url.Group
+	}
+
+	// prepare groups for exact match
+	preDetectGroups := make([]string, 0, 3)
+	if *motan.IDC != "" {
+		originGroup := strings.Replace(url.Group, clusterIdcPlaceHolder, *motan.IDC, 1)
+		lowerGroup := strings.Replace(url.Group, clusterIdcPlaceHolder, strings.ToLower(*motan.IDC), 1)
+		upperGroup := strings.Replace(url.Group, clusterIdcPlaceHolder, strings.ToUpper(*motan.IDC), 1)
+		preDetectGroups = append(preDetectGroups, originGroup)
+		appendPreDetectGroups := func(group string) {
+			// avoid duplicate group
+			for _, g := range preDetectGroups {
+				if group == g {
+					return
+				}
+			}
+			preDetectGroups = append(preDetectGroups, group)
+		}
+		appendPreDetectGroups(lowerGroup)
+		appendPreDetectGroups(upperGroup)
+	}
+
+	groupDetectUrl := url.Copy()
+	gr, canDiscoverGroup := registry.(groupDiscoverableRegistry)
+	if !canDiscoverGroup {
+		// registry can not discover groups, we just try prepared groups
+		for _, g := range preDetectGroups {
+			groupDetectUrl.Group = g
+			if len(registry.Discover(groupDetectUrl)) > 0 {
+				return g
+			}
+		}
+		return url.Group
+	}
+
+	// registry can discover groups, first try prepared groups, if no match, try regex match
+	groups := getAllGroups(gr)
+	for _, g := range preDetectGroups {
+		for _, group := range groups {
+			groupDetectUrl.Group = g
+			if group == g && len(registry.Discover(groupDetectUrl)) > 0 {
+				return g
+			}
+		}
+	}
+
+	regex, err := regexp.Compile("^" + strings.Replace(url.Group, clusterIdcPlaceHolder, "(.*)", 1) + "$")
+	if err != nil {
+		vlog.Errorf("Unexpected url config %v", url)
+		return url.Group
+	}
+
+	groupNodes := make(map[string][]*motan.URL)
+	matchedGroups := make([]string, 0, 3)
+	for _, group := range groups {
+		if regex.Match([]byte(group)) {
+			matchedGroups = append(matchedGroups, group)
+			groupDetectUrl.Group = group
+			nodes := registry.Discover(groupDetectUrl)
+			if len(nodes) > 0 {
+				groupNodes[group] = nodes
+			}
+		}
+	}
+	if len(groupNodes) != 0 {
+		return getBestGroup(groupNodes)
+	}
+	if len(matchedGroups) == 0 {
+		vlog.Errorf("No group found for %s", url.Group)
+		return url.Group
+	} else {
+		group := matchedGroups[len(matchedGroups)-1]
+		vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
+		return group
+	}
+}
+
+func getBestGroup(groupNodes map[string][]*motan.URL) string {
+	var lastGroup string
+	groupRtt := make(map[string]time.Duration, len(groupNodes))
+	// TODO: if we do not have root privilege on linux, we need another policy to get network latency
+	// For linux we need root privilege to do ping, but darwin no need
+	pingPrivileged := true
+	if runtime.GOOS == "darwin" {
+		pingPrivileged = false
+	}
+	for group, nodes := range groupNodes {
+		lastGroup = group
+		pinger, err := motan.NewPinger(nodes[rand.Intn(len(nodes))].Host, 5, 1*time.Second, 1024, pingPrivileged)
+		if err != nil {
+			continue
+		}
+		pinger.Ping()
+		if len(pinger.Rtts) < 3 {
+			// node loss packets
+			continue
+		}
+
+		var min, max, total time.Duration
+		min = pinger.Rtts[0]
+		max = pinger.Rtts[0]
+		for _, rtt := range pinger.Rtts {
+			if rtt < min {
+				min = rtt
+			}
+			if rtt > max {
+				max = rtt
+			}
+			total += rtt
+		}
+		groupRtt[group] = time.Duration(int64(total-min-max) / int64(len(pinger.Rtts)-2))
+	}
+
+	var minRtt time.Duration
+	var bestGroup string
+	for group, rtt := range groupRtt {
+		if minRtt == 0 || minRtt > rtt {
+			// First rtt group or the rtt is less then former
+			minRtt = rtt
+			bestGroup = group
+		}
+	}
+	if bestGroup == "" {
+		vlog.Warningf("Detect best group failed, use fallback group %s", lastGroup)
+		bestGroup = lastGroup
+	}
+	return bestGroup
 }
