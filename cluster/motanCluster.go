@@ -17,7 +17,7 @@ import (
 type MotanCluster struct {
 	Context        *motan.Context
 	url            *motan.URL
-	Registrys      []motan.Registry
+	Registries     []motan.Registry
 	HaStrategy     motan.HaStrategy
 	LoadBalance    motan.LoadBalance
 	Refers         []motan.EndPoint
@@ -35,8 +35,14 @@ func (m *MotanCluster) IsAvailable() bool {
 	return m.available
 }
 
-func NewCluster(url *motan.URL, proxy bool) *MotanCluster {
-	cluster := &MotanCluster{url: url, proxy: proxy}
+func NewCluster(context *motan.Context, extFactory motan.ExtensionFactory, url *motan.URL, proxy bool) *MotanCluster {
+	cluster := &MotanCluster{
+		Context:    context,
+		extFactory: extFactory,
+		url:        url,
+		proxy:      proxy,
+	}
+	cluster.initCluster()
 	return cluster
 }
 
@@ -62,7 +68,7 @@ func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster not available, maybe caused by degrade", ErrType: motan.ServiceException})
 }
-func (m *MotanCluster) InitCluster() bool {
+func (m *MotanCluster) initCluster() bool {
 	m.registryRefers = make(map[string][]motan.EndPoint)
 	//ha
 	m.HaStrategy = m.extFactory.GetHa(m.url)
@@ -108,7 +114,7 @@ func (m *MotanCluster) refresh() {
 	m.LoadBalance.OnRefresh(newRefers)
 }
 func (m *MotanCluster) AddRegistry(registry motan.Registry) {
-	m.Registrys = append(m.Registrys, registry)
+	m.Registries = append(m.Registries, registry)
 }
 func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 	vlog.Infof("cluster %s receive notify size %d. \n", m.GetIdentity(), len(urls))
@@ -219,7 +225,7 @@ func (m *MotanCluster) Destroy() {
 		m.notifyLock.Lock()
 		defer m.notifyLock.Unlock()
 		vlog.Infof("cluster %s will destroy.\n", m.url.GetIdentity())
-		for _, r := range m.Registrys {
+		for _, r := range m.Registries {
 			vlog.Infof("unsubscribe from registry %s .\n", r.GetURL().GetIdentity())
 			r.Unsubscribe(m.url, m)
 		}
@@ -265,7 +271,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		}
 
 	}
-	m.Registrys = registries
+	m.Registries = registries
 	return err
 }
 
@@ -280,9 +286,9 @@ func (m *MotanCluster) initFilters() {
 }
 
 func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
-	for _, reg := range m.Registrys {
-		if notifyRegisry, ok := reg.(motan.CommandNotifyListener); ok {
-			notifyRegisry.NotifyCommand(m.url, AgentCmd, commandInfo)
+	for _, reg := range m.Registries {
+		if notifyRegistry, ok := reg.(motan.CommandNotifyListener); ok {
+			notifyRegistry.NotifyCommand(m.url, AgentCmd, commandInfo)
 		}
 	}
 }

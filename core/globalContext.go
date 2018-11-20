@@ -64,6 +64,7 @@ var (
 // all env flag in motan-go
 var (
 	Port         = flag.Int("port", 0, "agent listen port")
+	Eport        = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
 	Mport        = flag.Int("mport", 0, "agent manage port")
 	Pidfile      = flag.String("pidfile", "", "agent manage port")
 	CfgFile      = flag.String("c", "", "motan run conf")
@@ -72,6 +73,7 @@ var (
 	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
 	Pool         = flag.String("pool", "", "application pool config. like 'application-idc-level'")
 	Application  = flag.String("application", "", "assist for application pool config.")
+	Recover      = flag.Bool("recover", false, "recover from accidental exit")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
