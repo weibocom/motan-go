@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -163,17 +164,20 @@ func (c *Context) Initialize() {
 			}
 		}
 		if dynamicFile != "" {
-			dc, _ := cfg.NewConfigFromFile(dynamicFile)
-			dconfs := make(map[string]interface{})
-			for k, v := range dc.GetOriginMap() {
-				if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
-					continue
+			if dc, err := cfg.NewConfigFromFile(dynamicFile); err != nil {
+				vlog.Warningf("load dynamic config file failed: %s", err.Error())
+			} else {
+				dconfs := make(map[string]interface{})
+				for k, v := range dc.GetOriginMap() {
+					if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
+						continue
+					}
+					if ks, ok := k.(string); ok {
+						dconfs[ks] = v
+					}
 				}
-				if ks, ok := k.(string); ok {
-					dconfs[ks] = v
-				}
+				cfgRs.ReplacePlaceHolder(dconfs)
 			}
-			cfgRs.ReplacePlaceHolder(dconfs)
 		}
 	}
 
