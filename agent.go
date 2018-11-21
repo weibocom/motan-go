@@ -17,6 +17,7 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -560,7 +561,10 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 }
 
 func (a *Agent) getConfigData() []byte {
-	data, _ := ioutil.ReadFile(*motan.CfgFile)
+	data, err := yaml.Marshal(a.Context.Config.GetOriginMap())
+	if err != nil {
+		return []byte(err.Error())
+	}
 	return data
 }
 
