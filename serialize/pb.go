@@ -108,7 +108,6 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		buf.EncodeVarint(1)
 		return nil
 	}
-	buf.EncodeVarint(0)
 	rv, ok := v.(reflect.Value)
 	if !ok {
 		rv = reflect.ValueOf(v)
@@ -116,6 +115,11 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 	}
+	if rv.Kind() == reflect.Invalid {
+		buf.EncodeVarint(1)
+		return nil
+	}
+	buf.EncodeVarint(0)
 	switch rv.Kind() {
 	case reflect.Bool:
 		if rv.Bool() {
