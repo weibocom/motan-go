@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -64,6 +65,7 @@ var (
 // all env flag in motan-go
 var (
 	Port         = flag.Int("port", 0, "agent listen port")
+	Eport        = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
 	Mport        = flag.Int("mport", 0, "agent manage port")
 	Pidfile      = flag.String("pidfile", "", "agent manage port")
 	CfgFile      = flag.String("c", "", "motan run conf")
@@ -72,6 +74,7 @@ var (
 	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
 	Pool         = flag.String("pool", "", "application pool config. like 'application-idc-level'")
 	Application  = flag.String("application", "", "assist for application pool config.")
+	Recover      = flag.Bool("recover", false, "recover from accidental exit")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
@@ -161,17 +164,20 @@ func (c *Context) Initialize() {
 			}
 		}
 		if dynamicFile != "" {
-			dc, _ := cfg.NewConfigFromFile(dynamicFile)
-			dconfs := make(map[string]interface{})
-			for k, v := range dc.GetOriginMap() {
-				if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
-					continue
+			if dc, err := cfg.NewConfigFromFile(dynamicFile); err != nil {
+				vlog.Warningf("load dynamic config file failed: %s", err.Error())
+			} else {
+				dconfs := make(map[string]interface{})
+				for k, v := range dc.GetOriginMap() {
+					if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
+						continue
+					}
+					if ks, ok := k.(string); ok {
+						dconfs[ks] = v
+					}
 				}
-				if ks, ok := k.(string); ok {
-					dconfs[ks] = v
-				}
+				cfgRs.ReplacePlaceHolder(dconfs)
 			}
-			cfgRs.ReplacePlaceHolder(dconfs)
 		}
 	}
 

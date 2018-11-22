@@ -11,9 +11,9 @@ import (
 
 const (
 	CircuitBreakerTimeoutField  = "circuitBreaker.timeout" //ms
-	RequestVolumeThresholdField = "circuitBreaker.requestVolume"
-	SleepWindowField            = "circuitBreaker.sleepWindow" //ms
-	ErrorPercentThreshold       = "circuitBreaker.errorPercent"
+	RequestVolumeThresholdField = "circuitBreaker.requestThreshold"
+	SleepWindowField            = "circuitBreaker.sleepWindow"  //ms
+	ErrorPercentThreshold       = "circuitBreaker.errorPercent" //%
 )
 
 type CircuitBreakerFilter struct {
@@ -39,7 +39,7 @@ func (c *CircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
 func (c *CircuitBreakerFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	var response motan.Response
 	if c.available {
-		hystrix.Do(c.url.GetIdentity(), func() error {
+		_ = hystrix.Do(c.url.GetIdentity(), func() error {
 			response = c.GetNext().Filter(caller, request)
 			if ex := response.GetException(); ex != nil {
 				return errors.New(ex.ErrMsg)
@@ -89,6 +89,7 @@ func newCircuitBreaker(url *motan.URL) (bool, *hystrix.CircuitBreaker) {
 
 func buildCommandConfig(url *motan.URL) *hystrix.CommandConfig {
 	hystrix.DefaultMaxConcurrent = 1000
+	hystrix.DefaultTimeout = int(url.GetPositiveIntValue(motan.TimeOutKey, int64(hystrix.DefaultTimeout)))
 	commandConfig := &hystrix.CommandConfig{}
 	if v, ok := url.Parameters[CircuitBreakerTimeoutField]; ok {
 		commandConfig.Timeout, _ = strconv.Atoi(v)
@@ -125,7 +126,7 @@ func getConfigStr(config *hystrix.CommandConfig) string {
 		ret += "timeout:" + strconv.Itoa(config.Timeout) + " "
 	}
 	if config.RequestVolumeThreshold != 0 {
-		ret += "requestVolume:" + strconv.Itoa(config.RequestVolumeThreshold) + " "
+		ret += "requestThreshold:" + strconv.Itoa(config.RequestVolumeThreshold) + " "
 	}
 	if config.SleepWindow != 0 {
 		ret += "sleepWindow:" + strconv.Itoa(config.SleepWindow) + " "

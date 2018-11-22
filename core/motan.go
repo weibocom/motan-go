@@ -124,6 +124,10 @@ type DiscoverService interface {
 	Discover(url *URL) []*URL
 }
 
+type GroupDiscoverService interface {
+	DiscoverAllGroups() ([]string, error)
+}
+
 // DiscoverCommand : discover command for client or agent
 type DiscoverCommand interface {
 	SubscribeCommand(url *URL, listener CommandNotifyListener)
@@ -206,10 +210,13 @@ type Server interface {
 
 // Exporter : export and manage a service. one exporter bind with a service
 type Exporter interface {
-	Export(server Server) error
+	Export(server Server, extFactory ExtensionFactory, context *Context) error
 	Unexport() error
 	SetProvider(provider Provider)
 	GetProvider() Provider
+	Available()
+	Unavailable()
+	IsAvailable() bool
 	WithURL
 }
 

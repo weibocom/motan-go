@@ -164,7 +164,7 @@ func deSerializeBuf(buf *motan.BytesBuffer, v interface{}) (interface{}, error) 
 	case sNull:
 		return nil, nil
 	case sString:
-		return decodeString(buf, v)
+		return compatDecodeString(buf, v)
 	case sStringMap:
 		return decodeStringMap(buf, v)
 	case sByteArray:
@@ -332,6 +332,18 @@ func decodeBool(buf *motan.BytesBuffer, v interface{}) (bool, error) {
 		}
 	}
 	return ret, nil
+}
+
+func compatDecodeString(buf *motan.BytesBuffer, v interface{}) (interface{}, error) {
+	if v != nil {
+		if rt, ok := v.(reflect.Type); ok && rt.Kind() == reflect.Slice && rt.Elem().Kind() == reflect.Uint8 {
+			return decodeBytes(buf, nil)
+		}
+		if _, ok := v.(*[]byte); ok {
+			return decodeBytes(buf, v)
+		}
+	}
+	return decodeString(buf, v)
 }
 
 func decodeString(buf *motan.BytesBuffer, v interface{}) (string, error) {

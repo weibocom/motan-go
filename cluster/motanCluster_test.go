@@ -54,7 +54,6 @@ func checkEndpointFilter(filters []motan.Filter, expectSize int, t *testing.T) {
 
 func TestNotify(t *testing.T) {
 	cluster := initCluster()
-	cluster.InitCluster()
 	urls := make([]*motan.URL, 0, 2)
 	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
 	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
@@ -75,7 +74,6 @@ func TestNotify(t *testing.T) {
 
 func TestCall(t *testing.T) {
 	cluster := initCluster()
-	cluster.InitCluster()
 	response := cluster.Call(&motan.MotanRequest{})
 	fmt.Printf("res:%+v", response)
 	if response == nil {
@@ -84,21 +82,16 @@ func TestCall(t *testing.T) {
 }
 
 func initCluster() *MotanCluster {
-	cluster := &MotanCluster{}
 	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Protocol = "test"
 	url.Parameters[motan.Hakey] = "failover"
 	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
 	url.Parameters[motan.Lbkey] = "random"
-	cluster.Context = &motan.Context{}
-	cluster.SetURL(url)
-	cluster.SetExtFactory(getCustomExt())
-	return cluster
+	return NewCluster(&motan.Context{}, getCustomExt(), url, false)
 }
 
 func TestDestroy(t *testing.T) {
 	cluster := initCluster()
-	cluster.InitCluster()
 	urls := make([]*motan.URL, 0, 2)
 	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
 	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})

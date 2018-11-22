@@ -27,6 +27,25 @@ func TestSerializeStringMap(t *testing.T) {
 	verifyMap(m, simple, t)
 }
 
+func TestStringBytesCompatible(t *testing.T) {
+	simple := &SimpleSerialization{}
+	ts := "teststring"
+	bytes, _ := simple.Serialize(ts)
+	ds, _ := simple.DeSerialize(bytes, nil)
+	if ds != ts {
+		t.Errorf("deseriallize string fail, except: %s, actual: %v", ts, ds)
+	}
+	var bs []byte
+	simple.DeSerialize(bytes, &bs)
+	if ts != string(bs) {
+		t.Errorf("string not compatible with bytes, except: %s, actual: %v", ts, bs)
+	}
+	dv, _ := simple.DeSerialize(bytes, reflect.TypeOf(([]byte)(nil)))
+	if rbs, ok := dv.([]byte); !ok || ts != string(rbs) {
+		t.Errorf("string not compatible with bytes, except: %s, actual: %v", ts, bs)
+	}
+}
+
 func TestSerializeMap(t *testing.T) {
 	simple := &SimpleSerialization{}
 	value := make([]interface{}, 0, 16)

@@ -137,10 +137,7 @@ func (m *MCContext) Start(extfactory motan.ExtensionFactory) {
 	}
 
 	for key, url := range m.context.RefersURLs {
-		c := cluster.NewCluster(url, false)
-		c.SetExtFactory(m.extFactory)
-		c.Context = m.context
-		c.InitCluster()
+		c := cluster.NewCluster(m.context, m.extFactory, url, false)
 		m.clients[key] = &Client{url: url, cluster: c, extFactory: m.extFactory}
 	}
 }

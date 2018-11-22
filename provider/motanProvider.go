@@ -74,7 +74,9 @@ func (m *MotanProvider) SetSerialization(s motan.Serialization) {}
 
 func (m *MotanProvider) SetProxy(proxy bool) {}
 
-func (m *MotanProvider) Destroy() {}
+func (m *MotanProvider) Destroy() {
+	m.ep.Destroy()
+}
 
 func (m *MotanProvider) IsAvailable() bool {
 	return m.available && m.ep.IsAvailable()

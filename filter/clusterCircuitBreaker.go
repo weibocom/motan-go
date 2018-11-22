@@ -25,7 +25,7 @@ func (c *ClusterCircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
 func (c *ClusterCircuitBreakerFilter) Filter(ha motan.HaStrategy, lb motan.LoadBalance, request motan.Request) motan.Response {
 	var response motan.Response
 	if c.available {
-		hystrix.Do(c.url.GetIdentity(), func() error {
+		_ = hystrix.Do(c.url.GetIdentity(), func() error {
 			response = c.GetNext().Filter(ha, lb, request)
 			if ex := response.GetException(); ex != nil {
 				return errors.New(ex.ErrMsg)
