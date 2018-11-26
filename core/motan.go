@@ -14,6 +14,9 @@ import (
 
 const (
 	DefaultAttachmentSize = 16
+
+	registryGroupInfoMaxCacheTime        = time.Hour
+	registryGroupServiceInfoMaxCacheTime = 5 * time.Minute
 )
 
 //-----------interface-------------
@@ -126,6 +129,20 @@ type DiscoverService interface {
 
 type GroupDiscoverService interface {
 	DiscoverAllGroups() ([]string, error)
+}
+
+type GroupDiscoverableRegistry interface {
+	Registry
+	GroupDiscoverService
+}
+
+type ServiceDiscoverService interface {
+	DiscoverAllServices(group string) ([]string, error)
+}
+
+type ServiceDiscoverableRegistry interface {
+	Registry
+	ServiceDiscoverService
 }
 
 // DiscoverCommand : discover command for client or agent
@@ -876,4 +893,95 @@ func (f *FilterEndPoint) IsAvailable() bool {
 		}
 	}
 	return f.Caller.IsAvailable()
+}
+
+var globalRegistryGroupCache = &registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
+
+type registryGroupCacheInfo struct {
+	gr          GroupDiscoverableRegistry
+	lastUpdTime time.Time
+	groups      []string
+	lock        sync.Mutex
+}
+
+type registryGroupCache struct {
+	cachedGroups map[string]*registryGroupCacheInfo
+	lock         sync.Mutex
+}
+
+func (c *registryGroupCacheInfo) getGroups() []string {
+	if time.Now().Sub(c.lastUpdTime) > registryGroupInfoMaxCacheTime {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		groups, err := c.gr.DiscoverAllGroups()
+		if err != nil {
+			return c.groups
+		}
+		c.lastUpdTime = time.Now()
+		c.groups = groups
+	}
+	return c.groups
+}
+
+func (rc *registryGroupCache) getGroups(gr GroupDiscoverableRegistry) []string {
+	key := gr.GetURL().GetIdentity()
+	rc.lock.Lock()
+	cacheInfo := rc.cachedGroups[key]
+	if cacheInfo == nil {
+		cacheInfo = &registryGroupCacheInfo{gr: gr}
+		rc.cachedGroups[key] = cacheInfo
+	}
+	rc.lock.Unlock()
+	return cacheInfo.getGroups()
+}
+
+func GetAllGroups(gr GroupDiscoverableRegistry) []string {
+	return globalRegistryGroupCache.getGroups(gr)
+}
+
+var globalRegistryGroupServiceCache = &registryGroupServiceCache{cachedInfos: new(sync.Map)}
+
+type registryGroupServiceCacheInfo struct {
+	sr          ServiceDiscoverableRegistry
+	group       string
+	lastUpdTime time.Time
+	services    []string
+	lock        sync.Mutex
+}
+
+type registryGroupServiceCache struct {
+	cachedInfos *sync.Map
+}
+
+func (c *registryGroupServiceCacheInfo) getServices() []string {
+	if time.Now().Sub(c.lastUpdTime) > registryGroupServiceInfoMaxCacheTime {
+		go c.refreshServices()
+	}
+	return c.services
+}
+
+func (c *registryGroupServiceCacheInfo) refreshServices() {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	services, err := c.sr.DiscoverAllServices(c.group)
+	if err != nil {
+		return
+	}
+	c.lastUpdTime = time.Now()
+	c.services = services
+}
+
+func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry, group string) []string {
+	key := sr.GetURL().GetIdentity() + "_" + group
+	cacheInfo, ok := rc.cachedInfos.Load(key)
+	if !ok {
+		cacheInfo = &registryGroupServiceCacheInfo{sr: sr, group: group}
+		cacheInfo.(*registryGroupServiceCacheInfo).refreshServices()
+		rc.cachedInfos.Store(key, cacheInfo)
+	}
+	return cacheInfo.(*registryGroupServiceCacheInfo).getServices()
+}
+
+func GetAllServices(sr ServiceDiscoverableRegistry, group string) []string {
+	return globalRegistryGroupServiceCache.getServices(sr, group)
 }

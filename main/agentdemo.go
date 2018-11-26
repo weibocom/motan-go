@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 
 	"github.com/weibocom/motan-go"
 	motancore "github.com/weibocom/motan-go/core"
@@ -12,6 +15,23 @@ func main() {
 }
 
 func runAgentDemo() {
+	go func() {
+		http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+			request.ParseForm()
+			bs, _ := json.Marshal(request.Form)
+			writer.Write([]byte("request_url" + request.URL.String() + "\r\n"))
+			writer.Write(bs)
+		})
+		http.ListenAndServe(":8080", nil)
+	}()
+	motan.PermissionCheck = func(r *http.Request) bool {
+		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if host == "127.0.0.1" || host == "::1" {
+			return true
+		}
+		return false
+	}
+
 	agent := motan.NewAgent(nil)
 	agent.ConfigFile = "./agentdemo.yaml"
 	// you can registry custom extension implements to defaultExtFactory. extensions includes ha, lb, endpoint, regisry,filter

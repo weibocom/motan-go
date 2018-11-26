@@ -4,7 +4,7 @@ motan-agent:
   port: 9981 # agent serve port.
   eport: 9982 # service export port when as a reverse proxy
   mport: 8002 # agent manage port
-  log_dir: "./agentlogs"
+  log_dir: "stdout"
   registry: "direct-registry" # registry id for registering agent info
   application: "agent-test" # agent identify. for agent command notify and so on
 
@@ -23,6 +23,42 @@ motan-registry:
     registrySessionTimeout: 10000
     requestTimeout: 5000
 
+motan-service:
+  test.domain:
+    registry: zk-registry
+    group: test.domain
+    domain: test.domain
+    path: test
+    export: "motan2:9982"
+    provider: http
+    serialization: simple
+    proxyAddress: 127.0.0.1:8080
+    filter: "accessLog,metric"
+    requestTimeout: 2000
+
+http-locations:
+  test.domain:
+    - upstream: test1
+      match: /test1
+      type: start
+    - upstream: test2
+      match: /test2
+      type: start
+    - upstream: test3
+      match: /test3/*
+      type: regexp
+    - upstream: test
+      match: /2
+      type: start
+
+http-client:
+  test.domain:
+    registry: zk-registry
+    domain: test.domain
+    group: test.domain
+    preload: test
+    serialization: simple
+    protocol: motan2 # this is the default endpoint type,the client use motan2 transport data to remote server, but it provider a http server when as the agent
 
 #conf of extensions. any custom config
 testextconf:

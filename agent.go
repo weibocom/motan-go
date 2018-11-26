@@ -21,13 +21,14 @@ import (
 )
 
 const (
-	defaultPort       = 9981
-	defaultEport      = 9982
-	defaultMport      = 8002
-	defaultPidFile    = "./agent.pid"
-	defaultAgentGroup = "default_agent_group"
-	defaultRuntimeDir = "./agent_runtime"
-	defaultStatusSnap = "status"
+	defaultPort          = 9981
+	defaultEport         = 9982
+	defaultHTTPProxyPort = 9983
+	defaultMport         = 8002
+	defaultPidFile       = "./agent.pid"
+	defaultAgentGroup    = "default_agent_group"
+	defaultRuntimeDir    = "./agent_runtime"
+	defaultStatusSnap    = "status"
 )
 
 type Agent struct {
@@ -38,15 +39,17 @@ type Agent struct {
 
 	agentServer motan.Server
 
-	clustermap *motan.CopyOnWriteMap
-	status     int
-	agentURL   *motan.URL
-	logdir     string
-	port       int
-	mport      int
-	eport      int
-	pidfile    string
-	runtimedir string
+	clustermap     *motan.CopyOnWriteMap
+	httpClusterMap *motan.CopyOnWriteMap
+	status         int
+	agentURL       *motan.URL
+	logdir         string
+	port           int
+	mport          int
+	eport          int
+	hport          int
+	pidfile        string
+	runtimedir     string
 
 	serviceExporters  *motan.CopyOnWriteMap
 	agentPortServer   map[int]motan.Server
@@ -69,6 +72,7 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 		agent = &Agent{extFactory: extfactory}
 	}
 	agent.clustermap = motan.NewCopyOnWriteMap()
+	agent.httpClusterMap = motan.NewCopyOnWriteMap()
 	agent.serviceExporters = motan.NewCopyOnWriteMap()
 	agent.agentPortServer = make(map[int]motan.Server)
 	agent.serviceRegistries = motan.NewCopyOnWriteMap()
@@ -105,6 +109,8 @@ func (a *Agent) StartMotanAgent() {
 	a.initAgentURL()
 	a.initStatus()
 	a.initClusters()
+	a.initHTTPClusters()
+	a.startHTTPAgent()
 	a.startServerAgent()
 	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
@@ -194,6 +200,14 @@ func (a *Agent) initParam() {
 		eport = defaultEport
 	}
 
+	hport := *motan.Hport
+	if hport == 0 && section != nil && section["hport"] != nil {
+		hport = section["hport"].(int)
+	}
+	if hport == 0 {
+		hport = defaultHTTPProxyPort
+	}
+
 	pidfile := *motan.Pidfile
 	if pidfile == "" && section != nil && section["pidfile"] != nil {
 		pidfile = section["pidfile"].(string)
@@ -219,9 +233,57 @@ func (a *Agent) initParam() {
 	a.logdir = logdir
 	a.port = port
 	a.eport = eport
+	a.hport = hport
 	a.mport = mport
 	a.pidfile = pidfile
 	a.runtimedir = runtimedir
+}
+
+func (a *Agent) initHTTPClusters() {
+	for id, url := range a.Context.HTTPClientURLs {
+		domain := url.GetParam("domain", "")
+		if domain == "" {
+			vlog.Errorf("HTTP client for %s has no domain config", id)
+			continue
+		}
+		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
+		a.httpClusterMap.Store(domain, httpCluster)
+	}
+}
+
+func (a *Agent) startHTTPAgent() {
+	url := &motan.URL{Port: a.hport}
+	httpProxyServer := mserver.NewHTTPProxyServer(url)
+	httpProxyServer.Open(false, true, &httpProxyMessageHandler{a: a})
+	vlog.Infof("Start http forward proxy server on port %d", a.hport)
+}
+
+// HTTPProxyMessageHandler 支持多个域名选择的处理
+type httpProxyMessageHandler struct {
+	a *Agent
+}
+
+func (h *httpProxyMessageHandler) Call(request motan.Request) (res motan.Response) {
+	host := request.GetAttachment("Host")
+	return h.a.httpClusterMap.LoadOrNil(host).(*cluster.HTTPCluster).Call(request)
+}
+
+func (h *httpProxyMessageHandler) GetHTTPCluster(host string) *cluster.HTTPCluster {
+	if c, ok := h.a.httpClusterMap.Load(host); ok {
+		return c.(*cluster.HTTPCluster)
+	}
+	return nil
+}
+
+func (h *httpProxyMessageHandler) AddProvider(p motan.Provider) error {
+	return nil
+}
+
+func (h *httpProxyMessageHandler) RmProvider(p motan.Provider) {
+}
+
+func (h *httpProxyMessageHandler) GetProvider(serviceName string) motan.Provider {
+	return nil
 }
 
 func (a *Agent) initClusters() {
@@ -465,6 +527,9 @@ func getClusterKey(group, version, protocol, path string) string {
 }
 
 func initLog(logdir string) {
+	if logdir == "stdout" {
+		return
+	}
 	fmt.Printf("use log dir:%s\n", logdir)
 	flag.Set("log_dir", logdir)
 	vlog.FlushInterval = 1 * time.Second

@@ -20,6 +20,7 @@ const (
 	servicesSection      = "motan-service"
 	agentSection         = "motan-agent"
 	clientSection        = "motan-client"
+	httpClientSection    = "http-client"
 	serverSection        = "motan-server"
 	importSection        = "import-refer"
 	dynamicSection       = "dynamic-param"
@@ -50,6 +51,7 @@ type Context struct {
 	Config           *cfg.Config
 	RegistryURLs     map[string]*URL
 	RefersURLs       map[string]*URL
+	HTTPClientURLs   map[string]*URL
 	BasicReferURLs   map[string]*URL
 	ServiceURLs      map[string]*URL
 	BasicServiceURLs map[string]*URL
@@ -66,6 +68,7 @@ var (
 var (
 	Port         = flag.Int("port", 0, "agent listen port")
 	Eport        = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
+	Hport        = flag.Int("hport", 0, "http forward proxy server port")
 	Mport        = flag.Int("mport", 0, "agent manage port")
 	Pidfile      = flag.String("pidfile", "", "agent manage port")
 	CfgFile      = flag.String("c", "", "motan run conf")
@@ -188,6 +191,7 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHostURL()
+	c.parseHTTPClients()
 }
 
 // pool config priority ： pool > application > service > basic
@@ -284,7 +288,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 	if section == servicesSection {
 		basicURLs = c.BasicServiceURLs
 		basicKey = basicServiceKey
-	} else if section == refersSection {
+	} else if section == refersSection || section == httpClientSection {
 		basicURLs = c.BasicReferURLs
 		basicKey = basicReferKey
 	}
@@ -336,4 +340,8 @@ func (c *Context) parseServices() {
 
 func (c *Context) parserBasicServices() {
 	c.BasicServiceURLs = c.confToURLs(basicServicesSection)
+}
+
+func (c *Context) parseHTTPClients() {
+	c.HTTPClientURLs = c.basicConfToURLs(httpClientSection)
 }

@@ -16,7 +16,6 @@ motan-registry:
     protocol: mesh
     host: localhost
     port: 8002
-    meshPort: 9981
 #    proxyRegistry: "zookeeper://localhost:2181"
     proxyRegistry: "direct://localhost:9982"
 
