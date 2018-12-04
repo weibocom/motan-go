@@ -1,6 +1,8 @@
 package http
 
 import (
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -9,13 +11,37 @@ import (
 )
 
 const (
-	proxyLocationTypeUnknown = iota
+	proxyMatchTypeUnknown = iota
 
-	proxyLocationTypeRegexp
-	proxyLocationTypeRegexpIgnoreCase
-	proxyLocationTypeStart
-	proxyLocationTypeExact
+	proxyMatchTypeRegexp
+	proxyMatchTypeRegexpIgnoreCase
+	proxyMatchTypeStart
+	proxyMatchTypeExact
 )
+
+var (
+	WhitespaceSplitPattern = regexp.MustCompile(`\s+`)
+)
+
+func PatternSplit(s string, pattern *regexp.Regexp) []string {
+	matches := pattern.FindAllStringIndex(s, -1)
+	strings := make([]string, 0, len(matches))
+	beg := 0
+	end := 0
+	for _, match := range matches {
+		end = match[0]
+		if match[1] != 0 {
+			strings = append(strings, s[beg:end])
+		}
+		beg = match[1]
+	}
+
+	if end != len(s) {
+		strings = append(strings, s[beg:])
+	}
+
+	return strings
+}
 
 // ServiceDiscover 对于正向代理来说需要根据url确定使用哪个upstream
 type ServiceDiscover interface {
@@ -23,75 +49,149 @@ type ServiceDiscover interface {
 	DiscoverService(uri string) string
 }
 
-// HTTPServiceExposer 对于反向代理来说需要根据ip获取自己在哪些域名的哪些upstream下
-type ServiceExposer interface {
-}
+type ProxyMatchType uint8
 
-type ProxyLocationType uint8
-
-func (t ProxyLocationType) String() string {
+func (t ProxyMatchType) String() string {
 	switch t {
-	case proxyLocationTypeRegexp:
+	case proxyMatchTypeRegexp:
 		return "regexp"
-	case proxyLocationTypeRegexpIgnoreCase:
+	case proxyMatchTypeRegexpIgnoreCase:
 		return "iregexp"
-	case proxyLocationTypeStart:
+	case proxyMatchTypeStart:
 		return "start"
-	case proxyLocationTypeExact:
+	case proxyMatchTypeExact:
 		return "exact"
 	default:
 		return "unknown"
 	}
 }
 
-func stringToProxyLocationType(st string) ProxyLocationType {
-	switch st {
+func stringToProxyMatchType(s string) ProxyMatchType {
+	switch s {
 	case "regexp":
-		return proxyLocationTypeRegexp
+		return proxyMatchTypeRegexp
 	case "iregexp":
-		return proxyLocationTypeRegexpIgnoreCase
+		return proxyMatchTypeRegexpIgnoreCase
 	case "start":
-		return proxyLocationTypeStart
+		return proxyMatchTypeStart
 	case "exact":
-		return proxyLocationTypeExact
+		return proxyMatchTypeExact
 	default:
-		return proxyLocationTypeUnknown
+		return proxyMatchTypeUnknown
 	}
 }
 
 type ProxyLocation struct {
-	Upstream string `json:"upstream"`
-	Match    string `json:"match"`
-	Rewrite  string `json:"rewrite"`
-	Type     string `json:"type"`
+	Upstream     string   `json:"upstream"`
+	Match        string   `json:"match"`
+	RewriteRules []string `json:"rewrite_rules"`
+	Script       string   `json:"script"`
+	Type         string   `json:"type"`
 
-	reg          *regexp.Regexp
-	locationType ProxyLocationType
+	pattern      *regexp.Regexp
+	locationType ProxyMatchType
+	rewriteRules []*rewriteRule
+	code         *compiledCode
+	length       int
+}
+
+// config like follows
+// !regex ^/2/.* ^/(.*) /2/$1 break
+type rewriteRule struct {
+	not         bool
+	condType    ProxyMatchType
+	condString  string
+	condPattern *regexp.Regexp
+	pattern     *regexp.Regexp
+	replace     string
+}
+
+func newRewriteRule(rule string) (*rewriteRule, error) {
+	args := PatternSplit(rule, WhitespaceSplitPattern)
+	argc := len(args)
+	if argc != 4 {
+		return nil, fmt.Errorf("illegal argument number %d for rewrite rule", argc)
+	}
+	r := rewriteRule{}
+	matchTypeString := args[0]
+	if strings.HasPrefix(matchTypeString, "!") {
+		r.not = true
+		matchTypeString = matchTypeString[1:]
+		r.condType = stringToProxyMatchType(matchTypeString)
+		if r.condType == proxyMatchTypeUnknown {
+			return nil, errors.New("unsupported condition type " + args[0])
+		}
+	}
+	r.condString = args[1]
+	if r.condType == proxyMatchTypeRegexp {
+		pattern, err := regexp.Compile(args[1])
+		if err != nil {
+			return nil, err
+		}
+		r.condPattern = pattern
+	} else if r.condType == proxyMatchTypeRegexpIgnoreCase {
+		pattern, err := regexp.Compile("(?i)" + args[1])
+		if err != nil {
+			return nil, err
+		}
+		r.condPattern = pattern
+	}
+	pattern, err := regexp.Compile(args[2])
+	if err != nil {
+		return nil, err
+	}
+	r.pattern = pattern
+	r.replace = args[3]
+	return &r, nil
+}
+
+func (r *rewriteRule) rewrite(uri string) (string, bool) {
+	ruleMatched := false
+	switch r.condType {
+	case proxyMatchTypeExact:
+		ruleMatched = r.condString == uri
+	case proxyMatchTypeStart:
+		ruleMatched = strings.HasPrefix(uri, r.condString)
+	case proxyMatchTypeRegexp, proxyMatchTypeRegexpIgnoreCase:
+		ruleMatched = r.condPattern.MatchString(uri)
+	}
+	if r.not {
+		ruleMatched = !ruleMatched
+	}
+	if ruleMatched {
+		return string(r.pattern.ExpandString(nil, r.replace, uri, r.pattern.FindStringSubmatchIndex(uri))), true
+	}
+	return uri, false
 }
 
 func (l *ProxyLocation) DeterminePath(path string, doRewrite bool) string {
 	if !doRewrite {
 		return path
 	}
-	if l.Rewrite == "" {
+	for _, r := range l.rewriteRules {
+		if s, b := r.rewrite(path); b {
+			return s
+		}
+	}
+	if l.code == nil {
 		return path
 	}
-	// TODO: rewrite
-	return path
+	ctx := newScriptContext()
+	ctx.set(scriptVarRequestURI, path)
+	l.code.exec(ctx)
+	return ctx.get(scriptVarRequestURI)
 }
 
-func (l *ProxyLocation) Copy() *ProxyLocation {
-	cl := &ProxyLocation{
-		Upstream:     l.Upstream,
-		Match:        l.Match,
-		Rewrite:      l.Rewrite,
-		Type:         l.Type,
-		locationType: l.locationType,
+func (l *ProxyLocation) CompileScript() error {
+	if l.Script == "" {
+		return nil
 	}
-	if l.reg != nil {
-		cl.reg = l.reg.Copy()
+	code, err := scriptCompile(l.Script)
+	if err != nil {
+		return err
 	}
-	return cl
+	l.code = code
+	return nil
 }
 
 type LocationMatcher struct {
@@ -120,8 +220,13 @@ func NewLocationMatcherFromContext(domain string, context *core.Context) *Locati
 		if t, ok := locationConfig["type"]; ok {
 			pl.Type = t.(string)
 		}
-		if r, ok := locationConfig["rewrite"]; ok {
-			pl.Rewrite = r.(string)
+		if rs, ok := locationConfig["rewriteRules"]; ok {
+			for _, r := range rs.([]interface{}) {
+				pl.RewriteRules = append(pl.RewriteRules, r.(string))
+			}
+		}
+		if s, ok := locationConfig["script"]; ok {
+			pl.Script = s.(string)
 		}
 		locations = append(locations, &pl)
 	}
@@ -133,35 +238,57 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 		locations: locations,
 	}
 	for _, l := range locations {
+		l.length = len(l.Match)
+		err := l.CompileScript()
+		if err != nil {
+			vlog.Errorf("Illegal script for location %s: %s", l.Match, err.Error())
+			continue
+		}
+		if len(l.RewriteRules) != 0 {
+			rewriteRules := make([]*rewriteRule, 0, len(l.RewriteRules))
+			for _, rule := range l.RewriteRules {
+				if rule == "" {
+					continue
+				}
+				r, err := newRewriteRule(rule)
+				if err != nil {
+					vlog.Errorf("Illegal rewrite rule %s for location %s: %s", rule, l.Match, err.Error())
+				}
+				rewriteRules = append(rewriteRules, r)
+			}
+			l.rewriteRules = rewriteRules
+		}
 		if l.Type == "" {
-			// if no configured as a start rule by default
+			// if not configured treat as a start rule by default
 			l.Type = "start"
 		}
-		l.locationType = stringToProxyLocationType(l.Type)
-		if l.locationType == proxyLocationTypeUnknown {
+		l.locationType = stringToProxyMatchType(l.Type)
+		if l.locationType == proxyMatchTypeUnknown {
 			vlog.Errorf("URL location unsupported type %s for location %s", l.Type, l.Match)
 			continue
 		}
-		if l.locationType == proxyLocationTypeExact {
+		if l.locationType == proxyMatchTypeExact {
 			matcher.exactLocations = append(matcher.exactLocations, l)
 		}
-		if l.locationType == proxyLocationTypeStart {
+		if l.locationType == proxyMatchTypeStart {
 			matcher.startLocations = append(matcher.startLocations, l)
 		}
-		if l.locationType == proxyLocationTypeRegexp {
-			reg, err := regexp.Compile(l.Match)
+		if l.locationType == proxyMatchTypeRegexp {
+			pattern, err := regexp.Compile(l.Match)
 			if err != nil {
 				vlog.Errorf("Malformed regexp location %s", l.Match)
+				continue
 			}
-			l.reg = reg
+			l.pattern = pattern
 			matcher.regexpLocations = append(matcher.regexpLocations, l)
 		}
-		if l.locationType == proxyLocationTypeRegexpIgnoreCase {
-			reg, err := regexp.Compile("(?i)" + l.Match)
+		if l.locationType == proxyMatchTypeRegexpIgnoreCase {
+			pattern, err := regexp.Compile("(?i)" + l.Match)
 			if err != nil {
 				vlog.Errorf("Malformed regexp location %s", l.Match)
+				continue
 			}
-			l.reg = reg
+			l.pattern = pattern
 			matcher.regexpLocations = append(matcher.regexpLocations, l)
 		}
 	}
@@ -170,6 +297,7 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 
 // Pick returns the matched upstream and do url rewrite and etc
 // Now this functions just compatible with nginx location match rules
+// See http://nginx.org/en/docs/http/ngx_http_core_module.html#location
 func (m *LocationMatcher) Pick(path string, doRewrite bool) (string, string, bool) {
 	// First do exact location match
 	for _, l := range m.exactLocations {
@@ -177,17 +305,26 @@ func (m *LocationMatcher) Pick(path string, doRewrite bool) (string, string, boo
 			return l.Upstream, l.DeterminePath(path, doRewrite), true
 		}
 	}
-	// Second do start location match
-	for _, l := range m.startLocations {
-		if strings.HasPrefix(path, l.Match) {
+	// Second do regexp match by order
+	for _, l := range m.regexpLocations {
+		if l.pattern.MatchString(path) {
 			return l.Upstream, l.DeterminePath(path, doRewrite), true
 		}
 	}
-	// Last do regexp match by order
-	for _, l := range m.regexpLocations {
-		if l.reg.MatchString(path) {
-			return l.Upstream, l.DeterminePath(path, doRewrite), true
+	// Last do start location match, use longest prefix match
+	// TODO: nginx '^~' will disable regex match if longest prefix matched
+	var longestLocation *ProxyLocation
+	lastPrefixLen := 0
+	for _, l := range m.startLocations {
+		if strings.HasPrefix(path, l.Match) {
+			if l.length > lastPrefixLen {
+				longestLocation = l
+				lastPrefixLen = l.length
+			}
 		}
+	}
+	if longestLocation != nil {
+		return longestLocation.Upstream, longestLocation.DeterminePath(path, doRewrite), true
 	}
 	return "", "", false
 }

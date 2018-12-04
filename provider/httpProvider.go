@@ -37,6 +37,7 @@ type HTTPProvider struct {
 	proxyAddr       string
 	proxySchema     string
 	locationMatcher *mhttp.LocationMatcher
+	maxConnections  int
 }
 
 const (
@@ -76,6 +77,7 @@ func (h *HTTPProvider) Initialize() {
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(domain, h.gctx)
 	h.proxyAddr = h.url.GetParam("proxyAddress", "")
 	h.proxySchema = h.url.GetParam("proxySchema", "http")
+	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 1024))
 	h.fstCli = &fasthttp.HostClient{
 		Name: "motan",
 		Addr: h.proxyAddr,
@@ -86,6 +88,7 @@ func (h *HTTPProvider) Initialize() {
 			}
 			return c, nil
 		},
+		MaxConns:     h.maxConnections,
 		ReadTimeout:  DefaultRequestTimeout,
 		WriteTimeout: DefaultRequestTimeout,
 	}

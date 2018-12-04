@@ -264,8 +264,8 @@ type httpProxyMessageHandler struct {
 }
 
 func (h *httpProxyMessageHandler) Call(request motan.Request) (res motan.Response) {
-	host := request.GetAttachment("Host")
-	return h.a.httpClusterMap.LoadOrNil(host).(*cluster.HTTPCluster).Call(request)
+	domain := request.GetAttachment("domain")
+	return h.a.httpClusterMap.LoadOrNil(domain).(*cluster.HTTPCluster).Call(request)
 }
 
 func (h *httpProxyMessageHandler) GetHTTPCluster(host string) *cluster.HTTPCluster {

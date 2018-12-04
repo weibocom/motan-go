@@ -57,7 +57,6 @@ func newCacheCluster(url *core.URL, context *core.Context, extFactory core.Exten
 	}
 }
 
-// HTTPCluster 代理一个域名的调用客户端
 type HTTPCluster struct {
 	url              *core.URL
 	hsd              http.ServiceDiscover
@@ -70,7 +69,6 @@ type HTTPCluster struct {
 	sr               core.ServiceDiscoverableRegistry
 }
 
-// NewHTTPCluster this cluster we just need a group name other is no need
 func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory core.ExtensionFactory) *HTTPCluster {
 	c := &HTTPCluster{
 		url:        url,
@@ -108,20 +106,22 @@ func (c *HTTPCluster) CanServe(uri string) (string, bool) {
 	if service == "" {
 		return "", false
 	}
+	// if the registry can not find all service of it
+	// we just use preload services
 	if c.sr == nil {
-		if _, ok := c.upstreamClusters[service]; !ok {
-			return "", false
-		}
-	} else {
-		services := core.GetAllServices(c.sr, c.url.Group)
-		for _, s := range services {
-			if s == service {
-				break
-			}
+		if _, ok := c.upstreamClusters[service]; ok {
+			return service, true
 		}
 		return "", false
 	}
-	return service, true
+
+	services := core.GetAllServices(c.sr, c.url.Group)
+	for _, s := range services {
+		if s == service {
+			return service, true
+		}
+	}
+	return "", false
 }
 
 func (c *HTTPCluster) GetIdentity() string {
@@ -132,7 +132,7 @@ func (c *HTTPCluster) Notify(registryURL *core.URL, urls []*core.URL) {
 }
 
 func (c *HTTPCluster) GetName() string {
-	return "HTTPCluster"
+	return "httpCluster"
 }
 
 func (c *HTTPCluster) GetURL() *core.URL {

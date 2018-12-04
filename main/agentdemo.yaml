@@ -12,13 +12,13 @@ motan-agent:
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
-    host: localhost # direct server ip in single ip. if has host, address will disable.
+    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
     port: 9982 #direct server port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
   zk-registry:
     protocol: zookeeper
-    host: localhost
+    host: 127.0.0.1
     port: 2181
     registrySessionTimeout: 10000
     requestTimeout: 5000
@@ -32,24 +32,37 @@ motan-service:
     export: "motan2:9982"
     provider: http
     serialization: simple
-    proxyAddress: 127.0.0.1:8080
-    filter: "accessLog,metric"
+    proxyAddress: 127.0.0.1:9090
+#    filter: "accessLog,metric"
     requestTimeout: 2000
 
 http-locations:
   test.domain:
-    - upstream: test1
-      match: /test1
+    - match: /test
       type: start
-    - upstream: test2
-      match: /test2
+      upstream: test
+      script: |
+        rmatch $request_uri ^(/test1/.*)
+        jt L1
+        ret
+        L1:
+        rewrite /test1/(.*) /backend/test1/$1
+        ret
+
+    - match: /test2
       type: start
-    - upstream: test3
-      match: /test3/*
+      upstream: test2
+
+    - match: /test3/*
       type: regexp
-    - upstream: test
-      match: /2
-      type: start
+      upstream: test3
+
+    - match: ^/(tst|2).*
+      type: regexp
+      upstream: test
+      rewriteRules:
+        # condition_type(! means not) condition regexp replacement
+        - "!regexp ^/2/.*  ^/(.*) /2/$1"
 
 http-client:
   test.domain:

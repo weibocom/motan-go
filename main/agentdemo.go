@@ -16,13 +16,14 @@ func main() {
 
 func runAgentDemo() {
 	go func() {
-		http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		handler := &http.ServeMux{}
+		handler.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 			request.ParseForm()
 			bs, _ := json.Marshal(request.Form)
-			writer.Write([]byte("request_url" + request.URL.String() + "\r\n"))
+			writer.Write([]byte("request_url:" + request.URL.String() + "\r\n"))
 			writer.Write(bs)
 		})
-		http.ListenAndServe(":8080", nil)
+		http.ListenAndServe(":9090", handler)
 	}()
 	motan.PermissionCheck = func(r *http.Request) bool {
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)

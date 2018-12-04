@@ -945,7 +945,7 @@ type registryGroupServiceCacheInfo struct {
 	sr          ServiceDiscoverableRegistry
 	group       string
 	lastUpdTime time.Time
-	services    []string
+	services    []string // TODO: use a map
 	lock        sync.Mutex
 }
 
