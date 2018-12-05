@@ -162,7 +162,9 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		// reset errorCount
 		m.resetErr()
 	}
-	response.ProcessDeserializable(rc.Reply)
+	if err = response.ProcessDeserializable(rc.Reply); err != nil {
+		return m.defaultErrMotanResponse(request, err.Error())
+	}
 	response.SetProcessTime(int64((time.Now().UnixNano() - startTime) / 1000000))
 	return response
 }
@@ -355,7 +357,9 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 				result.Done <- result
 				return
 			}
-			response.ProcessDeserializable(result.Reply)
+			if err = response.ProcessDeserializable(result.Reply); err != nil {
+				result.Error = err
+			}
 			response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
