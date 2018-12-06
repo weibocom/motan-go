@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -580,6 +581,11 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 	rc := mres.GetRPCContext(true)
 	rc.Proxy = response.Header.IsProxy()
 	mres.RequestID = response.Header.RequestID
+	if pt, ok := response.Metadata.Load(MProcessTime); ok {
+		if ptInt, err := strconv.Atoi(pt); err == nil {
+			mres.SetProcessTime(int64(ptInt))
+		}
+	}
 	if response.Header.GetStatus() == Normal && len(response.Body) > 0 {
 		if response.Header.IsGzip() {
 			response.Body = DecodeGzipBody(response.Body)
