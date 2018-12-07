@@ -81,6 +81,7 @@ const (
 
 var (
 	defaultSerialize = Simple
+	DefaultGzipLevel = gzip.BestSpeed
 )
 
 // errors
@@ -387,7 +388,7 @@ func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
 func EncodeGzip(data []byte) ([]byte, error) {
 	if len(data) > 0 {
 		var b bytes.Buffer
-		w := gzip.NewWriter(&b)
+		w, _ := gzip.NewWriterLevel(&b, DefaultGzipLevel)
 		defer w.Close()
 		_, e1 := w.Write(data)
 		if e1 != nil {
