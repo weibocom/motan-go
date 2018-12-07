@@ -165,7 +165,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	if err = response.ProcessDeserializable(rc.Reply); err != nil {
 		return m.defaultErrMotanResponse(request, err.Error())
 	}
-	response.SetProcessTime(int64((time.Now().UnixNano() - startTime) / 1000000))
 	return response
 }
 
