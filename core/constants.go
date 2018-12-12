@@ -43,6 +43,7 @@ const (
 	GzipSizeKey       = "mingzSize"
 	HostKey           = "host"
 	RemoteIPKey       = "remoteIP"
+	ProxyRegistryKey  = "proxyRegistry"
 )
 
 // nodeType

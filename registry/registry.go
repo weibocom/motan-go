@@ -25,6 +25,7 @@ const (
 	Direct = "direct"
 	Consul = "consul"
 	ZK     = "zookeeper"
+	Mesh   = "mesh"
 )
 
 type SnapshotNodeInfo struct {
@@ -101,6 +102,10 @@ func RegistDefaultRegistry(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtRegistry(Consul, func(url *motan.URL) motan.Registry {
 		return &ConsulRegistry{url: url}
+	})
+
+	extFactory.RegistExtRegistry(Mesh, func(url *motan.URL) motan.Registry {
+		return &MeshRegistry{url: url}
 	})
 }
 

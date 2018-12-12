@@ -24,7 +24,7 @@ type endpointStatus struct {
 	available                 bool
 	availMutex                sync.RWMutex
 	errorCount                uint32
-	successedOrLastTestedTime int64
+	succeededOrLastTestedTime int64
 }
 
 var epsMap = make(map[string]*endpointStatus)
@@ -46,7 +46,7 @@ func getEps(address string) (*endpointStatus, bool) {
 		if eps, ok := epsMap[address]; ok {
 			return eps, false
 		}
-		epsMap[address] = &endpointStatus{available: true, successedOrLastTestedTime: time.Now().UnixNano()}
+		epsMap[address] = &endpointStatus{available: true, succeededOrLastTestedTime: time.Now().UnixNano()}
 	} else {
 		defer epsMutex.RUnlock()
 	}
@@ -65,7 +65,7 @@ func (e *FailfastFilter) Filter(caller motan.Caller, request motan.Request) mota
 			e.eps.setAvailable(true)
 		}
 	}
-	atomic.StoreInt64(&e.eps.successedOrLastTestedTime, time.Now().UnixNano())
+	atomic.StoreInt64(&e.eps.succeededOrLastTestedTime, time.Now().UnixNano())
 	return response
 }
 
@@ -74,9 +74,9 @@ func (e *FailfastFilter) IsAvailable() bool {
 	available := e.eps.getAvailable()
 	result = available
 	if !available {
-		successedOrLastTestedTime := atomic.LoadInt64(&e.eps.successedOrLastTestedTime)
-		if successedOrLastTestedTime+nextTestTime.Nanoseconds() < time.Now().UnixNano() {
-			swapped := atomic.CompareAndSwapInt64(&e.eps.successedOrLastTestedTime, successedOrLastTestedTime, time.Now().UnixNano())
+		succeededOrLastTestedTime := atomic.LoadInt64(&e.eps.succeededOrLastTestedTime)
+		if succeededOrLastTestedTime+nextTestTime.Nanoseconds() < time.Now().UnixNano() {
+			swapped := atomic.CompareAndSwapInt64(&e.eps.succeededOrLastTestedTime, succeededOrLastTestedTime, time.Now().UnixNano())
 			result = swapped
 		}
 	}
@@ -89,7 +89,7 @@ func (e *FailfastFilter) GetIndex() int {
 }
 
 func (e *FailfastFilter) GetName() string {
-	return "failfast"
+	return FailFast
 }
 
 func (e *FailfastFilter) HasNext() bool {

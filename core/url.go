@@ -11,12 +11,12 @@ import (
 )
 
 type URL struct {
-	Protocol   string
-	Host       string
-	Port       int
-	Path       string //e.g. service name
-	Group      string
-	Parameters map[string]string
+	Protocol   string            `json:"protocol"`
+	Host       string            `json:"host"`
+	Port       int               `json:"port"`
+	Path       string            `json:"path"` //e.g. service name
+	Group      string            `json:"group"`
+	Parameters map[string]string `json:"parameters"`
 
 	// cached info
 	address  string
@@ -260,8 +260,9 @@ func GetURLFilters(url *URL, extFactory ExtensionFactory) (clusterFilter Cluster
 			if filter != nil {
 				if filter.GetType() == ClusterFilterType {
 					// filter should use new instance
-					filter = filter.NewFilter(url)
-					clusterFilters = append(clusterFilters, filter)
+					if filter = filter.NewFilter(url); filter != nil {
+						clusterFilters = append(clusterFilters, filter)
+					}
 				} else {
 					endpointFilters = append(endpointFilters, filter)
 				}

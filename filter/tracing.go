@@ -203,7 +203,7 @@ func spanName(request *core.Request) string {
 }
 
 func (*TracingFilter) GetName() string {
-	return "TracingFilter"
+	return Trace
 }
 
 func (t *TracingFilter) NewFilter(url *core.URL) core.Filter {

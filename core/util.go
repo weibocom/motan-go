@@ -12,11 +12,15 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-var localIPs = make([]string, 0)
-
 const (
 	defaultServerPort = "9982"
 	defaultProtocal   = "motan2"
+)
+
+var (
+	PanicStatFunc func()
+
+	localIPs = make([]string, 0)
 )
 
 func ParseExportInfo(export string) (string, int, error) {
@@ -122,6 +126,9 @@ func HandlePanic(f func()) {
 		vlog.Errorf("recover panic. error:%v, stack: %s\n", err, debug.Stack())
 		if f != nil {
 			f()
+		}
+		if PanicStatFunc != nil {
+			PanicStatFunc()
 		}
 	}
 }

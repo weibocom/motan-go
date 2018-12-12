@@ -16,7 +16,7 @@ type FailOverHA struct {
 }
 
 func (f *FailOverHA) GetName() string {
-	return "failover"
+	return FailOver
 }
 func (f *FailOverHA) GetURL() *motan.URL {
 	return f.url
@@ -33,17 +33,17 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 			return getErrorResponse(request.GetRequestID(), fmt.Sprintf("No referers for request, RequestID: %d, Request info: %+v",
 				request.GetRequestID(), request.GetAttachments().RawMap()))
 		}
-		respnose := ep.Call(request)
-		if respnose.GetException() == nil || respnose.GetException().ErrType == motan.BizException {
-			return respnose
+		response := ep.Call(request)
+		if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
+			return response
 		}
-		lastErr = respnose.GetException()
+		lastErr = response.GetException()
 		vlog.Warningf("FailOverHA call fail! url:%s, err:%+v\n", ep.GetURL().GetIdentity(), lastErr)
 	}
 	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("FailOverHA call fail %d times.Exception:%s", retries+1, lastErr.ErrMsg))
 
 }
 
-func getErrorResponse(requestid uint64, errmsg string) *motan.MotanResponse {
-	return motan.BuildExceptionResponse(requestid, &motan.Exception{ErrCode: 400, ErrMsg: errmsg, ErrType: motan.ServiceException})
+func getErrorResponse(requestID uint64, errMsg string) *motan.MotanResponse {
+	return motan.BuildExceptionResponse(requestID, &motan.Exception{ErrCode: 400, ErrMsg: errMsg, ErrType: motan.ServiceException})
 }

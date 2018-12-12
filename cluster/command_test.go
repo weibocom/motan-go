@@ -277,7 +277,6 @@ func checkHost(urls []*motan.URL, f func(host string) bool, t *testing.T) {
 
 func getDefalultCommandWarper() *CommandRegistryWrapper {
 	cluster := initCluster()
-	cluster.InitCluster()
 	registry := cluster.extFactory.GetRegistry(RegistryURL)
 	return GetCommandRegistryWrapper(cluster, registry).(*CommandRegistryWrapper)
 }
