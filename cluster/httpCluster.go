@@ -32,8 +32,8 @@ func (c *cacheCluster) getCluster() *MotanCluster {
 		return c.cluster
 	}
 
-	mc := NewCluster(c.context, c.extFactory, c.url, c.proxy)
-	c.cluster = mc
+	motanCluster := NewCluster(c.context, c.extFactory, c.url, c.proxy)
+	c.cluster = motanCluster
 	c.initialized = true
 	return c.cluster
 }
@@ -59,14 +59,13 @@ func newCacheCluster(url *core.URL, context *core.Context, extFactory core.Exten
 
 type HTTPCluster struct {
 	url              *core.URL
-	hsd              http.ServiceDiscover
+	serviceDiscover  http.ServiceDiscover
 	proxy            bool
-	ser              core.Serialization
 	upstreamClusters map[string]*cacheCluster
 	lock             sync.Mutex
 	extFactory       core.ExtensionFactory
 	context          *core.Context
-	sr               core.ServiceDiscoverableRegistry
+	serviceRegistry  core.ServiceDiscoverableRegistry
 }
 
 func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory core.ExtensionFactory) *HTTPCluster {
@@ -90,36 +89,36 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 			return nil
 		}
 		if sr, ok := registry.(core.ServiceDiscoverableRegistry); ok {
-			c.sr = sr
+			c.serviceRegistry = sr
 		}
 	}
-	c.hsd = http.NewLocationMatcherFromContext(domain, context)
+	c.serviceDiscover = http.NewLocationMatcherFromContext(domain, context)
 	preload := core.TrimSplit(url.GetParam(HTTPProxyPreloadKey, ""), ",")
 	for _, service := range preload {
+		if service == "" {
+			continue
+		}
 		c.getMotanCluster(service)
 	}
 	return c
 }
 
 func (c *HTTPCluster) CanServe(uri string) (string, bool) {
-	service := c.hsd.DiscoverService(uri)
+	service := c.serviceDiscover.DiscoverService(uri)
 	if service == "" {
 		return "", false
 	}
 	// if the registry can not find all service of it
 	// we just use preload services
-	if c.sr == nil {
+	if c.serviceRegistry == nil {
 		if _, ok := c.upstreamClusters[service]; ok {
 			return service, true
 		}
 		return "", false
 	}
 
-	services := core.GetAllServices(c.sr, c.url.Group)
-	for _, s := range services {
-		if s == service {
-			return service, true
-		}
+	if core.ServiceInGroup(c.serviceRegistry, c.url.Group, service) {
+		return service, true
 	}
 	return "", false
 }
@@ -176,18 +175,18 @@ func (c *HTTPCluster) removeMotanCluster(service string) {
 		return
 	}
 	newUpstreamClusters := make(map[string]*cacheCluster, len(c.upstreamClusters))
-	for u, cc := range c.upstreamClusters {
-		if u == service {
+	for upstream, cluster := range c.upstreamClusters {
+		if upstream == service {
 			continue
 		}
-		newUpstreamClusters[u] = cc
+		newUpstreamClusters[upstream] = cluster
 	}
 	c.upstreamClusters = newUpstreamClusters
 }
 
 func (c *HTTPCluster) Call(request core.Request) core.Response {
-	cls := c.getMotanCluster(request.GetServiceName())
-	return cls.Call(request)
+	cluster := c.getMotanCluster(request.GetServiceName())
+	return cluster.Call(request)
 }
 
 func (c *HTTPCluster) Destroy() {
@@ -200,7 +199,6 @@ func (c *HTTPCluster) Destroy() {
 }
 
 func (c *HTTPCluster) SetSerialization(s core.Serialization) {
-	c.ser = s
 }
 
 func (c *HTTPCluster) SetProxy(proxy bool) {

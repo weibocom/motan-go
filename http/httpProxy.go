@@ -11,6 +11,9 @@ import (
 )
 
 const (
+	Proxy = "HTTP_PROXY"
+)
+const (
 	proxyMatchTypeUnknown = iota
 
 	proxyMatchTypeRegexp

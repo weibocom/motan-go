@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,12 +14,12 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	"github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
 )
 
 const (
 	HTTPProxyServerName = "motan"
-	HTTPProxy           = "HTTP_PROXY"
 	DefaultTimeout      = 5 * time.Second
 )
 
@@ -28,12 +29,13 @@ type HTTPMessageHandler interface {
 }
 
 type HTTPProxyServer struct {
-	url         *core.URL
-	mh          HTTPMessageHandler
-	httpHandler fasthttp.RequestHandler
-	httpServer  *fasthttp.Server
-	httpClient  *fasthttp.Client
-	deny        []string
+	url            *core.URL
+	messageHandler HTTPMessageHandler
+	httpHandler    fasthttp.RequestHandler
+	httpServer     *fasthttp.Server
+	httpClient     *fasthttp.Client
+	deny           []string
+	keepalive      bool
 }
 
 func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
@@ -43,7 +45,8 @@ func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
 func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandler) error {
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
-	s.mh = handler
+	s.messageHandler = handler
+	s.keepalive, _ = strconv.ParseBool(s.url.GetParam("httpProxyKeepalive", "true"))
 	s.deny = append(s.deny, "127.0.0.1:"+s.url.GetPortStr())
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
@@ -103,8 +106,8 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 		}
 
 		host, _, _ := net.SplitHostPort(hostAndPort)
-		if hc := s.mh.GetHTTPCluster(host); hc != nil {
-			if service, ok := hc.CanServe(string(ctx.Path())); ok {
+		if httpCluster := s.messageHandler.GetHTTPCluster(host); httpCluster != nil {
+			if service, ok := httpCluster.CanServe(string(ctx.Path())); ok {
 				s.doHTTPRpcProxy(ctx, host, service)
 				return
 			}
@@ -145,7 +148,13 @@ func (s *HTTPProxyServer) Destroy() {
 func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
 	httpReq := &ctx.Request
 	httpRes := &ctx.Response
+	if s.keepalive {
+		httpReq.Header.Del("Connection")
+	}
 	err := s.httpClient.Do(httpReq, httpRes)
+	if s.keepalive {
+		httpRes.Header.Del("Connection")
+	}
 	if err != nil {
 		vlog.Errorf("Proxy request %s by http failed: %s", string(httpReq.RequestURI()), err.Error())
 		httpRes.Header.SetServer(HTTPProxyServerName)
@@ -154,11 +163,11 @@ func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
 }
 
 func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, service string) {
-	mr := &core.MotanRequest{}
-	mr.ServiceName = service
-	mr.Method = string(ctx.Path())
-	mr.SetAttachment("domain", host)
-	mr.SetAttachment(HTTPProxy, "true")
+	motanRequest := &core.MotanRequest{}
+	motanRequest.ServiceName = service
+	motanRequest.Method = string(ctx.Path())
+	motanRequest.SetAttachment("domain", host)
+	motanRequest.SetAttachment(http.Proxy, "true")
 
 	headerBuffer := bytes.NewBuffer(nil)
 	headerWriter := bufio.NewWriter(headerBuffer)
@@ -171,13 +180,13 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	headerBytes := headerBuffer.Bytes()
 	bodyBytes := ctx.Request.Body()
 
-	mr.SetArguments([]interface{}{headerBytes, bodyBytes})
+	motanRequest.SetArguments([]interface{}{headerBytes, bodyBytes})
 	var reply []interface{}
-	mr.GetRPCContext(true).Reply = &reply
-	res := s.mh.Call(mr)
-	if res.GetException() != nil {
+	motanRequest.GetRPCContext(true).Reply = &reply
+	motanResponse := s.messageHandler.Call(motanRequest)
+	if motanResponse.GetException() != nil {
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
-		ctx.Response.Header.SetStatusCode(res.GetException().ErrCode)
+		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
 		return
 	}
 	if reply[0] != nil {

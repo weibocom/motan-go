@@ -27,13 +27,12 @@ type srvURLMapT map[string]srvConfT
 
 // HTTPProvider struct
 type HTTPProvider struct {
-	url        *motan.URL
-	httpClient http.Client
-	srvURLMap  srvURLMapT
-	gctx       *motan.Context
-	mixVars    []string
+	url       *motan.URL
+	srvURLMap srvURLMapT
+	gctx      *motan.Context
+	mixVars   []string
 	// for transparent http proxy
-	fstCli          *fasthttp.HostClient
+	fastClient      *fasthttp.HostClient
 	proxyAddr       string
 	proxySchema     string
 	locationMatcher *mhttp.LocationMatcher
@@ -53,7 +52,7 @@ const (
 
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
-	h.httpClient = http.Client{Timeout: DefaultRequestTimeout}
+	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
 	h.srvURLMap = make(srvURLMapT)
 	urlConf, _ := h.gctx.Config.GetSection("http-service")
 	if urlConf != nil {
@@ -77,20 +76,20 @@ func (h *HTTPProvider) Initialize() {
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(domain, h.gctx)
 	h.proxyAddr = h.url.GetParam("proxyAddress", "")
 	h.proxySchema = h.url.GetParam("proxySchema", "http")
-	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 1024))
-	h.fstCli = &fasthttp.HostClient{
+	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 512))
+	h.fastClient = &fasthttp.HostClient{
 		Name: "motan",
 		Addr: h.proxyAddr,
 		Dial: func(addr string) (net.Conn, error) {
-			c, err := fasthttp.DialTimeout(addr, DefaultRequestTimeout)
+			c, err := fasthttp.DialTimeout(addr, timeout)
 			if err != nil {
 				return c, err
 			}
 			return c, nil
 		},
 		MaxConns:     h.maxConnections,
-		ReadTimeout:  DefaultRequestTimeout,
-		WriteTimeout: DefaultRequestTimeout,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
 	}
 }
 
@@ -196,7 +195,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
 	var headerBytes []byte
 	var bodyBytes []byte
-	doTransparentProxy, _ := strconv.ParseBool(request.GetAttachment("HTTP_PROXY"))
+	doTransparentProxy, _ := strconv.ParseBool(request.GetAttachment(mhttp.Proxy))
 	var toType []interface{}
 	if doTransparentProxy {
 		// Header and body with []byte
@@ -231,9 +230,9 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
 		httpReq.Header.Del("Connection")
-		httpReq.Header.Set("x-forwarded-for", ip)
+		httpReq.Header.Set("X-Forwarded-For", ip)
 		httpReq.BodyWriter().Write(bodyBytes)
-		err := h.fstCli.Do(httpReq, httpRes)
+		err := h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
 			fillException(resp, t, err)
 			return resp
@@ -283,7 +282,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	req.Header.Add("x-forwarded-for", ip)
 	req.Header.Set("Accept-Encoding", "") //强制不走gzip
 
-	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000*time.Millisecond)
+	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
 	c := http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {

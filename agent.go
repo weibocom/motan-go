@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	defaultPort          = 9981
-	defaultEport         = 9982
-	defaultHTTPProxyPort = 9983
-	defaultMport         = 8002
-	defaultPidFile       = "./agent.pid"
-	defaultAgentGroup    = "default_agent_group"
-	defaultRuntimeDir    = "./agent_runtime"
-	defaultStatusSnap    = "status"
+	defaultPort       = 9981
+	defaultEport      = 9982
+	defaultHport      = 9983
+	defaultMport      = 8002
+	defaultPidFile    = "./agent.pid"
+	defaultAgentGroup = "default_agent_group"
+	defaultRuntimeDir = "./agent_runtime"
+	defaultStatusSnap = "status"
 )
 
 type Agent struct {
@@ -205,7 +205,7 @@ func (a *Agent) initParam() {
 		hport = section["hport"].(int)
 	}
 	if hport == 0 {
-		hport = defaultHTTPProxyPort
+		hport = defaultHport
 	}
 
 	pidfile := *motan.Pidfile
@@ -252,7 +252,9 @@ func (a *Agent) initHTTPClusters() {
 }
 
 func (a *Agent) startHTTPAgent() {
-	url := &motan.URL{Port: a.hport}
+	// reuse configuration of agent
+	url := a.agentURL.Copy()
+	url.Port = a.hport
 	httpProxyServer := mserver.NewHTTPProxyServer(url)
 	httpProxyServer.Open(false, true, &httpProxyMessageHandler{a: a})
 	vlog.Infof("Start http forward proxy server on port %d", a.hport)
@@ -510,6 +512,7 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
+	// TODO: use group and service or more information as identifier
 	sa.providers.Store(p.GetPath(), p)
 	return nil
 }

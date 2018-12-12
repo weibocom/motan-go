@@ -12,6 +12,21 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
+type taskHandler func()
+
+var refreshTaskPool = make(chan taskHandler, 100)
+
+func init() {
+	go func() {
+		for handler := range refreshTaskPool {
+			func() {
+				defer HandlePanic(nil)
+				handler()
+			}()
+		}
+	}()
+}
+
 const (
 	DefaultAttachmentSize = 16
 
@@ -127,22 +142,14 @@ type DiscoverService interface {
 	Discover(url *URL) []*URL
 }
 
-type GroupDiscoverService interface {
-	DiscoverAllGroups() ([]string, error)
-}
-
 type GroupDiscoverableRegistry interface {
 	Registry
-	GroupDiscoverService
-}
-
-type ServiceDiscoverService interface {
-	DiscoverAllServices(group string) ([]string, error)
+	DiscoverAllGroups() ([]string, error)
 }
 
 type ServiceDiscoverableRegistry interface {
 	Registry
-	ServiceDiscoverService
+	DiscoverAllServices(group string) ([]string, error)
 }
 
 // DiscoverCommand : discover command for client or agent
@@ -895,7 +902,7 @@ func (f *FilterEndPoint) IsAvailable() bool {
 	return f.Caller.IsAvailable()
 }
 
-var globalRegistryGroupCache = &registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
+var globalRegistryGroupCache = registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
 
 type registryGroupCacheInfo struct {
 	gr          GroupDiscoverableRegistry
@@ -939,49 +946,76 @@ func GetAllGroups(gr GroupDiscoverableRegistry) []string {
 	return globalRegistryGroupCache.getGroups(gr)
 }
 
-var globalRegistryGroupServiceCache = &registryGroupServiceCache{cachedInfos: new(sync.Map)}
+var globalRegistryGroupServiceCache registryGroupServiceCache
 
 type registryGroupServiceCacheInfo struct {
 	sr          ServiceDiscoverableRegistry
 	group       string
 	lastUpdTime time.Time
-	services    []string // TODO: use a map
+	services    []string
+	serviceMap  map[string]string
 	lock        sync.Mutex
 }
 
 type registryGroupServiceCache struct {
-	cachedInfos *sync.Map
+	cachedInfos sync.Map
+	lock        sync.Mutex
 }
 
-func (c *registryGroupServiceCacheInfo) getServices() []string {
-	if time.Now().Sub(c.lastUpdTime) > registryGroupServiceInfoMaxCacheTime {
-		go c.refreshServices()
+func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]string) {
+	if time.Now().Sub(c.lastUpdTime) >= registryGroupServiceInfoMaxCacheTime {
+		select {
+		case refreshTaskPool <- taskHandler(func() { c.refreshServices() }):
+		default:
+			vlog.Warningf("Task pool is full, refresh service of group [%s] delay", c.group)
+		}
 	}
-	return c.services
+	return c.services, c.serviceMap
 }
 
 func (c *registryGroupServiceCacheInfo) refreshServices() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	if time.Now().Sub(c.lastUpdTime) < registryGroupServiceInfoMaxCacheTime {
+		return
+	}
 	services, err := c.sr.DiscoverAllServices(c.group)
 	if err != nil {
 		return
 	}
 	c.lastUpdTime = time.Now()
 	c.services = services
+	serviceMap := make(map[string]string, len(services))
+	for _, service := range services {
+		serviceMap[service] = service
+	}
+	c.serviceMap = serviceMap
 }
 
-func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry, group string) []string {
+func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry, group string) ([]string, map[string]string) {
+	// TODO: check the group is valid
 	key := sr.GetURL().GetIdentity() + "_" + group
 	cacheInfo, ok := rc.cachedInfos.Load(key)
 	if !ok {
-		cacheInfo = &registryGroupServiceCacheInfo{sr: sr, group: group}
-		cacheInfo.(*registryGroupServiceCacheInfo).refreshServices()
-		rc.cachedInfos.Store(key, cacheInfo)
+		rc.lock.Lock()
+		defer rc.lock.Unlock()
+		cacheInfo, ok = rc.cachedInfos.Load(key)
+		if !ok {
+			cacheInfo = &registryGroupServiceCacheInfo{sr: sr, group: group}
+			cacheInfo.(*registryGroupServiceCacheInfo).refreshServices()
+			rc.cachedInfos.Store(key, cacheInfo)
+		}
 	}
 	return cacheInfo.(*registryGroupServiceCacheInfo).getServices()
 }
 
-func GetAllServices(sr ServiceDiscoverableRegistry, group string) []string {
-	return globalRegistryGroupServiceCache.getServices(sr, group)
+func ServiceInGroup(sr ServiceDiscoverableRegistry, group string, service string) bool {
+	_, serviceMap := globalRegistryGroupServiceCache.getServices(sr, group)
+	if serviceMap == nil {
+		return false
+	}
+	if _, ok := serviceMap[service]; ok {
+		return true
+	}
+	return false
 }

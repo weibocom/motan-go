@@ -25,7 +25,7 @@ motan-registry:
 
 motan-service:
   test.domain:
-    registry: zk-registry
+    registry: direct-registry
     group: test.domain
     domain: test.domain
     path: test
@@ -66,11 +66,12 @@ http-locations:
 
 http-client:
   test.domain:
-    registry: zk-registry
+    registry: direct-registry
     domain: test.domain
     group: test.domain
     preload: test
     serialization: simple
+    requestTimeout: 2000
     protocol: motan2 # this is the default endpoint type,the client use motan2 transport data to remote server, but it provider a http server when as the agent
 
 #conf of extensions. any custom config
