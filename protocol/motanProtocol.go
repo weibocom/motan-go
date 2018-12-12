@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,6 +81,7 @@ const (
 
 var (
 	defaultSerialize = Simple
+	DefaultGzipLevel = gzip.BestSpeed
 )
 
 // errors
@@ -386,7 +388,7 @@ func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
 func EncodeGzip(data []byte) ([]byte, error) {
 	if len(data) > 0 {
 		var b bytes.Buffer
-		w := gzip.NewWriter(&b)
+		w, _ := gzip.NewWriterLevel(&b, DefaultGzipLevel)
 		defer w.Close()
 		_, e1 := w.Write(data)
 		if e1 != nil {
@@ -400,6 +402,18 @@ func EncodeGzip(data []byte) ([]byte, error) {
 		return b.Bytes(), nil
 	}
 	return data, nil
+}
+
+func EncodeMessageGzip(msg *Message, gzipSize int) {
+	if gzipSize > 0 && len(msg.Body) > gzipSize {
+		data, err := EncodeGzip(msg.Body)
+		if err != nil {
+			vlog.Warningf("encode gzip fail! request id:%d, err:%s\n", msg.Header.RequestID, err.Error())
+		} else {
+			msg.Header.SetGzip(true)
+			msg.Body = data
+		}
+	}
 }
 
 // DecodeGzip : decode gzip
@@ -452,6 +466,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
+			EncodeMessageGzip(msg, rc.GzipSize)
 			return msg, nil
 		}
 	}
@@ -487,15 +502,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	}
 
 	req.Metadata = request.GetAttachments()
-	if rc.GzipSize > 0 && len(req.Body) > rc.GzipSize {
-		data, err := EncodeGzip(req.Body)
-		if err != nil {
-			vlog.Errorf("encode gzip fail! %s, err %s\n", motan.GetReqInfo(request), err.Error())
-		} else {
-			req.Header.SetGzip(true)
-			req.Body = data
-		}
-	}
+	EncodeMessageGzip(req, rc.GzipSize)
 	if rc.Oneway {
 		req.Header.SetOneWay(true)
 	}
@@ -561,15 +568,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	}
 
 	res.Metadata = response.GetAttachments()
-	if rc.GzipSize > 0 && len(res.Body) > rc.GzipSize {
-		data, err := EncodeGzip(res.Body)
-		if err != nil {
-			vlog.Errorf("encode gzip fail! requestid:%d, err %s\n", response.GetRequestID(), err.Error())
-		} else {
-			res.Header.SetGzip(true)
-			res.Body = data
-		}
-	}
+	EncodeMessageGzip(res, rc.GzipSize)
 	if rc.Proxy {
 		res.Header.SetProxy(true)
 	}
@@ -583,6 +582,11 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 	rc := mres.GetRPCContext(true)
 	rc.Proxy = response.Header.IsProxy()
 	mres.RequestID = response.Header.RequestID
+	if pt, ok := response.Metadata.Load(MProcessTime); ok {
+		if ptInt, err := strconv.Atoi(pt); err == nil {
+			mres.SetProcessTime(int64(ptInt))
+		}
+	}
 	if response.Header.GetStatus() == Normal && len(response.Body) > 0 {
 		if response.Header.IsGzip() {
 			response.Body = DecodeGzipBody(response.Body)

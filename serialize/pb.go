@@ -2,6 +2,7 @@ package serialize
 
 import (
 	"errors"
+	"io"
 	"math"
 	"reflect"
 
@@ -108,7 +109,6 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		buf.EncodeVarint(1)
 		return nil
 	}
-	buf.EncodeVarint(0)
 	rv, ok := v.(reflect.Value)
 	if !ok {
 		rv = reflect.ValueOf(v)
@@ -116,6 +116,11 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 	if rv.Kind() == reflect.Ptr {
 		rv = rv.Elem()
 	}
+	if rv.Kind() == reflect.Invalid {
+		buf.EncodeVarint(1)
+		return nil
+	}
+	buf.EncodeVarint(0)
 	switch rv.Kind() {
 	case reflect.Bool:
 		if rv.Bool() {
@@ -138,13 +143,24 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		return buf.EncodeStringBytes(rv.String())
 	case reflect.Uint8:
 		return buf.EncodeVarint(rv.Uint())
+	case reflect.Slice: //  Experimental: This type only works in golang
+		for i := 0; i < rv.Len(); i++ {
+			iv := rv.Index(i)
+			if _, ok := iv.Interface().(proto.Message); !ok {
+				return errors.New("not support other types in pb-array in PbSerialization. type: " + iv.Elem().Kind().String())
+			}
+			if err = p.serializeBuf(buf, iv.Elem().Interface()); err != nil {
+				return err
+			}
+		}
+		return nil
 	default:
 		if rv.CanAddr() {
 			if pb, ok := rv.Addr().Interface().(proto.Message); ok {
 				return buf.EncodeMessage(pb)
 			}
 		}
-		return errors.New("not support serialize type in PbSerialization Serialize. type: " + rv.Type().String())
+		return errors.New("not support serialize type in PbSerialization. type: " + rv.Type().String())
 	}
 }
 
@@ -259,6 +275,23 @@ func (p *PbSerialization) deSerializeBuf(buf *proto.Buffer, v interface{}) (inte
 			*sv = uint8(dv)
 		}
 		return uint8(dv), err
+	case reflect.Slice: // Experimental: This type only works in golang
+		msgArray := reflect.ValueOf(v).Elem()
+		rtElem := rt.Elem()
+		if rtElem.Kind() != reflect.Ptr {
+			return nil, errors.New("not support non-pointer deserialize type in pb-array in PbSerialization. type: " + rtElem.String())
+		}
+		message := reflect.New(rtElem.Elem()).Interface()
+		for {
+			if _, err = p.deSerializeBuf(buf, message); err != nil {
+				if err == io.ErrUnexpectedEOF {
+					break
+				}
+				return nil, err
+			}
+			msgArray.Set(reflect.Append(msgArray, reflect.ValueOf(message)))
+		}
+		return msgArray, nil
 	default:
 		message, ok := v.(proto.Message)
 		if !ok {
