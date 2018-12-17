@@ -217,21 +217,21 @@ func NewLocationMatcherFromContext(domain string, context *core.Context) *Locati
 	locations := make([]*ProxyLocation, 0, len(domainLocationsSlice))
 	for _, location := range domainLocationsSlice {
 		locationConfig := location.(map[interface{}]interface{})
-		pl := ProxyLocation{}
-		pl.Upstream = locationConfig["upstream"].(string)
-		pl.Match = locationConfig["match"].(string)
+		proxyLocation := ProxyLocation{}
+		proxyLocation.Upstream = locationConfig["upstream"].(string)
+		proxyLocation.Match = locationConfig["match"].(string)
 		if t, ok := locationConfig["type"]; ok {
-			pl.Type = t.(string)
+			proxyLocation.Type = t.(string)
 		}
 		if rs, ok := locationConfig["rewriteRules"]; ok {
 			for _, r := range rs.([]interface{}) {
-				pl.RewriteRules = append(pl.RewriteRules, r.(string))
+				proxyLocation.RewriteRules = append(proxyLocation.RewriteRules, r.(string))
 			}
 		}
 		if s, ok := locationConfig["script"]; ok {
-			pl.Script = s.(string)
+			proxyLocation.Script = s.(string)
 		}
-		locations = append(locations, &pl)
+		locations = append(locations, &proxyLocation)
 	}
 	return NewLocationMatcher(locations)
 }

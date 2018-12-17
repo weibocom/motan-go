@@ -187,6 +187,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	if motanResponse.GetException() != nil {
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetBodyString("err_msg: " + motanResponse.GetException().ErrMsg)
 		return
 	}
 	if reply[0] != nil {
