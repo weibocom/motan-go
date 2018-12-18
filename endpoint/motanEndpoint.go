@@ -150,6 +150,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		return defaultAsyncResponse
 	}
 	recvMsg.Header.SetProxy(m.proxy)
+	recvMsg.Header.RequestID = request.GetRequestID()
 	response, err := mpro.ConvertToResponse(recvMsg, m.serialization)
 	if err != nil {
 		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
@@ -162,8 +163,11 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		// reset errorCount
 		m.resetErr()
 	}
-	if err = response.ProcessDeserializable(rc.Reply); err != nil {
-		return m.defaultErrMotanResponse(request, err.Error())
+
+	if !m.proxy {
+		if err = response.ProcessDeserializable(rc.Reply); err != nil {
+			return m.defaultErrMotanResponse(request, err.Error())
+		}
 	}
 	return response
 }
@@ -390,10 +394,8 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		deadline:     time.Now().Add(1 * time.Second),
 		rc:           rc,
 	}
-	if msg.Header.RequestID == 0 {
-		msg.Header.RequestID = GenerateRequestID()
-	}
-
+	// RequestID is communication identifier, it is own by channel
+	msg.Header.RequestID = GenerateRequestID()
 	if msg.Header.IsHeartbeat() {
 		c.heartbeatLock.Lock()
 		c.heartbeats[msg.Header.RequestID] = s

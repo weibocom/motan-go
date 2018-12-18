@@ -121,6 +121,7 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 	request.Header.SetProxy(m.proxy)
 	// TODO request , response reuse
 	var res *mpro.Message
+	lastRequestID := request.Header.RequestID
 	if request.Header.IsHeartbeat() {
 		res = mpro.BuildHeartbeat(request.Header.RequestID, mpro.Res)
 	} else {
@@ -154,13 +155,15 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 			}
 		}
 	}
-	resbuf := res.Encode()
+	// recover the communication identifier
+	res.Header.RequestID = lastRequestID
+	resBuf := res.Encode()
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
 
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-	_, err := conn.Write(resbuf.Bytes())
+	_, err := conn.Write(resBuf.Bytes())
 	if err != nil {
 		vlog.Errorf("connection will close. conn: %s, err:%s\n", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
