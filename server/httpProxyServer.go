@@ -65,9 +65,10 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 	}
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
+		defer core.HandlePanic(nil)
 		httpReq := &ctx.Request
 		if ctx.IsConnect() {
-			// this is for https proxy we just proxy it to the real domain
+			// For https proxy we just proxy it to the real domain
 			proxyHost := string(ctx.Request.Host())
 			backendConn, err := net.Dial("tcp", proxyHost)
 			if err != nil {
@@ -146,6 +147,7 @@ func (s *HTTPProxyServer) Destroy() {
 }
 
 func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
+	// TODO: accessLog
 	httpReq := &ctx.Request
 	httpRes := &ctx.Response
 	if s.keepalive {

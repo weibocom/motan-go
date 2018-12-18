@@ -46,9 +46,9 @@ func PatternSplit(s string, pattern *regexp.Regexp) []string {
 	return strings
 }
 
-// ServiceDiscover 对于正向代理来说需要根据url确定使用哪个upstream
+// ServiceDiscover discover which service to use
 type ServiceDiscover interface {
-	// DiscoverService  通过路径发现归属于哪个service(upstream), 如果能匹配出来则返回否则返回空字符串表示没有找到
+	// DiscoverService  get the service(upstream) by http uri, return empty string if not found
 	DiscoverService(uri string) string
 }
 
@@ -99,7 +99,7 @@ type ProxyLocation struct {
 }
 
 // config like follows
-// !regex ^/2/.* ^/(.*) /2/$1 break
+// !regex ^/2/.* ^/(.*) /2/$1
 type rewriteRule struct {
 	not         bool
 	condType    ProxyMatchType

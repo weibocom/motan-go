@@ -976,6 +976,7 @@ func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]stri
 func (c *registryGroupServiceCacheInfo) refreshServices() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	// TODO: maybe we just need refresh services at startup
 	if time.Now().Sub(c.lastUpdTime) < registryGroupServiceInfoMaxCacheTime {
 		return
 	}

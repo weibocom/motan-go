@@ -23,6 +23,7 @@ const (
 	httpClientSection    = "http-client"
 	serverSection        = "motan-server"
 	importSection        = "import-refer"
+	importHTTPLocation   = "import-http-location"
 	dynamicSection       = "dynamic-param"
 	SwitcherSection      = "switcher"
 
@@ -42,6 +43,8 @@ const (
 	servicePath       = "services/"
 	applicationPath   = "applications/"
 	poolPath          = "pools/"
+	httpPath          = "http/"
+	httpLocationPath  = httpPath + "location/"
 	poolNameSeparator = "-"
 )
 
@@ -194,43 +197,66 @@ func (c *Context) Initialize() {
 	c.parseHTTPClients()
 }
 
-// pool config priority ： pool > application > service > basic
+func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, section string, root string, includeDir string, parsedHttpLocation map[string]bool) {
+	is, err := parsingConfig.DIY(section)
+	if err != nil || is == nil {
+		return
+	}
+	isHttpLocation := section == importHTTPLocation
+	if li, ok := is.([]interface{}); ok {
+		for _, r := range li {
+			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + fileSuffix)
+			if isHttpLocation {
+				if parsedHttpLocation[r.(string)] {
+					continue
+				} else {
+					parsedHttpLocation[r.(string)] = true
+				}
+			}
+			if err != nil || tempCfg == nil {
+				continue
+			}
+			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocation, root, httpLocationPath, parsedHttpLocation)
+			finalConfig.Merge(tempCfg)
+		}
+	}
+}
+
+// pool config priority ： pool > application > service > http > basic
 func parsePool(path string, pool string) (*cfg.Config, error) {
 	c := cfg.NewConfig()
-	var tempcfg *cfg.Config
+	var tempCfg *cfg.Config
 	var err error
 
 	// basic config
-	tempcfg, err = cfg.NewConfigFromFile(path + basicConfig)
-	if err == nil && tempcfg != nil {
-		c.Merge(tempcfg)
+	tempCfg, err = cfg.NewConfigFromFile(path + basicConfig)
+	if err == nil && tempCfg != nil {
+		c.Merge(tempCfg)
 	}
+
+	parsedHttpLocation := make(map[string]bool)
 
 	// application
 	poolPart := strings.Split(pool, poolNameSeparator)
-	var appconfig *cfg.Config
-	application := *Application
-	if application == "" && len(poolPart) > 0 { // the first part be the application name
-		application = poolPart[0]
+	var appConfig *cfg.Config
+	applicationName := *Application
+	if applicationName == "" && len(poolPart) > 0 { // the first part be the application name
+		applicationName = poolPart[0]
 	}
-	application = path + applicationPath + application + fileSuffix
-	if application != "" {
-		appconfig, err = cfg.NewConfigFromFile(application)
-		if err == nil && appconfig != nil {
-			// import-refer
-			is, err := appconfig.DIY(importSection)
-			if err == nil && is != nil {
-				if li, ok := is.([]interface{}); ok {
-					for _, r := range li {
-						tempcfg, err = cfg.NewConfigFromFile(path + servicePath + r.(string) + fileSuffix)
-						if err == nil && tempcfg != nil {
-							c.Merge(tempcfg)
-						}
-					}
+	// http service
+	httpService := path + httpPath + applicationName + fileSuffix
+	httpConfig, err := cfg.NewConfigFromFile(httpService)
+	if err == nil && httpConfig != nil {
+		importCfgIgnoreError(c, httpConfig, importHTTPLocation, path, httpLocationPath, parsedHttpLocation)
+		c.Merge(httpConfig)
+	}
 
-				}
-			}
-			c.Merge(appconfig) // application config > service default config
+	application := path + applicationPath + applicationName + fileSuffix
+	if application != "" {
+		appConfig, err = cfg.NewConfigFromFile(application)
+		if err == nil && appConfig != nil {
+			importCfgIgnoreError(c, appConfig, importSection, path, servicePath, parsedHttpLocation)
+			c.Merge(appConfig) // application config > service default config
 		}
 	}
 
@@ -239,9 +265,9 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		base := ""
 		for _, v := range poolPart {
 			base = base + v
-			tempcfg, err = cfg.NewConfigFromFile(path + poolPath + base + fileSuffix)
-			if err == nil && tempcfg != nil {
-				c.Merge(tempcfg)
+			tempCfg, err = cfg.NewConfigFromFile(path + poolPath + base + fileSuffix)
+			if err == nil && tempCfg != nil {
+				c.Merge(tempCfg)
 			}
 			base = base + poolNameSeparator
 		}

@@ -260,7 +260,7 @@ func (a *Agent) startHTTPAgent() {
 	vlog.Infof("Start http forward proxy server on port %d", a.hport)
 }
 
-// HTTPProxyMessageHandler 支持多个域名选择的处理
+// HTTPProxyMessageHandler for multiple http domain handler
 type httpProxyMessageHandler struct {
 	a *Agent
 }
