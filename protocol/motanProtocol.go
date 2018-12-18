@@ -44,6 +44,7 @@ const (
 	MVersion       = "M_v"
 	MModule        = "M_mdu"
 	MSource        = "M_s"
+	MRequestID     = "M_rid"
 )
 
 type Header struct {
@@ -211,6 +212,7 @@ func (h *Header) GetSerialize() int {
 }
 
 // BuildHeader build header with common set
+// TODO: remove 'requestID' parameter
 func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgStatus int) *Header {
 	var mtype uint8 = 0x00
 	if proxy {
@@ -438,6 +440,16 @@ func DecodeGzip(data []byte) ([]byte, error) {
 func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Request, error) {
 	motanRequest := &motan.MotanRequest{Arguments: make([]interface{}, 0)}
 	motanRequest.RequestID = request.Header.RequestID
+	if idStr, ok := request.Metadata.Load(MRequestID); !ok {
+		if request.Header.IsProxy() {
+			// we need convert it to a int64 string, some language has no uint64
+			request.Metadata.Store(MRequestID, strconv.FormatInt(int64(request.Header.RequestID), 10))
+		}
+	} else {
+		requestID, _ := strconv.ParseInt(idStr, 10, 64)
+		motanRequest.RequestID = uint64(requestID)
+	}
+
 	motanRequest.ServiceName = request.Metadata.LoadOrEmpty(MPath)
 	motanRequest.Method = request.Metadata.LoadOrEmpty(MMethod)
 	motanRequest.MethodDesc = request.Metadata.LoadOrEmpty(MMethodDesc)
