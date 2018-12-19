@@ -174,7 +174,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	headerBuffer := bytes.NewBuffer(nil)
 	headerWriter := bufio.NewWriter(headerBuffer)
 
-	// Server do the url rewrite
+	// server do the url rewrite
 	requestURI := ctx.Request.URI()
 	ctx.Request.SetRequestURIBytes(requestURI.RequestURI())
 	ctx.Request.Header.WriteTo(headerWriter)
@@ -187,6 +187,15 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	motanRequest.GetRPCContext(true).Reply = &reply
 	motanResponse := s.messageHandler.Call(motanRequest)
 	if motanResponse.GetException() != nil {
+		ctx.Response.Header.SetServer(HTTPProxyServerName)
+		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		return
+	}
+	// we need process deserialize here, maybe the httpCluster should initialize without proxy as a normal client
+	// and the serialization proceed by cluster itself
+	err := motanResponse.ProcessDeserializable(&reply)
+	if err != nil {
+		vlog.Errorf("deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
 		return

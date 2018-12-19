@@ -43,8 +43,8 @@ const (
 	servicePath       = "services/"
 	applicationPath   = "applications/"
 	poolPath          = "pools/"
-	httpPath          = "http/"
-	httpLocationPath  = httpPath + "location/"
+	httpServicePath   = "http/service/"
+	httpLocationPath  = "http/location/"
 	poolNameSeparator = "-"
 )
 
@@ -244,7 +244,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		applicationName = poolPart[0]
 	}
 	// http service
-	httpService := path + httpPath + applicationName + fileSuffix
+	httpService := path + httpServicePath + applicationName + fileSuffix
 	httpConfig, err := cfg.NewConfigFromFile(httpService)
 	if err == nil && httpConfig != nil {
 		importCfgIgnoreError(c, httpConfig, importHTTPLocation, path, httpLocationPath, parsedHttpLocation)
