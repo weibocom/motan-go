@@ -1,0 +1,5 @@
+http-locations:
+  api.demo.com:
+    - match: /test
+      type: start
+      upstream: test
