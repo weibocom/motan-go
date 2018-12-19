@@ -112,8 +112,9 @@ func GetStatItem(group string, service string) StatItem {
 	return items[group+service]
 }
 
+// NewDefaultStatItem create a new statistic item, you should escape input parameter before call this function
 func NewDefaultStatItem(group string, service string) StatItem {
-	return &DefaultStatItem{group: group, service: Escape(service), registry: metrics.NewRegistry(), isReport: true}
+	return &DefaultStatItem{group: group, service: service, registry: metrics.NewRegistry(), isReport: true}
 }
 
 func RMStatItem(group string, service string) {

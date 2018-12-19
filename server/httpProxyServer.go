@@ -147,9 +147,9 @@ func (s *HTTPProxyServer) Destroy() {
 }
 
 func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
-	// TODO: accessLog
 	httpReq := &ctx.Request
 	httpRes := &ctx.Response
+	start := time.Now()
 	if s.keepalive {
 		httpReq.Header.Del("Connection")
 	}
@@ -162,6 +162,8 @@ func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
 		httpRes.Header.SetServer(HTTPProxyServerName)
 		httpRes.Header.SetStatusCode(fasthttp.StatusBadGateway)
 	}
+	// TODO: configurable
+	vlog.Infof("http-proxy %s %s %d %d", httpReq.Host(), httpReq.RequestURI(), httpRes.Header.StatusCode(), time.Now().Sub(start)/1e6)
 }
 
 func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, service string) {
