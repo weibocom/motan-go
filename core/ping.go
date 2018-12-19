@@ -1,13 +1,14 @@
 package core
 
 import (
+	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/weibocom/motan-go/log"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -131,7 +132,7 @@ func (p *Pinger) Ping() error {
 			return nil
 		case <-timeout.C:
 			close(p.done)
-			return errors.New("Ping timed out")
+			return errors.New("ping timed out")
 		case <-interval.C:
 			if p.Count > 0 && p.PacketsSent == p.Count {
 				break
@@ -221,7 +222,7 @@ func (p *Pinger) processPacket(recv *packet) error {
 	var m *icmp.Message
 	var err error
 	if m, err = icmp.ParseMessage(p.proto, recv.bytes[:recv.nBytes]); err != nil {
-		return errors.New("Error parsing icmp message")
+		return errors.New("error parsing icmp message")
 	}
 
 	if m.Type != ipv4.ICMPTypeEchoReply && m.Type != ipv6.ICMPTypeEchoReply {
@@ -247,7 +248,7 @@ func (p *Pinger) processPacket(recv *packet) error {
 			p.Rtts = append(p.Rtts, rtt)
 		}
 	default:
-		return errors.Errorf("Invalid ICMP echo reply. Body type: %T, %s", pkt, pkt)
+		return fmt.Errorf("invalid ICMP echo reply. Body type: %T, %s", pkt, pkt)
 	}
 
 	return nil

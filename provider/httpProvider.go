@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -10,10 +11,13 @@ import (
 	"net/http"
 	URL "net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/valyala/fasthttp"
 	motan "github.com/weibocom/motan-go/core"
+	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
 )
 
@@ -23,11 +27,16 @@ type srvURLMapT map[string]srvConfT
 
 // HTTPProvider struct
 type HTTPProvider struct {
-	url        *motan.URL
-	httpClient http.Client
-	srvURLMap  srvURLMapT
-	gctx       *motan.Context
-	mixVars    []string
+	url       *motan.URL
+	srvURLMap srvURLMapT
+	gctx      *motan.Context
+	mixVars   []string
+	// for transparent http proxy
+	fastClient      *fasthttp.HostClient
+	proxyAddr       string
+	proxySchema     string
+	locationMatcher *mhttp.LocationMatcher
+	maxConnections  int
 }
 
 const (
@@ -37,11 +46,13 @@ const (
 	DefaultMotanHTTPMethod = "GET"
 	// MotanRequestHTTPMethodKey http method key in a motan request attachment
 	MotanRequestHTTPMethodKey = "HTTP_Method"
+
+	DefaultRequestTimeout = 1 * time.Second
 )
 
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
-	h.httpClient = http.Client{Timeout: 1 * time.Second}
+	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
 	h.srvURLMap = make(srvURLMapT)
 	urlConf, _ := h.gctx.Config.GetSection("http-service")
 	if urlConf != nil {
@@ -52,7 +63,7 @@ func (h *HTTPProvider) Initialize() {
 				for _, method := range methodArr {
 					sconf := make(sConfT)
 					for k, v := range getSrvConf.(map[interface{}]interface{}) {
-						// @TODO gracful panic when got a conf err, like more %s in URL_FORMAT
+						// @TODO gracefully panic when got a conf err, like more %s in URL_FORMAT
 						sconf[k.(string)] = v.(string)
 					}
 					srvConf[method] = sconf
@@ -60,6 +71,25 @@ func (h *HTTPProvider) Initialize() {
 			}
 			h.srvURLMap[confID.(string)] = srvConf
 		}
+	}
+	domain := h.url.GetParam("domain", "")
+	h.locationMatcher = mhttp.NewLocationMatcherFromContext(domain, h.gctx)
+	h.proxyAddr = h.url.GetParam("proxyAddress", "")
+	h.proxySchema = h.url.GetParam("proxySchema", "http")
+	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 512))
+	h.fastClient = &fasthttp.HostClient{
+		Name: "motan",
+		Addr: h.proxyAddr,
+		Dial: func(addr string) (net.Conn, error) {
+			c, err := fasthttp.DialTimeout(addr, timeout)
+			if err != nil {
+				return c, err
+			}
+			return c, nil
+		},
+		MaxConns:     h.maxConnections,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
 	}
 }
 
@@ -73,7 +103,7 @@ func (h *HTTPProvider) SetSerialization(s motan.Serialization) {}
 // SetProxy for HTTPProvider
 func (h *HTTPProvider) SetProxy(proxy bool) {}
 
-// SetContext use to set globle config to HTTPProvider
+// SetContext use to set global config to HTTPProvider
 func (h *HTTPProvider) SetContext(context *motan.Context) {
 	h.gctx = context
 }
@@ -163,18 +193,64 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	t := time.Now().UnixNano()
 	resp := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
-	toType := make([]interface{}, 1)
+	var headerBytes []byte
+	var bodyBytes []byte
+	doTransparentProxy, _ := strconv.ParseBool(request.GetAttachment(mhttp.Proxy))
+	var toType []interface{}
+	if doTransparentProxy {
+		// Header and body with []byte
+		toType = []interface{}{&headerBytes, &bodyBytes}
+	} else {
+		toType = make([]interface{}, 1)
+	}
 	if err := request.ProcessDeserializable(toType); err != nil {
 		fillException(resp, t, err)
 		return resp
 	}
 	resp.RequestID = request.GetRequestID()
+	ip := ""
+	if remoteIP, exist := request.GetAttachments().Load(motan.RemoteIPKey); exist {
+		ip = remoteIP
+	} else {
+		ip = request.GetAttachment(motan.HostKey)
+	}
+	// Ok here we do transparent http proxy and return
+	if doTransparentProxy {
+		upstream, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+		if !ok || upstream != h.url.Path {
+			fillException(resp, t, errors.New("service not found"))
+			return resp
+		}
+		httpReq := fasthttp.AcquireRequest()
+		httpRes := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseRequest(httpReq)
+		defer fasthttp.ReleaseResponse(httpRes)
+		httpReq.Header.Read(bufio.NewReader(bytes.NewReader(headerBytes)))
+
+		httpReq.URI().SetScheme(h.proxySchema)
+		httpReq.URI().SetPath(rewritePath)
+		httpReq.Header.Del("Connection")
+		httpReq.Header.Set("X-Forwarded-For", ip)
+		httpReq.BodyWriter().Write(bodyBytes)
+		err := h.fastClient.Do(httpReq, httpRes)
+		if err != nil {
+			fillException(resp, t, err)
+			return resp
+		}
+		headerBuffer := bytes.NewBuffer(nil)
+		headerWriter := bufio.NewWriter(headerBuffer)
+		httpRes.Header.Del("Connection")
+		httpRes.Header.WriteTo(headerWriter)
+		headerWriter.Flush()
+		resp.Value = []interface{}{headerBuffer.Bytes(), httpRes.Body()}
+		return resp
+	}
+
 	httpReqURL, httpReqMethod, err := buildReqURL(request, h)
 	if err != nil {
 		fillException(resp, t, err)
 		return resp
 	}
-	//vlog.Infof("HTTPProvider read to call: Method:%s, URL:%s", httpReqMethod, httpReqURL)
 	queryStr, err := buildQueryStr(request, h.url, h.mixVars)
 	if err != nil {
 		fillException(resp, t, err)
@@ -203,16 +279,10 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		return true
 	})
 
-	ip := ""
-	if remoteIP, exist := request.GetAttachments().Load(motan.RemoteIPKey); exist {
-		ip = remoteIP
-	} else {
-		ip = request.GetAttachment(motan.HostKey)
-	}
 	req.Header.Add("x-forwarded-for", ip)
 	req.Header.Set("Accept-Encoding", "") //强制不走gzip
 
-	timeout := h.url.GetTimeDuration("requestTimeout", time.Millisecond, 1000*time.Millisecond)
+	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
 	c := http.Client{
 		Transport: &http.Transport{
 			Dial: func(netw, addr string) (net.Conn, error) {
