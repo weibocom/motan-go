@@ -6,6 +6,7 @@ import (
 	"github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -186,6 +187,9 @@ func (c *HTTPCluster) removeMotanCluster(service string) {
 
 func (c *HTTPCluster) Call(request core.Request) core.Response {
 	cluster := c.getMotanCluster(request.GetServiceName())
+	if request.GetAttachment(protocol.MSource) == "" {
+		request.SetAttachment(protocol.MSource, c.url.GetParam(core.ApplicationKey, ""))
+	}
 	return cluster.Call(request)
 }
 
