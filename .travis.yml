@@ -17,6 +17,7 @@ install:
     - go get -d -v -t $(go list ./... | grep -v main)
 
 script:
-    - go test -v $(go list ./... | grep -v main)
+    - go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
 
 after_success:
+    - bash <(curl -s https://codecov.io/bash)

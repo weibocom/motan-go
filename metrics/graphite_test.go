@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,6 +104,7 @@ type udpServer struct {
 	port    string
 	stopped bool
 	data    bytes.Buffer
+	lock    sync.Mutex
 }
 
 func (u *udpServer) start() {
@@ -117,9 +119,8 @@ func (u *udpServer) start() {
 		return
 	}
 	defer socket.Close()
-
 	for {
-		if u.stopped {
+		if u.isStop() {
 			break
 		}
 		data := make([]byte, 4096)
@@ -134,5 +135,13 @@ func (u *udpServer) start() {
 }
 
 func (u *udpServer) stop() {
+	u.lock.Lock()
 	u.stopped = true
+	u.lock.Unlock()
+}
+
+func (u *udpServer) isStop() bool {
+	u.lock.Lock()
+	defer u.lock.Unlock()
+	return u.stopped
 }

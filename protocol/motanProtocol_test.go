@@ -185,17 +185,21 @@ func assertTrue(b bool, msg string, t *testing.T) {
 func BenchmarkEncodeGzip(b *testing.B) {
 	DefaultGzipLevel = gzip.BestSpeed
 	bs := buildBytes(100 * 1024)
-	for i := 0; i < b.N; i++ {
-		EncodeGzip(bs)
-	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			EncodeGzip(bs)
+		}
+	})
 }
 
 func BenchmarkDecodeGzip(b *testing.B) {
 	bs := buildBytes(100 * 1024)
 	result, _ := EncodeGzip(bs)
-	for i := 0; i < b.N; i++ {
-		DecodeGzip(result)
-	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			DecodeGzip(result)
+		}
+	})
 }
 
 func buildBytes(size int) []byte {
