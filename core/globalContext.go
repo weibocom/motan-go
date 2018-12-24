@@ -13,19 +13,19 @@ import (
 
 const (
 	// all default sections
-	registrysSection     = "motan-registry"
-	basicRefersSection   = "motan-basicRefer"
-	refersSection        = "motan-refer"
-	basicServicesSection = "motan-basicService"
-	servicesSection      = "motan-service"
-	agentSection         = "motan-agent"
-	clientSection        = "motan-client"
-	httpClientSection    = "http-client"
-	serverSection        = "motan-server"
-	importSection        = "import-refer"
-	importHTTPLocation   = "import-http-location"
-	dynamicSection       = "dynamic-param"
-	SwitcherSection      = "switcher"
+	registrysSection          = "motan-registry"
+	basicRefersSection        = "motan-basicRefer"
+	refersSection             = "motan-refer"
+	basicServicesSection      = "motan-basicService"
+	servicesSection           = "motan-service"
+	agentSection              = "motan-agent"
+	clientSection             = "motan-client"
+	httpClientSection         = "http-client"
+	serverSection             = "motan-server"
+	importSection             = "import-refer"
+	importHTTPLocationSection = "import-http-location"
+	dynamicSection            = "dynamic-param"
+	SwitcherSection           = "switcher"
 
 	// URLConfKey is config id
 	// config Keys
@@ -202,7 +202,7 @@ func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, se
 	if err != nil || is == nil {
 		return
 	}
-	isHttpLocation := section == importHTTPLocation
+	isHttpLocation := section == importHTTPLocationSection
 	if li, ok := is.([]interface{}); ok {
 		for _, r := range li {
 			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + fileSuffix)
@@ -216,7 +216,7 @@ func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, se
 			if err != nil || tempCfg == nil {
 				continue
 			}
-			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocation, root, httpLocationPath, parsedHttpLocation)
+			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocationSection, root, httpLocationPath, parsedHttpLocation)
 			finalConfig.Merge(tempCfg)
 		}
 	}
@@ -247,7 +247,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 	httpService := path + httpServicePath + applicationName + fileSuffix
 	httpConfig, err := cfg.NewConfigFromFile(httpService)
 	if err == nil && httpConfig != nil {
-		importCfgIgnoreError(c, httpConfig, importHTTPLocation, path, httpLocationPath, parsedHttpLocation)
+		importCfgIgnoreError(c, httpConfig, importHTTPLocationSection, path, httpLocationPath, parsedHttpLocation)
 		c.Merge(httpConfig)
 	}
 

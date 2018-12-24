@@ -85,21 +85,19 @@ func stringToProxyMatchType(s string) ProxyMatchType {
 }
 
 type ProxyLocation struct {
-	Upstream     string   `json:"upstream"`
-	Match        string   `json:"match"`
-	RewriteRules []string `json:"rewrite_rules"`
-	Script       string   `json:"script"`
-	Type         string   `json:"type"`
+	Upstream     string
+	Match        string
+	RewriteRules []string
+	Type         string
 
 	pattern      *regexp.Regexp
 	locationType ProxyMatchType
 	rewriteRules []*rewriteRule
-	code         *compiledCode
 	length       int
 }
 
 // config like follows
-// !regex ^/2/.* ^/(.*) /2/$1
+// !regexp ^/2/.* ^/(.*) /2/$1
 type rewriteRule struct {
 	not         bool
 	condType    ProxyMatchType
@@ -176,25 +174,7 @@ func (l *ProxyLocation) DeterminePath(path string, doRewrite bool) string {
 			return s
 		}
 	}
-	if l.code == nil {
-		return path
-	}
-	ctx := newScriptContext()
-	ctx.set(scriptVarRequestURI, path)
-	l.code.exec(ctx)
-	return ctx.get(scriptVarRequestURI)
-}
-
-func (l *ProxyLocation) CompileScript() error {
-	if l.Script == "" {
-		return nil
-	}
-	code, err := scriptCompile(l.Script)
-	if err != nil {
-		return err
-	}
-	l.code = code
-	return nil
+	return path
 }
 
 type LocationMatcher struct {
@@ -228,9 +208,6 @@ func NewLocationMatcherFromContext(domain string, context *core.Context) *Locati
 				pl.RewriteRules = append(pl.RewriteRules, r.(string))
 			}
 		}
-		if s, ok := locationConfig["script"]; ok {
-			pl.Script = s.(string)
-		}
 		locations = append(locations, &pl)
 	}
 	return NewLocationMatcher(locations)
@@ -242,11 +219,6 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 	}
 	for _, l := range locations {
 		l.length = len(l.Match)
-		err := l.CompileScript()
-		if err != nil {
-			vlog.Errorf("Illegal script for location %s: %s", l.Match, err.Error())
-			continue
-		}
 		if len(l.RewriteRules) != 0 {
 			rewriteRules := make([]*rewriteRule, 0, len(l.RewriteRules))
 			for _, rule := range l.RewriteRules {
@@ -256,6 +228,7 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 				r, err := newRewriteRule(rule)
 				if err != nil {
 					vlog.Errorf("Illegal rewrite rule %s for location %s: %s", rule, l.Match, err.Error())
+					continue
 				}
 				rewriteRules = append(rewriteRules, r)
 			}

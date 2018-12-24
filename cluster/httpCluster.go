@@ -83,6 +83,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 	}
 
 	registryID := url.GetParam(core.RegistryKey, "")
+	// TODO: for multiple registry
 	if registryURL, ok := context.RegistryURLs[registryID]; ok {
 		registry := extFactory.GetRegistry(registryURL)
 		if registry == nil {
@@ -95,6 +96,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 	}
 	c.serviceDiscover = http.NewLocationMatcherFromContext(domain, context)
 	preload := core.TrimSplit(url.GetParam(HTTPProxyPreloadKey, ""), ",")
+	// TODO: find service by location then do warm up
 	for _, service := range preload {
 		if service == "" {
 			continue
@@ -172,7 +174,7 @@ func (c *HTTPCluster) getMotanCluster(service string) *MotanCluster {
 func (c *HTTPCluster) removeMotanCluster(service string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if _, ok := c.upstreamClusters[service]; ok {
+	if _, ok := c.upstreamClusters[service]; !ok {
 		return
 	}
 	newUpstreamClusters := make(map[string]*cacheCluster, len(c.upstreamClusters))
@@ -196,10 +198,11 @@ func (c *HTTPCluster) Call(request core.Request) core.Response {
 func (c *HTTPCluster) Destroy() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	for _, cc := range c.upstreamClusters {
+	clusters := c.upstreamClusters
+	c.upstreamClusters = make(map[string]*cacheCluster)
+	for _, cc := range clusters {
 		cc.destroy()
 	}
-	c.upstreamClusters = make(map[string]*cacheCluster)
 }
 
 func (c *HTTPCluster) SetSerialization(s core.Serialization) {

@@ -204,7 +204,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		toType = make([]interface{}, 1)
 	}
 	if err := request.ProcessDeserializable(toType); err != nil {
-		fillException(resp, t, err)
+		fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
 		return resp
 	}
 	resp.RequestID = request.GetRequestID()
@@ -218,7 +218,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	if doTransparentProxy {
 		upstream, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
 		if !ok || upstream != h.url.Path {
-			fillException(resp, t, errors.New("service not found"))
+			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
 			return resp
 		}
 		httpReq := fasthttp.AcquireRequest()
@@ -234,7 +234,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpReq.BodyWriter().Write(bodyBytes)
 		err := h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
-			fillException(resp, t, err)
+			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)
 			return resp
 		}
 		headerBuffer := bytes.NewBuffer(nil)
@@ -369,8 +369,11 @@ func (h *HTTPProvider) GetPath() string {
 	return h.url.Path
 }
 
-func fillException(resp *motan.MotanResponse, start int64, err error) {
+func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err error) {
 	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
-	resp.Exception = &motan.Exception{ErrCode: http.StatusServiceUnavailable,
-		ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
+	resp.Exception = &motan.Exception{ErrCode: code, ErrMsg: fmt.Sprintf("%s", err), ErrType: code}
+}
+
+func fillException(resp *motan.MotanResponse, start int64, err error) {
+	fillExceptionWithCode(resp, http.StatusServiceUnavailable, start, err)
 }

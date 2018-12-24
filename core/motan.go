@@ -31,7 +31,7 @@ const (
 	DefaultAttachmentSize = 16
 
 	registryGroupInfoMaxCacheTime        = time.Hour
-	registryGroupServiceInfoMaxCacheTime = 5 * time.Minute
+	registryGroupServiceInfoMaxCacheTime = time.Hour
 )
 
 //-----------interface-------------

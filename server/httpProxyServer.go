@@ -51,6 +51,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
 
+	// TODO: configurable timeout
 	s.httpClient = &fasthttp.Client{
 		Name: "motan",
 		Dial: func(addr string) (net.Conn, error) {
@@ -65,7 +66,9 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 	}
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
-		defer core.HandlePanic(nil)
+		defer core.HandlePanic(func() {
+			vlog.Errorf("Http proxy handler for [%s] panic", string(ctx.Request.URI().String()))
+		})
 		httpReq := &ctx.Request
 		if ctx.IsConnect() {
 			// For https proxy we just proxy it to the real domain
@@ -188,7 +191,10 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	var reply []interface{}
 	motanRequest.GetRPCContext(true).Reply = &reply
 	motanResponse := s.messageHandler.Call(motanRequest)
+	// exception is an motan internal exception
+	// TODO: should we check the motanResponse nil?
 	if motanResponse.GetException() != nil {
+		vlog.Errorf("Http rpc proxy call failed: %s", motanResponse.GetException().ErrMsg)
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
 		return
@@ -197,7 +203,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	// and the serialization proceed by cluster itself
 	err := motanResponse.ProcessDeserializable(&reply)
 	if err != nil {
-		vlog.Errorf("deserialize rpc response failed: %s", err.Error())
+		vlog.Errorf("Deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
 		return

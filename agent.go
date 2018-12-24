@@ -246,6 +246,9 @@ func (a *Agent) initHTTPClusters() {
 			vlog.Errorf("HTTP client for %s has no domain config", id)
 			continue
 		}
+		if application := url.GetParam(motan.ApplicationKey, ""); application == "" {
+			url.PutParam(motan.ApplicationKey, a.agentURL.GetParam(motan.ApplicationKey, ""))
+		}
 		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
 		a.httpClusterMap.Store(domain, httpCluster)
 	}
