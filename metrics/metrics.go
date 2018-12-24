@@ -141,15 +141,13 @@ func ClearStatItems() {
 }
 
 func RangeAllStatItem(f func(k string, v StatItem) bool) {
-	if StatItemSize() > 0 {
-		itemsLock.RLock()
-		defer itemsLock.RUnlock()
-		var b bool
-		for k, i := range items {
-			b = f(k, i)
-			if !b {
-				return
-			}
+	itemsLock.RLock()
+	defer itemsLock.RUnlock()
+	var b bool
+	for k, i := range items {
+		b = f(k, i)
+		if !b {
+			return
 		}
 	}
 }
