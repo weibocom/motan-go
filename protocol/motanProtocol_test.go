@@ -2,8 +2,12 @@ package protocol
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/weibocom/motan-go/core"
 )
@@ -177,3 +181,33 @@ func assertTrue(b bool, msg string, t *testing.T) {
 }
 
 //TODO convert
+
+func BenchmarkEncodeGzip(b *testing.B) {
+	DefaultGzipLevel = gzip.BestSpeed
+	bs := buildBytes(100 * 1024)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			EncodeGzip(bs)
+		}
+	})
+}
+
+func BenchmarkDecodeGzip(b *testing.B) {
+	bs := buildBytes(100 * 1024)
+	result, _ := EncodeGzip(bs)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			DecodeGzip(result)
+		}
+	})
+}
+
+func buildBytes(size int) []byte {
+	baseBytes := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+	result := bytes.NewBuffer(make([]byte, 0, size))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < size; i++ {
+		result.WriteByte(baseBytes[r.Intn(len(baseBytes))])
+	}
+	return result.Bytes()
+}
