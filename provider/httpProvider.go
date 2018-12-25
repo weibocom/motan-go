@@ -72,7 +72,7 @@ func (h *HTTPProvider) Initialize() {
 			h.srvURLMap[confID.(string)] = srvConf
 		}
 	}
-	domain := h.url.GetParam("domain", "")
+	domain := h.url.GetParam(mhttp.DomainKey, "")
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(domain, h.gctx)
 	h.proxyAddr = h.url.GetParam("proxyAddress", "")
 	h.proxySchema = h.url.GetParam("proxySchema", "http")

@@ -14,6 +14,9 @@ const (
 	Proxy = "HTTP_PROXY"
 )
 const (
+	DomainKey = "domain"
+)
+const (
 	proxyMatchTypeUnknown = iota
 
 	proxyMatchTypeRegexp
@@ -49,7 +52,7 @@ func PatternSplit(s string, pattern *regexp.Regexp) []string {
 // ServiceDiscover discover which service to use
 type ServiceDiscover interface {
 	// DiscoverService  get the service(upstream) by http uri, return empty string if not found
-	DiscoverService(uri string) string
+	URIToServiceName(uri string) string
 }
 
 type ProxyMatchType uint8
@@ -305,7 +308,7 @@ func (m *LocationMatcher) Pick(path string, doRewrite bool) (string, string, boo
 	return "", "", false
 }
 
-func (m *LocationMatcher) DiscoverService(uri string) string {
+func (m *LocationMatcher) URIToServiceName(uri string) string {
 	if s, _, b := m.Pick(uri, false); b {
 		return s
 	}
