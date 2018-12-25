@@ -183,8 +183,8 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	ctx.Request.Header.WriteTo(headerWriter)
 	headerWriter.Flush()
 	headerBytes := headerBuffer.Bytes()
+	// no need to copy body, because we hold it until request finished
 	bodyBytes := ctx.Request.Body()
-
 	motanRequest.SetArguments([]interface{}{headerBytes, bodyBytes})
 	var reply []interface{}
 	motanRequest.GetRPCContext(true).Reply = &reply

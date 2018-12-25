@@ -237,12 +237,16 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)
 			return resp
 		}
-		headerBuffer := bytes.NewBuffer(nil)
+		headerBuffer := &bytes.Buffer{}
 		headerWriter := bufio.NewWriter(headerBuffer)
 		httpRes.Header.Del("Connection")
 		httpRes.Header.WriteTo(headerWriter)
 		headerWriter.Flush()
-		resp.Value = []interface{}{headerBuffer.Bytes(), httpRes.Body()}
+		body := httpRes.Body()
+		// copy response body is needed
+		responseBodyBytes := make([]byte, len(body))
+		copy(responseBodyBytes, body)
+		resp.Value = []interface{}{headerBuffer.Bytes(), responseBodyBytes}
 		return resp
 	}
 
