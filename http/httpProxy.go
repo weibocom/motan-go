@@ -14,7 +14,8 @@ const (
 	Proxy = "HTTP_PROXY"
 )
 const (
-	DomainKey = "domain"
+	DomainKey           = "domain"
+	KeepaliveTimeoutKey = "keepaliveTimeout"
 )
 const (
 	proxyMatchTypeUnknown = iota
