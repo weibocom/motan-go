@@ -6,6 +6,8 @@ import (
 	"compress/gzip"
 	"fmt"
 	"math/rand"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -184,7 +186,23 @@ func assertTrue(b bool, msg string, t *testing.T) {
 
 func BenchmarkEncodeGzip(b *testing.B) {
 	DefaultGzipLevel = gzip.BestSpeed
-	bs := buildBytes(100 * 1024)
+	bs := buildBytes(10 * 1024)
+	for i := 0; i < b.N; i++ {
+		EncodeGzip(bs)
+	}
+}
+
+func BenchmarkDecodeGzip(b *testing.B) {
+	bs := buildBytes(10 * 1024)
+	result, _ := EncodeGzip(bs)
+	for i := 0; i < b.N; i++ {
+		DecodeGzip(result)
+	}
+}
+
+func BenchmarkEncodeGzipConcurrent(b *testing.B) {
+	DefaultGzipLevel = gzip.BestSpeed
+	bs := buildBytes(10 * 1024)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			EncodeGzip(bs)
@@ -192,14 +210,42 @@ func BenchmarkEncodeGzip(b *testing.B) {
 	})
 }
 
-func BenchmarkDecodeGzip(b *testing.B) {
-	bs := buildBytes(100 * 1024)
+func BenchmarkDecodeGzipConcurrent(b *testing.B) {
+	bs := buildBytes(10 * 1024)
 	result, _ := EncodeGzip(bs)
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			DecodeGzip(result)
 		}
 	})
+}
+
+func TestConcurrentGzip(t *testing.T) {
+	size := 100
+	wg := sync.WaitGroup{}
+	wg.Add(size)
+	var count, errCount int64
+	datas := make([][]byte, size)
+	for i := 0; i < size; i++ {
+		datas[i] = buildBytes(10 * 1024)
+	}
+	for i := 0; i < size; i++ {
+		j := i
+		go func() {
+			temp, _ := EncodeGzip(datas[j])
+			nb, _ := DecodeGzip(temp)
+			if string(nb) != string(datas[j]) {
+				t.Errorf("concurrent gzip not correct.\n")
+				atomic.AddInt64(&errCount, 1)
+			} else {
+				atomic.AddInt64(&count, 1)
+
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	fmt.Printf("count:%v, errCount: %v\n", count, errCount)
 }
 
 func buildBytes(size int) []byte {

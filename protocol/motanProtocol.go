@@ -417,7 +417,9 @@ func EncodeGzip(data []byte) ([]byte, error) {
 			return nil, err
 		}
 		w.Close()
-		return buf.Bytes(), nil
+		ret := make([]byte, buf.Len())
+		copy(ret, buf.Bytes())
+		return ret, nil
 	}
 	return data, nil
 }
@@ -468,7 +470,9 @@ func DecodeGzip(data []byte) (ret []byte, err error) {
 		}()
 
 		_, err = buf.ReadFrom(r)
-		return buf.Bytes(), err
+		ret := make([]byte, buf.Len())
+		copy(ret, buf.Bytes())
+		return ret, err
 	}
 	return data, nil
 }
