@@ -197,26 +197,26 @@ func (c *Context) Initialize() {
 	c.parseHTTPClients()
 }
 
-func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, section string, root string, includeDir string, parsedHttpLocation map[string]bool) {
+func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, section string, root string, includeDir string, parsedHTTPLocation map[string]bool) {
 	is, err := parsingConfig.DIY(section)
 	if err != nil || is == nil {
 		return
 	}
-	isHttpLocation := section == importHTTPLocationSection
+	isHTTPLocation := section == importHTTPLocationSection
 	if li, ok := is.([]interface{}); ok {
 		for _, r := range li {
 			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + fileSuffix)
-			if isHttpLocation {
-				if parsedHttpLocation[r.(string)] {
+			if isHTTPLocation {
+				if parsedHTTPLocation[r.(string)] {
 					continue
 				} else {
-					parsedHttpLocation[r.(string)] = true
+					parsedHTTPLocation[r.(string)] = true
 				}
 			}
 			if err != nil || tempCfg == nil {
 				continue
 			}
-			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocationSection, root, httpLocationPath, parsedHttpLocation)
+			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocationSection, root, httpLocationPath, parsedHTTPLocation)
 			finalConfig.Merge(tempCfg)
 		}
 	}
@@ -234,7 +234,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		c.Merge(tempCfg)
 	}
 
-	parsedHttpLocation := make(map[string]bool)
+	parsedHTTPLocation := make(map[string]bool)
 
 	// application
 	poolPart := strings.Split(pool, poolNameSeparator)
@@ -247,7 +247,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 	httpService := path + httpServicePath + applicationName + fileSuffix
 	httpConfig, err := cfg.NewConfigFromFile(httpService)
 	if err == nil && httpConfig != nil {
-		importCfgIgnoreError(c, httpConfig, importHTTPLocationSection, path, httpLocationPath, parsedHttpLocation)
+		importCfgIgnoreError(c, httpConfig, importHTTPLocationSection, path, httpLocationPath, parsedHTTPLocation)
 		c.Merge(httpConfig)
 	}
 
@@ -255,7 +255,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 	if application != "" {
 		appConfig, err = cfg.NewConfigFromFile(application)
 		if err == nil && appConfig != nil {
-			importCfgIgnoreError(c, appConfig, importSection, path, servicePath, parsedHttpLocation)
+			importCfgIgnoreError(c, appConfig, importSection, path, servicePath, parsedHTTPLocation)
 			c.Merge(appConfig) // application config > service default config
 		}
 	}
