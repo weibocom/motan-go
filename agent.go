@@ -110,9 +110,9 @@ func (a *Agent) StartMotanAgent() {
 	a.initAgentURL()
 	a.initStatus()
 	a.initClusters()
+	a.startServerAgent()
 	a.initHTTPClusters()
 	a.startHTTPAgent()
-	a.startServerAgent()
 	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
 	go a.registerAgent()
@@ -517,6 +517,7 @@ func getClusterKey(group, version, protocol, path string) string {
 }
 
 func initLog(logdir string) {
+	// TODO: remove after a better handle
 	if logdir == "stdout" {
 		return
 	}

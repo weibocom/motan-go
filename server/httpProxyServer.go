@@ -35,6 +35,7 @@ type HTTPProxyServer struct {
 	httpClient    *fasthttp.Client
 	deny          []string
 	keepalive     bool
+	defaultDomain string
 }
 
 func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
@@ -46,6 +47,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 	os.Unsetenv("https_proxy")
 	s.clusterGetter = clusterGetter
 	s.keepalive, _ = strconv.ParseBool(s.url.GetParam("httpProxyKeepalive", "true"))
+	s.defaultDomain = s.url.GetParam("httpProxyDefaultDomain", "")
 	s.deny = append(s.deny, "127.0.0.1:"+s.url.GetPortStr())
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
@@ -109,7 +111,11 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		}
 
 		host, _, _ := net.SplitHostPort(hostAndPort)
-		if httpCluster := s.clusterGetter.GetHTTPCluster(host); httpCluster != nil {
+		httpCluster := s.clusterGetter.GetHTTPCluster(host)
+		if httpCluster == nil && s.defaultDomain != "" {
+			httpCluster = s.clusterGetter.GetHTTPCluster(s.defaultDomain)
+		}
+		if httpCluster != nil {
 			if service, ok := httpCluster.CanServe(string(ctx.Path())); ok {
 				s.doHTTPRpcProxy(ctx, httpCluster, service)
 				return
