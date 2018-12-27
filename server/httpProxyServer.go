@@ -210,6 +210,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 		vlog.Errorf("Deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetBodyString("err_msg: " + motanResponse.GetException().ErrMsg)
 		return
 	}
 	if reply[0] != nil {
