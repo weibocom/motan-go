@@ -208,40 +208,31 @@ func (c *Config) Merge(config *Config) {
 	}
 }
 
-// t & o should not nil
-func mergeMap(t map[interface{}]interface{}, o map[interface{}]interface{}) {
-	for k, v := range o {
-		if v != nil {
-			if tv, ok := t[k]; !ok || tv == nil {
-				t[k] = v
+// target & origin should not nil
+func mergeMap(target map[interface{}]interface{}, origin map[interface{}]interface{}) {
+	for originKey, originValue := range origin {
+		if originValue != nil {
+			if targetValue, ok := target[originKey]; !ok || targetValue == nil {
+				target[originKey] = originValue
 			} else {
-				tp := reflect.TypeOf(tv)
-				vtp := reflect.TypeOf(v)
-				if tp.Kind() == reflect.Map && vtp.Kind() == reflect.Map {
-					tvm, ok1 := tv.(map[interface{}]interface{})
-					vm, ok2 := v.(map[interface{}]interface{})
+				targetValueType := reflect.TypeOf(targetValue)
+				originValueType := reflect.TypeOf(originValue)
+				if targetValueType.Kind() == reflect.Map && originValueType.Kind() == reflect.Map {
+					targetValueMap, ok1 := targetValue.(map[interface{}]interface{})
+					originValueMap, ok2 := originValue.(map[interface{}]interface{})
 					if ok1 && ok2 {
-						mergeMap(tvm, vm)
+						mergeMap(targetValueMap, originValueMap)
 					}
-				} else if tp.Kind() == reflect.Slice && vtp.Kind() == reflect.Slice {
-					tvs, ok1 := tv.([]interface{})
-					vs, ok2 := v.([]interface{})
+				} else if targetValueType.Kind() == reflect.Slice && originValueType.Kind() == reflect.Slice {
+					targetValueSlice, ok1 := targetValue.([]interface{})
+					originValueSlice, ok2 := originValue.([]interface{})
 					if ok1 && ok2 {
-						mergeArray(&tvs, vs)
+						target[originKey] = append(targetValueSlice, originValueSlice...)
 					}
 				} else {
-					t[k] = v
+					target[originKey] = originValue
 				}
 			}
-		}
-	}
-}
-
-// only append in slice type
-func mergeArray(t *[]interface{}, o []interface{}) {
-	for _, v := range o {
-		if v != nil {
-			*t = append(*t, v)
 		}
 	}
 }
