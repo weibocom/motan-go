@@ -50,9 +50,7 @@ func PatternSplit(s string, pattern *regexp.Regexp) []string {
 	return strings
 }
 
-// ServiceDiscover discover which service to use
-type ServiceDiscover interface {
-	// DiscoverService  get the service(upstream) by http uri, return empty string if not found
+type URIConverter interface {
 	URIToServiceName(uri string) string
 }
 

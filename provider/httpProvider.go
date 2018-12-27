@@ -233,7 +233,9 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpReq.URI().SetPath(rewritePath)
 		httpReq.Header.Del("Connection")
 		httpReq.Header.Set("X-Forwarded-For", ip)
-		httpReq.BodyWriter().Write(bodyBytes)
+		if len(bodyBytes) != 0 {
+			httpReq.BodyWriter().Write(bodyBytes)
+		}
 		err := h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
 			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)

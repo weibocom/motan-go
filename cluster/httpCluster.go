@@ -61,7 +61,7 @@ func newClusterHolder(url *core.URL, context *core.Context, extFactory core.Exte
 type HTTPCluster struct {
 	url *core.URL
 	// for get the service from uri
-	serviceDiscover  http.ServiceDiscover
+	uriConverter     http.URIConverter
 	proxy            bool
 	upstreamClusters map[string]*clusterHolder
 	lock             sync.RWMutex
@@ -95,7 +95,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 		}
 	}
 	c.upstreamClusters = make(map[string]*clusterHolder, 16)
-	c.serviceDiscover = http.NewLocationMatcherFromContext(domain, context)
+	c.uriConverter = http.NewLocationMatcherFromContext(domain, context)
 	preload := core.TrimSplit(url.GetParam(HTTPProxyPreloadKey, ""), ",")
 	// TODO: find service by location then do warm up
 	for _, service := range preload {
@@ -108,7 +108,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 }
 
 func (c *HTTPCluster) CanServe(uri string) (string, bool) {
-	service := c.serviceDiscover.URIToServiceName(uri)
+	service := c.uriConverter.URIToServiceName(uri)
 	if service == "" {
 		return "", false
 	}
