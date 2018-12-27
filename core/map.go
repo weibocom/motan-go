@@ -113,6 +113,7 @@ func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
 func (m *CopyOnWriteMap) Store(key, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// TODO: fix race problem
 	copiedMap := make(map[interface{}]interface{}, len(m.innerMap)+1)
 	for k, v := range m.innerMap {
 		copiedMap[k] = v

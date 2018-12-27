@@ -262,7 +262,7 @@ func (h *DynamicConfigurerHandler) register(res http.ResponseWriter, req *http.R
 	}
 	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
 	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyURL(url)
+	h.agent.initProxyServiceURL(url)
 	err = h.agent.configurer.Register(url)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
@@ -279,7 +279,7 @@ func (h *DynamicConfigurerHandler) unregister(res http.ResponseWriter, req *http
 	}
 	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
 	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyURL(url)
+	h.agent.initProxyServiceURL(url)
 	err = h.agent.configurer.Unregister(url)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)

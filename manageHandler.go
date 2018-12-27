@@ -42,18 +42,12 @@ func (s *StatusHandler) SetAgent(agent *Agent) {
 func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
 	case "/200":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Available()
-			return true
-		})
+		s.a.availableAllServices()
 		s.a.status = http.StatusOK
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/503":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Unavailable()
-			return true
-		})
+		s.a.unavailableAllServices()
 		s.a.status = http.StatusServiceUnavailable
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))

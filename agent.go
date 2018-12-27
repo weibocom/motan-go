@@ -81,7 +81,7 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	return agent
 }
 
-func (a *Agent) initProxyURL(url *motan.URL) {
+func (a *Agent) initProxyServiceURL(url *motan.URL) {
 	export := url.GetParam(motan.ExportKey, "")
 	url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
 	url.Host = motan.GetLocalIP()
@@ -122,6 +122,10 @@ func (a *Agent) StartMotanAgent() {
 	} else {
 		defer f.Close()
 		f.WriteString(strconv.Itoa(os.Getpid()))
+	}
+	if a.status == http.StatusOK {
+		// recover form a unexpected case
+		a.availableAllServices()
 	}
 	vlog.Infoln("Motan agent is starting...")
 	a.startAgent()
@@ -421,9 +425,23 @@ func (a *agentMessageHandler) GetProvider(serviceName string) motan.Provider {
 func (a *Agent) startServerAgent() {
 	globalContext := a.Context
 	for _, url := range globalContext.ServiceURLs {
-		a.initProxyURL(url)
+		a.initProxyServiceURL(url)
 		a.doExportService(url)
 	}
+}
+
+func (a *Agent) availableAllServices() {
+	a.serviceRegistries.Range(func(k, v interface{}) bool {
+		v.(motan.Registry).Available(nil)
+		return true
+	})
+}
+
+func (a *Agent) unavailableAllServices() {
+	a.serviceRegistries.Range(func(k, v interface{}) bool {
+		v.(motan.Registry).Available(nil)
+		return true
+	})
 }
 
 func (a *Agent) doExportService(url *motan.URL) {
@@ -468,10 +486,6 @@ func (a *Agent) doExportService(url *motan.URL) {
 		if _, ok := a.serviceRegistries.Load(rid); !ok {
 			a.serviceRegistries.Store(rid, r)
 		}
-	}
-
-	if a.status == http.StatusOK {
-		exporter.Available()
 	}
 }
 

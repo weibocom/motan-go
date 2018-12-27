@@ -15,14 +15,15 @@ import (
 )
 
 var (
-	defaultChannelPoolSize     = 3
-	defaultRequestTimeout      = 1000 * time.Millisecond
-	defaultConnectTimeout      = 1000 * time.Millisecond
-	defaultKeepaliveInterval   = 10 * time.Second
-	defaultErrorCountThreshold = 10
-	ErrChannelShutdown         = fmt.Errorf("The channel has been shutdown")
-	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
-	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
+	defaultChannelPoolSize      = 3
+	defaultRequestTimeout       = 1000 * time.Millisecond
+	defaultConnectTimeout       = 1000 * time.Millisecond
+	defaultConnectRetryInterval = 60 * time.Second
+	defaultKeepaliveInterval    = 10 * time.Second
+	defaultErrorCountThreshold  = 10
+	ErrChannelShutdown          = fmt.Errorf("The channel has been shutdown")
+	ErrSendRequestTimeout       = fmt.Errorf("Timeout err: send request timeout")
+	ErrRecvRequestTimeout       = fmt.Errorf("Timeout err: receive request timeout")
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
@@ -30,14 +31,15 @@ var (
 )
 
 type MotanEndpoint struct {
-	url        *motan.URL
-	channels   *ChannelPool
-	destroyCh  chan struct{}
-	available  bool
-	errorCount uint32
-	proxy      bool
+	url            *motan.URL
+	channels       *ChannelPool
+	destroyCh      chan struct{}
+	available      bool
+	errorCount     uint32
+	errorThreshold int
+	proxy          bool
 
-	// for heartbeat requestid
+	// for heartbeat requestID
 	keepaliveID   uint64
 	serialization motan.Serialization
 }
@@ -56,7 +58,12 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 
 func (m *MotanEndpoint) Initialize() {
 	m.destroyCh = make(chan struct{}, 1)
-	connectTimeout := m.url.GetTimeDuration("connectTimeout", time.Millisecond, defaultConnectTimeout)
+	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
+	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
+	m.errorThreshold = int(m.url.GetIntValue(motan.ErrorThresholdKey, int64(defaultErrorCountThreshold)))
+	if m.errorThreshold < 0 {
+		m.errorThreshold = 0
+	}
 
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
@@ -67,7 +74,8 @@ func (m *MotanEndpoint) Initialize() {
 		// retry connect
 		go func() {
 			defer motan.HandlePanic(nil)
-			ticker := time.NewTicker(60 * time.Second)
+			// TODO: retry after 2^n * timeUnit
+			ticker := time.NewTicker(connectRetryInterval)
 			defer ticker.Stop()
 			for {
 				select {
@@ -174,7 +182,10 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(defaultErrorCountThreshold) {
+	if m.errorThreshold == 0 {
+		return
+	}
+	if errCount == uint32(m.errorThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 		go m.keepalive()
