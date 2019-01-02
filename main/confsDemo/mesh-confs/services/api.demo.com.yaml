@@ -1,0 +1,16 @@
+import-http-location:
+  - api.demo.com
+
+dynamic-param:
+  refer.i_api_weibo_com.group: "yf-api.demo.com"
+  refer.i_api_weibo_com.preload: ""
+
+http-client:
+  api.demo.com:
+    registry: direct-registry
+    domain: api.demo.com
+    group: api.demo.com
+    preload: test
+    serialization: simple
+    requestTimeout: 2000
+    protocol: motan2
