@@ -24,9 +24,8 @@ func runAgentDemo() {
 			if err != nil {
 				http.Error(writer, fmt.Sprint(err), http.StatusInternalServerError)
 				return
-			} else {
-				fmt.Println(string(rawRequestBytes))
 			}
+			fmt.Println(string(rawRequestBytes))
 		})
 		http.ListenAndServe(addr, handler)
 	}()

@@ -439,7 +439,7 @@ func (a *Agent) availableAllServices() {
 
 func (a *Agent) unavailableAllServices() {
 	a.serviceRegistries.Range(func(k, v interface{}) bool {
-		v.(motan.Registry).Available(nil)
+		v.(motan.Registry).Unavailable(nil)
 		return true
 	})
 }

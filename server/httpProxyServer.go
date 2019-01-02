@@ -201,6 +201,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 		vlog.Errorf("Http rpc proxy call failed: %s", motanResponse.GetException().ErrMsg)
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetBodyString("err_msg: " + motanResponse.GetException().ErrMsg)
 		return
 	}
 	// we need process deserialize here, maybe the httpCluster should initialize without proxy as a normal client
@@ -210,7 +211,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 		vlog.Errorf("Deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
-		ctx.Response.SetBodyString("err_msg: " + motanResponse.GetException().ErrMsg)
+		ctx.Response.SetBodyString("err_msg: " + err.Error())
 		return
 	}
 	if reply[0] != nil {
