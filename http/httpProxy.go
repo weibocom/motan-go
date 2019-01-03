@@ -87,10 +87,10 @@ func stringToProxyMatchType(s string) ProxyMatchType {
 }
 
 type ProxyLocation struct {
-	Upstream     string
-	Match        string
-	RewriteRules []string
-	Type         string
+	Upstream     string   `yaml:"upstream"`
+	Match        string   `yaml:"match"`
+	Type         string   `yaml:"type"`
+	RewriteRules []string `yaml:"rewriteRules"`
 
 	pattern      *regexp.Regexp
 	locationType ProxyMatchType
