@@ -53,18 +53,25 @@ func TestGetStatItem(t *testing.T) {
 	assert.Nil(t, si2, "clear not work")
 
 	// multi thread
-	size := 300
+	size := 50
 	sia := make([]StatItem, size, size)
+	var lock sync.Mutex
 	for i := 0; i < size; i++ {
 		j := i
 		go func() {
-			sia[j] = GetOrRegisterStatItem(group, service)
+			s := GetOrRegisterStatItem(group, service)
+			lock.Lock()
+			sia[j] = s
+			lock.Unlock()
 		}()
 	}
+
 	time.Sleep(10 * time.Millisecond)
+	lock.Lock()
 	for i := 0; i < size; i++ {
 		assert.True(t, sia[i] == sia[0], "multi thread GetOrRegisterStatItem")
 	}
+	lock.Unlock()
 }
 
 func TestNewDefaultStatItem(t *testing.T) {
@@ -127,9 +134,9 @@ func TestAddWriter(t *testing.T) {
 	AddHistograms(group, service, "h2", 200)
 
 	time.Sleep(210 * time.Millisecond)
-	assert.Equal(t, 1, len(w.snapshots), "writer snapshot size")
-	assert.Equal(t, group, w.snapshots[0].GetGroup(), "snapshot group")
-	assert.Equal(t, service, w.snapshots[0].GetService(), "snapshot group")
+	assert.Equal(t, 1, len(w.GetSanpshot()), "writer snapshot size")
+	assert.Equal(t, group, w.GetSanpshot()[0].GetGroup(), "snapshot group")
+	assert.Equal(t, service, w.GetSanpshot()[0].GetService(), "snapshot group")
 }
 
 func TestStat(t *testing.T) {
@@ -208,10 +215,19 @@ func TestStat(t *testing.T) {
 }
 
 type mockWriter struct {
+	lock      sync.RWMutex
 	snapshots []Snapshot
 }
 
 func (m *mockWriter) Write(snapshots []Snapshot) error {
+	m.lock.Lock()
 	m.snapshots = snapshots
+	m.lock.Unlock()
 	return nil
+}
+
+func (m *mockWriter) GetSanpshot() []Snapshot {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+	return m.snapshots
 }

@@ -3,7 +3,9 @@ package metrics
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/rcrowley/go-metrics"
 	motan "github.com/weibocom/motan-go/core"
@@ -113,7 +115,7 @@ func GetStatItem(group string, service string) StatItem {
 }
 
 func NewDefaultStatItem(group string, service string) StatItem {
-	return &DefaultStatItem{group: group, service: Escape(service), registry: metrics.NewRegistry(), isReport: true}
+	return &DefaultStatItem{group: group, service: Escape(service), holder: &RegistryHolder{registry: metrics.NewRegistry()}, isReport: true}
 }
 
 func RMStatItem(group string, service string) {
@@ -139,20 +141,20 @@ func ClearStatItems() {
 }
 
 func RangeAllStatItem(f func(k string, v StatItem) bool) {
-	if len(items) > 0 {
-		itemsLock.RLock()
-		defer itemsLock.RUnlock()
-		var b bool
-		for k, i := range items {
-			b = f(k, i)
-			if !b {
-				return
-			}
+	itemsLock.RLock()
+	defer itemsLock.RUnlock()
+	var b bool
+	for k, i := range items {
+		b = f(k, i)
+		if !b {
+			return
 		}
 	}
 }
 
 func StatItemSize() int {
+	itemsLock.RLock()
+	defer itemsLock.RUnlock()
 	return len(items)
 }
 
@@ -210,13 +212,21 @@ type event struct {
 	value   int64
 }
 
+type RegistryHolder struct {
+	registry metrics.Registry
+}
+
 type DefaultStatItem struct {
 	group        string
 	service      string
-	registry     metrics.Registry
+	holder       *RegistryHolder
 	isReport     bool
 	lastSnapshot Snapshot
 	lock         sync.Mutex
+}
+
+func (d *DefaultStatItem) getRegistry() metrics.Registry {
+	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
 }
 
 func (d *DefaultStatItem) SetService(service string) {
@@ -236,36 +246,37 @@ func (d *DefaultStatItem) GetGroup() string {
 }
 
 func (d *DefaultStatItem) AddCounter(key string, value int64) {
-	c := d.registry.Get(key)
+	c := d.getRegistry().Get(key)
 	if c == nil {
-		c = metrics.GetOrRegisterCounter(key, d.registry)
+		c = metrics.GetOrRegisterCounter(key, d.getRegistry())
 	}
 	c.(metrics.Counter).Inc(value)
 }
 
 func (d *DefaultStatItem) AddHistograms(key string, duration int64) {
-	h := d.registry.Get(key)
+	h := d.getRegistry().Get(key)
 	if h == nil {
-		h = metrics.GetOrRegisterHistogram(key, d.registry, metrics.NewExpDecaySample(1024, 0))
+		h = metrics.GetOrRegisterHistogram(key, d.getRegistry(), metrics.NewExpDecaySample(1024, 0))
 	}
 	h.(metrics.Histogram).Update(duration)
 }
 
 func (d *DefaultStatItem) Snapshot() Snapshot {
 	// TODO need real-time snapshot?
-	return d.lastSnapshot
+	return d.LastSnapshot()
 }
 
 func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	registry := d.registry
-	d.registry = metrics.NewRegistry()
-	d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, registry: registry}
+	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
+	d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, holder: (*RegistryHolder)(old)}
 	return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) LastSnapshot() Snapshot {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 	return d.lastSnapshot
 }
 
@@ -278,15 +289,15 @@ func (d *DefaultStatItem) IsReport() bool {
 }
 
 func (d *DefaultStatItem) Remove(key string) {
-	d.registry.Unregister(key)
+	d.getRegistry().Unregister(key)
 }
 
 func (d *DefaultStatItem) Clear() {
-	d.registry.UnregisterAll()
+	d.getRegistry().UnregisterAll()
 }
 
 func (d *DefaultStatItem) Count(key string) (i int64) {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if v != nil {
 		switch m := v.(type) {
 		case metrics.Counter:
@@ -299,7 +310,7 @@ func (d *DefaultStatItem) Count(key string) (i int64) {
 }
 
 func (d *DefaultStatItem) Sum(key string) int64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Sum()
 	}
@@ -307,7 +318,7 @@ func (d *DefaultStatItem) Sum(key string) int64 {
 }
 
 func (d *DefaultStatItem) Max(key string) int64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Max()
 	}
@@ -315,7 +326,7 @@ func (d *DefaultStatItem) Max(key string) int64 {
 }
 
 func (d *DefaultStatItem) Mean(key string) float64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Mean()
 	}
@@ -323,7 +334,7 @@ func (d *DefaultStatItem) Mean(key string) float64 {
 }
 
 func (d *DefaultStatItem) Min(key string) int64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Min()
 	}
@@ -347,7 +358,7 @@ func (d *DefaultStatItem) P999(key string) float64 {
 }
 
 func (d *DefaultStatItem) Percentile(key string, f float64) float64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Percentile(f)
 	}
@@ -356,7 +367,7 @@ func (d *DefaultStatItem) Percentile(key string, f float64) float64 {
 
 // Percentiles : return value is nil while key not exist
 func (d *DefaultStatItem) Percentiles(key string, f []float64) []float64 {
-	v := d.registry.Get(key)
+	v := d.getRegistry().Get(key)
 	if h, ok := v.(metrics.Histogram); ok {
 		return h.Percentiles(f)
 	}
@@ -364,18 +375,18 @@ func (d *DefaultStatItem) Percentiles(key string, f []float64) []float64 {
 }
 
 func (d *DefaultStatItem) RangeKey(f func(k string)) {
-	d.registry.Each(func(s string, i interface{}) {
+	d.getRegistry().Each(func(s string, i interface{}) {
 		f(s)
 	})
 }
 
 func (d *DefaultStatItem) IsHistogram(key string) bool {
-	_, ok := d.registry.Get(key).(metrics.Histogram)
+	_, ok := d.getRegistry().Get(key).(metrics.Histogram)
 	return ok
 }
 
 func (d *DefaultStatItem) IsCounter(key string) bool {
-	_, ok := d.registry.Get(key).(metrics.Counter)
+	_, ok := d.getRegistry().Get(key).(metrics.Counter)
 	return ok
 }
 
@@ -476,8 +487,9 @@ func (r *reporter) sink() {
 }
 
 func (r *reporter) snapshot() (snapshots []Snapshot) {
-	if len(items) > 0 {
-		snapshots = make([]Snapshot, 0, len(items))
+	l := StatItemSize()
+	if l > 0 {
+		snapshots = make([]Snapshot, 0, l)
 		RangeAllStatItem(func(k string, v StatItem) bool {
 			snapshots = append(snapshots, v.SnapshotAndClear())
 			return true
