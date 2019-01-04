@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	CircuitBreakerTimeoutField  = "circuitBreaker.timeout" //ms
 	RequestVolumeThresholdField = "circuitBreaker.requestThreshold"
 	SleepWindowField            = "circuitBreaker.sleepWindow"  //ms
 	ErrorPercentThreshold       = "circuitBreaker.errorPercent" //%
@@ -19,7 +18,6 @@ const (
 type CircuitBreakerFilter struct {
 	url            *motan.URL
 	next           motan.EndPointFilter
-	available      bool
 	circuitBreaker *hystrix.CircuitBreaker
 }
 
@@ -32,28 +30,24 @@ func (c *CircuitBreakerFilter) GetName() string {
 }
 
 func (c *CircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
-	available, circuitBreaker := newCircuitBreaker(url)
-	return &CircuitBreakerFilter{url: url, available: available, circuitBreaker: circuitBreaker}
+	circuitBreaker := newCircuitBreaker(c.GetName(), url)
+	return &CircuitBreakerFilter{url: url, circuitBreaker: circuitBreaker}
 }
 
 func (c *CircuitBreakerFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	var response motan.Response
-	if c.available {
-		_ = hystrix.Do(c.url.GetIdentity(), func() error {
-			response = c.GetNext().Filter(caller, request)
-			if ex := response.GetException(); ex != nil {
-				return errors.New(ex.ErrMsg)
-			}
-			return nil
-		}, func(err error) error {
-			if response == nil {
-				response = defaultErrMotanResponse(request, err.Error())
-			}
-			return err
-		})
-	} else {
+	_ = hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(caller, request)
-	}
+		if ex := response.GetException(); ex != nil {
+			return errors.New(ex.ErrMsg)
+		}
+		return nil
+	}, func(err error) error {
+		if response == nil {
+			response = defaultErrMotanResponse(request, err.Error())
+		}
+		return err
+	})
 	return response
 }
 
@@ -73,35 +67,38 @@ func (c *CircuitBreakerFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func newCircuitBreaker(url *motan.URL) (bool, *hystrix.CircuitBreaker) {
-	available := true
-	commandConfig := buildCommandConfig(url)
+func newCircuitBreaker(filterName string, url *motan.URL) *hystrix.CircuitBreaker {
+	commandConfig := buildCommandConfig(filterName, url)
 	hystrix.ConfigureCommand(url.GetIdentity(), *commandConfig)
-	circuitBreaker, _, err := hystrix.GetCircuit(url.GetIdentity())
-	if err != nil {
-		available = false
-		vlog.Errorf("[circuitBreaker] New circuit error: %s\n", err.Error())
-	} else {
-		vlog.Infof("[circuitBreaker] New circuit success. url:%v, config{%s}\n", url.GetIdentity(), getConfigStr(commandConfig))
-	}
-	return available, circuitBreaker
+	circuitBreaker, _, _ := hystrix.GetCircuit(url.GetIdentity())
+	vlog.Infof("[%s] new circuit success. url:%v, config{%s}\n", filterName, url.GetIdentity(), getConfigStr(commandConfig))
+	return circuitBreaker
 }
 
-func buildCommandConfig(url *motan.URL) *hystrix.CommandConfig {
+func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfig {
 	hystrix.DefaultMaxConcurrent = 1000
-	hystrix.DefaultTimeout = int(url.GetPositiveIntValue(motan.TimeOutKey, int64(hystrix.DefaultTimeout)))
+	hystrix.DefaultTimeout = int(url.GetPositiveIntValue(motan.TimeOutKey, int64(hystrix.DefaultTimeout))) * 2
 	commandConfig := &hystrix.CommandConfig{}
-	if v, ok := url.Parameters[CircuitBreakerTimeoutField]; ok {
-		commandConfig.Timeout, _ = strconv.Atoi(v)
-	}
 	if v, ok := url.Parameters[RequestVolumeThresholdField]; ok {
-		commandConfig.RequestVolumeThreshold, _ = strconv.Atoi(v)
+		if temp, _ := strconv.Atoi(v); temp > 0 {
+			commandConfig.RequestVolumeThreshold = temp
+		} else {
+			vlog.Warningf("[%s] parse config %s error, use default", filterName, RequestVolumeThresholdField)
+		}
 	}
 	if v, ok := url.Parameters[SleepWindowField]; ok {
-		commandConfig.SleepWindow, _ = strconv.Atoi(v)
+		if temp, _ := strconv.Atoi(v); temp > 0 {
+			commandConfig.SleepWindow = temp
+		} else {
+			vlog.Warningf("[%s] parse config %s error, use default", filterName, SleepWindowField)
+		}
 	}
 	if v, ok := url.Parameters[ErrorPercentThreshold]; ok {
-		commandConfig.ErrorPercentThreshold, _ = strconv.Atoi(v)
+		if temp, _ := strconv.Atoi(v); temp > 0 && temp <= 100 {
+			commandConfig.ErrorPercentThreshold = temp
+		} else {
+			vlog.Warningf("[%s] parse config %s error, use default", filterName, ErrorPercentThreshold)
+		}
 	}
 	return commandConfig
 }
@@ -122,17 +119,20 @@ func defaultErrMotanResponse(request motan.Request, errMsg string) motan.Respons
 
 func getConfigStr(config *hystrix.CommandConfig) string {
 	var ret string
-	if config.Timeout != 0 {
-		ret += "timeout:" + strconv.Itoa(config.Timeout) + " "
-	}
 	if config.RequestVolumeThreshold != 0 {
 		ret += "requestThreshold:" + strconv.Itoa(config.RequestVolumeThreshold) + " "
+	} else {
+		ret += "requestThreshold:" + strconv.Itoa(hystrix.DefaultVolumeThreshold) + " "
 	}
 	if config.SleepWindow != 0 {
 		ret += "sleepWindow:" + strconv.Itoa(config.SleepWindow) + " "
+	} else {
+		ret += "sleepWindow:" + strconv.Itoa(hystrix.DefaultSleepWindow) + " "
 	}
 	if config.ErrorPercentThreshold != 0 {
 		ret += "errorPercent:" + strconv.Itoa(config.ErrorPercentThreshold) + " "
+	} else {
+		ret += "errorPercent:" + strconv.Itoa(hystrix.DefaultErrorPercentThreshold) + " "
 	}
 	return ret
 }

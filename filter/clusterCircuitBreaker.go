@@ -9,7 +9,6 @@ import (
 type ClusterCircuitBreakerFilter struct {
 	url            *motan.URL
 	next           motan.ClusterFilter
-	available      bool
 	circuitBreaker *hystrix.CircuitBreaker
 }
 
@@ -18,28 +17,24 @@ func (c *ClusterCircuitBreakerFilter) GetIndex() int {
 }
 
 func (c *ClusterCircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
-	available, circuitBreaker := newCircuitBreaker(url)
-	return &ClusterCircuitBreakerFilter{url: url, available: available, circuitBreaker: circuitBreaker}
+	circuitBreaker := newCircuitBreaker(c.GetName(), url)
+	return &ClusterCircuitBreakerFilter{url: url, circuitBreaker: circuitBreaker}
 }
 
 func (c *ClusterCircuitBreakerFilter) Filter(ha motan.HaStrategy, lb motan.LoadBalance, request motan.Request) motan.Response {
 	var response motan.Response
-	if c.available {
-		_ = hystrix.Do(c.url.GetIdentity(), func() error {
-			response = c.GetNext().Filter(ha, lb, request)
-			if ex := response.GetException(); ex != nil {
-				return errors.New(ex.ErrMsg)
-			}
-			return nil
-		}, func(err error) error {
-			if response == nil {
-				response = defaultErrMotanResponse(request, err.Error())
-			}
-			return err
-		})
-	} else {
+	_ = hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(ha, lb, request)
-	}
+		if ex := response.GetException(); ex != nil {
+			return errors.New(ex.ErrMsg)
+		}
+		return nil
+	}, func(err error) error {
+		if response == nil {
+			response = defaultErrMotanResponse(request, err.Error())
+		}
+		return err
+	})
 	return response
 }
 

@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 )
 
 var (
-	count           = 0
+	count           = int64(0)
 	filterSleepTime = 7 * time.Millisecond
 )
 
@@ -25,9 +26,9 @@ func TestAccessLogEndPointFilter(t *testing.T) {
 	request := &core.MotanRequest{Method: "testMethod"}
 
 	//Test NewFilter
-	param := map[string]string{CircuitBreakerTimeoutField: "5", SleepWindowField: "300"}
+	param := map[string]string{core.TimeOutKey: "2", SleepWindowField: "300"}
 	filterURL := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
-	f := defaultExtFactory.GetFilter("circuitBreaker")
+	f := defaultExtFactory.GetFilter(CircuitBreaker)
 	if f == nil {
 		t.Error("Can not find circuitBreaker filter!")
 	}
@@ -82,7 +83,7 @@ func (m *mockEndPointFilter) NewFilter(url *core.URL) core.Filter {
 }
 
 func (m *mockEndPointFilter) Filter(caller core.Caller, request core.Request) core.Response {
-	count++
+	atomic.AddInt64(&count, 1)
 	time.Sleep(filterSleepTime)
 	return caller.Call(request)
 }
