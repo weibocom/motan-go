@@ -36,18 +36,16 @@ func (c *CircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
 
 func (c *CircuitBreakerFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	var response motan.Response
-	_ = hystrix.Do(c.url.GetIdentity(), func() error {
+	err := hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(caller, request)
 		if ex := response.GetException(); ex != nil {
 			return errors.New(ex.ErrMsg)
 		}
 		return nil
-	}, func(err error) error {
-		if response == nil {
-			response = defaultErrMotanResponse(request, err.Error())
-		}
-		return err
-	})
+	}, nil)
+	if err != nil {
+		return defaultErrMotanResponse(request, err.Error())
+	}
 	return response
 }
 

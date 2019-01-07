@@ -35,7 +35,7 @@ func TestRateLimitFilter(t *testing.T) {
 		ef.Filter(caller, request)
 	}
 	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
-		t.Error("Test serviceFilter failed!")
+		t.Error("Test serviceFilter failed! elapsed1:", elapsed1)
 	}
 
 	//Test methodFilter
@@ -48,7 +48,7 @@ func TestRateLimitFilter(t *testing.T) {
 		ef.Filter(caller, request)
 	}
 	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
-		t.Error("Test methodFilter failed!")
+		t.Error("Test methodFilter failed! elapsed1:", elapsed1)
 	}
 
 	//Test switcher
@@ -62,6 +62,6 @@ func TestRateLimitFilter(t *testing.T) {
 		ef.Filter(caller, request)
 	}
 	if elapsed1 := time.Since(startTime); elapsed1 > time.Second {
-		t.Error("Test switcher failed!")
+		t.Error("Test switcher failed! elapsed:", elapsed1)
 	}
 }

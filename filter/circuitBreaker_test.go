@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,11 +12,13 @@ import (
 )
 
 var (
-	count           = int64(0)
-	filterSleepTime = 7 * time.Millisecond
+	count               = int64(0)
+	countLock           sync.RWMutex
+	filterSleepTime     = 7 * time.Millisecond
+	filterSleepTimeLock sync.RWMutex
 )
 
-func TestAccessLogEndPointFilter(t *testing.T) {
+func TestCircuitBreakerFilter(t *testing.T) {
 	//Init
 	defaultExtFactory := &core.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
@@ -41,9 +44,11 @@ func TestAccessLogEndPointFilter(t *testing.T) {
 		ef.Filter(caller, request)
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
+	countLock.RLock()
 	if count != 20 {
 		t.Error("Test circuitBreakerTimeout failed! count:", count)
 	}
+	countLock.RUnlock()
 
 	//Test sleepWindow
 	time.Sleep(350 * time.Millisecond) //wait until SleepWindowField
@@ -51,25 +56,33 @@ func TestAccessLogEndPointFilter(t *testing.T) {
 		ef.Filter(caller, request)
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
+	countLock.RLock()
 	if count != 21 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
+	countLock.RUnlock()
 
 	//Test errorPercentThreshold
 	time.Sleep(350 * time.Millisecond) //wait until SleepWindowField
+	filterSleepTimeLock.Lock()
 	filterSleepTime = 0 * time.Millisecond
+	filterSleepTimeLock.Unlock()
 	for i := 0; i < 100; i++ {
 		ef.Filter(caller, request)
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
+	filterSleepTimeLock.Lock()
 	filterSleepTime = 7 * time.Millisecond
+	filterSleepTimeLock.Unlock()
 	for i := 0; i < 50; i++ {
 		ef.Filter(caller, request)
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
+	countLock.RLock()
 	if count != 171 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
+	countLock.RUnlock()
 }
 
 type mockEndPointFilter struct{}
@@ -83,8 +96,12 @@ func (m *mockEndPointFilter) NewFilter(url *core.URL) core.Filter {
 }
 
 func (m *mockEndPointFilter) Filter(caller core.Caller, request core.Request) core.Response {
+	countLock.Lock()
 	atomic.AddInt64(&count, 1)
+	countLock.Unlock()
+	filterSleepTimeLock.RLock()
 	time.Sleep(filterSleepTime)
+	filterSleepTimeLock.RUnlock()
 	return caller.Call(request)
 }
 
