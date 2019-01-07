@@ -120,10 +120,10 @@ func newRewriteRule(rule string) (*rewriteRule, error) {
 	if strings.HasPrefix(matchTypeString, "!") {
 		r.not = true
 		matchTypeString = matchTypeString[1:]
-		r.condType = stringToProxyMatchType(matchTypeString)
-		if r.condType == proxyMatchTypeUnknown {
-			return nil, errors.New("unsupported condition type " + args[0])
-		}
+	}
+	r.condType = stringToProxyMatchType(matchTypeString)
+	if r.condType == proxyMatchTypeUnknown {
+		return nil, errors.New("unsupported condition type " + args[0])
 	}
 	r.condString = args[1]
 	if r.condType == proxyMatchTypeRegexp {
