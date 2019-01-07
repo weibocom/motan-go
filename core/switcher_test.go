@@ -1,36 +1,26 @@
 package core
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
 
-var (
-	notifyA  = false
-	notifyB  = false
-	notifyBB = false
-
-	lisA  = &switcherA{}
-	lisB  = &switcherB{}
-	lisBB = &switcherBB{}
-)
-
-type switcherA struct{}
-
-func (*switcherA) Notify(value bool) {
-	notifyA = true
+type listener struct {
+	notified bool
+	lock     sync.Mutex
 }
 
-type switcherB struct{}
-
-func (*switcherB) Notify(value bool) {
-	notifyB = true
+func (l *listener) Notify(value bool) {
+	l.lock.Lock()
+	l.notified = true
+	l.lock.Unlock()
 }
 
-type switcherBB struct{}
-
-func (*switcherBB) Notify(value bool) {
-	notifyBB = true
+func (l *listener) IsNotified() bool {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	return l.notified
 }
 
 func TestSwitcher(t *testing.T) {
@@ -38,12 +28,12 @@ func TestSwitcher(t *testing.T) {
 	if s == nil {
 		t.Error("GetSwitcherManager fail")
 	}
-
+	la, lb, lc := &listener{}, &listener{}, &listener{}
 	s.Register("aaa", true)
-	s.Register("bbb", true, lisB)
-	if switcherA := s.GetSwitcher("aaa"); switcherA != nil {
-		if switcherA.GetName() != "aaa" {
-			t.Error("GetName error, origin: aaa, return:", switcherA.GetName())
+	s.Register("bbb", true, lb)
+	if switcher := s.GetSwitcher("aaa"); switcher != nil {
+		if switcher.GetName() != "aaa" {
+			t.Error("GetName error, origin: aaa, return:", switcher.GetName())
 		}
 	} else {
 		t.Error("GetSwitcher failed")
@@ -53,12 +43,12 @@ func TestSwitcher(t *testing.T) {
 		t.Error("check IsOpen failed")
 	}
 
-	s.GetSwitcher("aaa").Watch(lisA)
-	s.GetSwitcher("bbb").Watch(lisBB)
+	s.GetSwitcher("aaa").Watch(la)
+	s.GetSwitcher("bbb").Watch(lc)
 	s.GetSwitcher("aaa").SetValue(false)
 	s.GetSwitcher("bbb").SetValue(false)
 	time.Sleep(200 * time.Millisecond) //wait notify
-	if notifyA != true || notifyB != true || notifyBB != true {
+	if !la.IsNotified() || !lb.IsNotified() || !lc.IsNotified() {
 		t.Error("watch failed")
 	}
 
