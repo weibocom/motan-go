@@ -152,6 +152,9 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	recvMsg.Header.SetProxy(m.proxy)
 	recvMsg.Header.RequestID = request.GetRequestID()
 	response, err := mpro.ConvertToResponse(recvMsg, m.serialization)
+	if rc.Tc != nil {
+		rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
+	}
 	if err != nil {
 		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
