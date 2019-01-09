@@ -162,7 +162,11 @@ func (r *rewriteRule) rewrite(uri string) (string, bool) {
 		ruleMatched = !ruleMatched
 	}
 	if ruleMatched {
-		return string(r.pattern.ExpandString(nil, r.replace, uri, r.pattern.FindStringSubmatchIndex(uri))), true
+		matchedIndex := r.pattern.FindStringSubmatchIndex(uri)
+		if matchedIndex == nil {
+			return uri, false
+		}
+		return string(r.pattern.ExpandString(nil, r.replace, uri, matchedIndex)), true
 	}
 	return uri, false
 }
