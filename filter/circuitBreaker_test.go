@@ -45,7 +45,7 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
-	if count != 20 {
+	if count != 20 && count != 21 {
 		t.Error("Test circuitBreakerTimeout failed! count:", count)
 	}
 	countLock.RUnlock()
@@ -57,7 +57,7 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
-	if count != 21 {
+	if count != 21 && count != 22 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
 	countLock.RUnlock()
@@ -79,7 +79,7 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	}
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
-	if count != 171 {
+	if count != 171 && count != 172 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
 	countLock.RUnlock()

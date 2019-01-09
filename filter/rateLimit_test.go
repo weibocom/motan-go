@@ -31,7 +31,7 @@ func TestRateLimitFilter(t *testing.T) {
 
 	//Test serviceFilter
 	startTime := time.Now()
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < 1010; i++ {
 		ef.Filter(caller, request)
 	}
 	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
@@ -44,7 +44,7 @@ func TestRateLimitFilter(t *testing.T) {
 	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 	startTime = time.Now()
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < 1010; i++ {
 		ef.Filter(caller, request)
 	}
 	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
