@@ -411,7 +411,7 @@ func (a *Agent) doExportService(url *motan.URL) {
 	}
 
 	a.serviceExporters.Store(url.GetIdentity(), exporter)
-	vlog.Infof("service export success. url:%s\n", url.GetIdentity())
+	vlog.Infof("service export success. url:%v\n", url)
 	for _, r := range exporter.Registries {
 		rid := r.GetURL().GetIdentity()
 		if _, ok := a.serviceRegistries.Load(rid); !ok {

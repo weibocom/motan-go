@@ -19,7 +19,7 @@ var (
 	defaultRequestTimeout      = 1000 * time.Millisecond
 	defaultConnectTimeout      = 1000 * time.Millisecond
 	defaultKeepaliveInterval   = 10 * time.Second
-	DefaultErrorCountThreshold = 10
+	defaultErrorCountThreshold = 10
 	ErrChannelShutdown         = fmt.Errorf("The channel has been shutdown")
 	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
 	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
@@ -177,7 +177,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(DefaultErrorCountThreshold) {
+	if errCount == uint32(defaultErrorCountThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 		go m.keepalive()

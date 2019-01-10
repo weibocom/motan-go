@@ -55,7 +55,7 @@ type Context struct {
 
 var (
 	// default config file and path
-	DefaultConfigFile = "./motan.yaml"
+	defaultConfigFile = "./motan.yaml"
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
@@ -144,7 +144,7 @@ func (c *Context) Initialize() {
 		}
 	} else { // parse single config file and dynamic file
 		if c.ConfigFile == "" {
-			c.ConfigFile = DefaultConfigFile
+			c.ConfigFile = defaultConfigFile
 		}
 		if cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile); err != nil {
 			fmt.Printf("parse config fail. err:%s\n", err.Error())

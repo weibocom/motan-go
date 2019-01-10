@@ -60,7 +60,7 @@ const (
 	Convert       = "convert"
 	ClFilter      = "clusterFilter"
 	EpFilterStart = "selectEp"
-	EpFilterEnd   = "epFilter"
+	EpFilterEnd   = "endpointFilter"
 	Encode        = "encode"
 	Send          = "send"
 )

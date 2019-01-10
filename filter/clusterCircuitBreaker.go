@@ -2,6 +2,7 @@ package filter
 
 import (
 	"errors"
+
 	"github.com/afex/hystrix-go/hystrix"
 	motan "github.com/weibocom/motan-go/core"
 )
@@ -23,18 +24,16 @@ func (c *ClusterCircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
 
 func (c *ClusterCircuitBreakerFilter) Filter(ha motan.HaStrategy, lb motan.LoadBalance, request motan.Request) motan.Response {
 	var response motan.Response
-	_ = hystrix.Do(c.url.GetIdentity(), func() error {
+	err := hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(ha, lb, request)
 		if ex := response.GetException(); ex != nil {
 			return errors.New(ex.ErrMsg)
 		}
 		return nil
-	}, func(err error) error {
-		if response == nil {
-			response = defaultErrMotanResponse(request, err.Error())
-		}
-		return err
-	})
+	}, nil)
+	if err != nil {
+		return defaultErrMotanResponse(request, err.Error())
+	}
 	return response
 }
 

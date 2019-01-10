@@ -110,7 +110,6 @@ func defaultErrMotanResponse(request motan.Request, errMsg string) motan.Respons
 			ErrCode: 400,
 			ErrMsg:  errMsg,
 			ErrType: motan.ServiceException},
-		Value: make([]byte, 0),
 	}
 	return response
 }

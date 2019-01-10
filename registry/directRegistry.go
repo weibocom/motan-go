@@ -45,7 +45,7 @@ func (d *DirectRegistry) Discover(url *motan.URL) []*motan.URL {
 	return result
 }
 func (d *DirectRegistry) Register(serverURL *motan.URL) {
-	vlog.Infof("direct registry:register url :%s\n", serverURL.GetIdentity())
+	vlog.Infof("direct registry:register url :%+v\n", serverURL)
 }
 func (d *DirectRegistry) UnRegister(serverURL *motan.URL) {
 
