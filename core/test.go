@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -162,7 +163,9 @@ func (t *TestLoadBalance) SetWeight(weight string) {
 }
 
 type TestRegistry struct {
-	URL *URL
+	URL           *URL
+	GroupService  map[string][]string
+	DiscoverError bool
 }
 
 func (t *TestRegistry) GetName() string {
@@ -205,4 +208,22 @@ func (t *TestRegistry) InitRegistry() {
 
 }
 func (t *TestRegistry) StartSnapshot(conf *SnapshotConf) {
+}
+
+func (t *TestRegistry) DiscoverAllServices(group string) ([]string, error) {
+	if t.DiscoverError {
+		return nil, errors.New("service discover error")
+	}
+	return t.GroupService[group], nil
+}
+
+func (t *TestRegistry) DiscoverAllGroups() ([]string, error) {
+	if t.DiscoverError {
+		return nil, errors.New("group discover error")
+	}
+	groups := make([]string, 0, len(t.GroupService))
+	for k, _ := range t.GroupService {
+		groups = append(groups, k)
+	}
+	return groups, nil
 }

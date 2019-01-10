@@ -133,7 +133,7 @@ func TestAddWriter(t *testing.T) {
 	AddHistograms(group, service, "h1", 100)
 	AddHistograms(group, service, "h2", 200)
 
-	time.Sleep(210 * time.Millisecond)
+	time.Sleep(250 * time.Millisecond)
 	assert.Equal(t, 1, len(w.GetSanpshot()), "writer snapshot size")
 	assert.Equal(t, group, w.GetSanpshot()[0].GetGroup(), "snapshot group")
 	assert.Equal(t, service, w.GetSanpshot()[0].GetService(), "snapshot group")

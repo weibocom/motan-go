@@ -910,13 +910,33 @@ func (f *FilterEndPoint) IsAvailable() bool {
 	return f.Caller.IsAvailable()
 }
 
-var globalRegistryGroupCache = registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
-
 type registryGroupCacheInfo struct {
 	gr          GroupDiscoverableRegistry
-	lastUpdTime time.Time
-	groups      []string
+	lastUpdTime atomic.Value //time.Time
+	groups      atomic.Value //[]string
 	lock        sync.Mutex
+}
+
+func newRegistryGroupCacheInfo(gr GroupDiscoverableRegistry) *registryGroupCacheInfo {
+	c := &registryGroupCacheInfo{gr: gr}
+	c.lastUpdTime.Store(time.Time{})
+	c.groups.Store([]string(nil))
+	return c
+
+}
+
+func (c *registryGroupCacheInfo) getGroups() []string {
+	if time.Now().Sub(c.lastUpdTime.Load().(time.Time)) > registryGroupInfoMaxCacheTime {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		groups, err := c.gr.DiscoverAllGroups()
+		if err != nil {
+			return c.groups.Load().([]string)
+		}
+		c.groups.Store(groups)
+		c.lastUpdTime.Store(time.Now())
+	}
+	return c.groups.Load().([]string)
 }
 
 type registryGroupCache struct {
@@ -924,54 +944,43 @@ type registryGroupCache struct {
 	lock         sync.Mutex
 }
 
-func (c *registryGroupCacheInfo) getGroups() []string {
-	if time.Now().Sub(c.lastUpdTime) > registryGroupInfoMaxCacheTime {
-		c.lock.Lock()
-		defer c.lock.Unlock()
-		groups, err := c.gr.DiscoverAllGroups()
-		if err != nil {
-			return c.groups
-		}
-		c.lastUpdTime = time.Now()
-		c.groups = groups
-	}
-	return c.groups
-}
-
 func (rc *registryGroupCache) getGroups(gr GroupDiscoverableRegistry) []string {
 	key := gr.GetURL().GetIdentity()
 	rc.lock.Lock()
 	cacheInfo := rc.cachedGroups[key]
 	if cacheInfo == nil {
-		cacheInfo = &registryGroupCacheInfo{gr: gr}
+		cacheInfo = newRegistryGroupCacheInfo(gr)
 		rc.cachedGroups[key] = cacheInfo
 	}
 	rc.lock.Unlock()
 	return cacheInfo.getGroups()
 }
 
+var globalRegistryGroupCache = registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
+
 func GetAllGroups(gr GroupDiscoverableRegistry) []string {
 	return globalRegistryGroupCache.getGroups(gr)
 }
 
-var globalRegistryGroupServiceCache registryGroupServiceCache
-
 type registryGroupServiceCacheInfo struct {
 	sr          ServiceDiscoverableRegistry
 	group       string
-	lastUpdTime time.Time
+	lastUpdTime atomic.Value // time.Time
 	services    atomic.Value // []string
 	serviceMap  atomic.Value // map[string]string
 	lock        sync.Mutex
 }
 
-type registryGroupServiceCache struct {
-	cachedInfos sync.Map
-	lock        sync.Mutex
+func newRegistryGroupServiceCacheInfo(sr ServiceDiscoverableRegistry, group string) *registryGroupServiceCacheInfo {
+	c := &registryGroupServiceCacheInfo{sr: sr, group: group}
+	c.services.Store([]string(nil))
+	c.serviceMap.Store(map[string]string(nil))
+	c.lastUpdTime.Store(time.Time{})
+	return c
 }
 
 func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]string) {
-	if time.Now().Sub(c.lastUpdTime) >= registryGroupServiceInfoMaxCacheTime {
+	if time.Now().Sub(c.lastUpdTime.Load().(time.Time)) >= registryGroupServiceInfoMaxCacheTime {
 		select {
 		case refreshTaskPool <- taskHandler(func() { c.refreshServices() }):
 		default:
@@ -985,20 +994,25 @@ func (c *registryGroupServiceCacheInfo) refreshServices() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	// TODO: maybe we just need refresh services at startup
-	if time.Now().Sub(c.lastUpdTime) < registryGroupServiceInfoMaxCacheTime {
+	if time.Now().Sub(c.lastUpdTime.Load().(time.Time)) < registryGroupServiceInfoMaxCacheTime {
 		return
 	}
 	services, err := c.sr.DiscoverAllServices(c.group)
 	if err != nil {
 		return
 	}
-	c.lastUpdTime = time.Now()
 	c.services.Store(services)
 	serviceMap := make(map[string]string, len(services))
 	for _, service := range services {
 		serviceMap[service] = service
 	}
 	c.serviceMap.Store(serviceMap)
+	c.lastUpdTime.Store(time.Now())
+}
+
+type registryGroupServiceCache struct {
+	cachedInfos sync.Map
+	lock        sync.Mutex
 }
 
 func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry, group string) ([]string, map[string]string) {
@@ -1010,9 +1024,7 @@ func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry,
 		defer rc.lock.Unlock()
 		cacheInfo, ok = rc.cachedInfos.Load(key)
 		if !ok {
-			serviceCacheInfo := &registryGroupServiceCacheInfo{sr: sr, group: group}
-			serviceCacheInfo.services.Store(make([]string, 0, 1))
-			serviceCacheInfo.serviceMap.Store(make(map[string]string))
+			serviceCacheInfo := newRegistryGroupServiceCacheInfo(sr, group)
 			serviceCacheInfo.refreshServices()
 			rc.cachedInfos.Store(key, serviceCacheInfo)
 			cacheInfo = serviceCacheInfo
@@ -1020,6 +1032,8 @@ func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry,
 	}
 	return cacheInfo.(*registryGroupServiceCacheInfo).getServices()
 }
+
+var globalRegistryGroupServiceCache registryGroupServiceCache
 
 func ServiceInGroup(sr ServiceDiscoverableRegistry, group string, service string) bool {
 	_, serviceMap := globalRegistryGroupServiceCache.getServices(sr, group)

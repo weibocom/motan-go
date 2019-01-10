@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -67,32 +66,70 @@ func TestMotanRequest_Clone(t *testing.T) {
 	}
 }
 
+func TestGetAllGroups(t *testing.T) {
+	registry := newMockRegistry()
+	discoverErrorRegistry := newDiscoverErrorRegistry()
+	assert.Equal(t, GetAllGroups(registry)[0], "testGroup")
+	assert.True(t, len(GetAllGroups(discoverErrorRegistry)) == 0)
+}
+
+func TestGetAllGroupsParallel(t *testing.T) {
+	registry := newMockRegistry()
+	goNum := 5
+	wg := &sync.WaitGroup{}
+	wg.Add(goNum)
+	for i := 0; i < goNum; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				assert.Equal(t, GetAllGroups(registry)[0], "testGroup")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
 func TestServiceInGroup(t *testing.T) {
-	registry := &mockRegistry{}
-	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	registry := newMockRegistry()
 	assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
 	assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+	discoverErrorRegistry := newDiscoverErrorRegistry()
+	assert.False(t, ServiceInGroup(discoverErrorRegistry, "testGroup", "testService"))
 }
 
 func TestServiceInGroupParallel(t *testing.T) {
-	registry := &mockRegistry{}
-	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
-	registryGroupServiceInfoMaxCacheTime = 10 * time.Millisecond
-	for i := 0; i < 10000; i++ {
-		assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
-		assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+	registry := newMockRegistry()
+	goNum := 5
+	wg := &sync.WaitGroup{}
+	wg.Add(goNum)
+	for i := 0; i < 5; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
+				assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+			}
+		}()
 	}
+	wg.Wait()
 }
 
 func BenchmarkServiceInGroup(b *testing.B) {
-	registry := &mockRegistry{}
-	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	registry := newMockRegistry()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			ServiceInGroup(registry, "testGroup", "testService")
 		}
 	})
+}
 
+func BenchmarkGetAllGroups(b *testing.B) {
+	registry := newMockRegistry()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			GetAllGroups(registry)
+		}
+	})
 }
 
 func newHa(url *URL) HaStrategy {
@@ -131,62 +168,18 @@ func newSerial() Serialization {
 	return nil
 }
 
-type mockRegistry struct {
-	url *URL
+func newMockRegistry() *TestRegistry {
+	registry := &TestRegistry{}
+	registry.URL = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	registry.URL.GetIdentity()
+	registry.GroupService = map[string][]string{"testGroup": {"testService"}}
+	return registry
 }
 
-func (r *mockRegistry) GetName() string {
-	return "mockRegistry"
-}
-
-func (r *mockRegistry) GetURL() *URL {
-	return r.url
-}
-
-func (r *mockRegistry) SetURL(url *URL) {
-	r.url = url
-}
-
-func (r *mockRegistry) Subscribe(url *URL, listener NotifyListener) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) Unsubscribe(url *URL, listener NotifyListener) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) Discover(url *URL) []*URL {
-	panic("implement me")
-}
-
-func (r *mockRegistry) Register(serverURL *URL) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) UnRegister(serverURL *URL) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) Available(serverURL *URL) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) Unavailable(serverURL *URL) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) GetRegisteredServices() []*URL {
-	panic("implement me")
-}
-
-func (r *mockRegistry) StartSnapshot(conf *SnapshotConf) {
-	panic("implement me")
-}
-
-func (r *mockRegistry) DiscoverAllServices(group string) ([]string, error) {
-	return []string{"testService"}, nil
-}
-
-func (r *mockRegistry) DiscoverAllGroups() ([]string, error) {
-	return []string{"testService"}, nil
+func newDiscoverErrorRegistry() *TestRegistry {
+	registry := newMockRegistry()
+	registry.URL = &URL{Protocol: "mockDiscoverError", Host: "testHost", Port: 0}
+	registry.URL.GetIdentity()
+	registry.DiscoverError = true
+	return registry
 }

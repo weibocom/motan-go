@@ -46,7 +46,7 @@ http-locations:
       type: start
       upstream: test2
 
-    - match: /test3/*
+    - match: ^/test3/.*
       type: regexp
       upstream: test3
 

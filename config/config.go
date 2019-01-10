@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -18,24 +20,34 @@ type Config struct {
 	rex          *regexp.Regexp
 }
 
+// NewConfigFromReader parse config from a reader
+func NewConfigFromReader(r io.Reader) (*Config, error) {
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.New("read config data failed: " + err.Error())
+	}
+	m := make(map[interface{}]interface{})
+	err = yaml.Unmarshal([]byte(data), &m)
+	if err != nil {
+		fmt.Printf("config unmarshal failed. " + err.Error())
+		return nil, errors.New("config unmarshal failed: " + err.Error())
+	}
+	return &Config{conf: m}, nil
+}
+
 // NewConfigFromFile parse config from file.
 func NewConfigFromFile(path string) (*Config, error) {
 	filename, err := filepath.Abs(path)
 	if err != nil {
 		return nil, errors.New("can not find the file :" + filename)
 	}
-	data, err := ioutil.ReadFile(filename)
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil, errors.New("read config file fail. " + err.Error())
 	}
+	defer f.Close()
 	fmt.Printf("start parse config path:%s \n", path)
-	m := make(map[interface{}]interface{})
-	err = yaml.Unmarshal([]byte(data), &m)
-	if err != nil {
-		fmt.Printf("config unmarshal failed. " + err.Error())
-		return nil, errors.New("config unmarshal failed. " + err.Error())
-	}
-	return &Config{conf: m}, nil
+	return NewConfigFromReader(f)
 }
 
 // ParseBool accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,

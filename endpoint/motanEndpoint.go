@@ -308,7 +308,7 @@ type Stream struct {
 	deadline time.Time
 
 	rc          *motan.RPCContext
-	isClose     bool
+	isClose     atomic.Value // bool
 	isHeartBeat bool
 }
 
@@ -408,6 +408,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		deadline:     time.Now().Add(1 * time.Second),
 		rc:           rc,
 	}
+	s.isClose.Store(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
 	if msg.Header.IsHeartbeat() {
@@ -424,7 +425,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 }
 
 func (s *Stream) Close() {
-	if !s.isClose {
+	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
@@ -434,7 +435,7 @@ func (s *Stream) Close() {
 			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose = true
+		s.isClose.Store(true)
 	}
 }
 
