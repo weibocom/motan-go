@@ -839,9 +839,15 @@ func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 
 func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
 	if request.GetRPCContext(true).Tc != nil {
+		// clusterFilter end
 		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: ClustFliter, Time: time.Now()})
 	}
-	return haStrategy.Call(request, loadBalance)
+	response := haStrategy.Call(request, loadBalance)
+	if request.GetRPCContext(true).Tc != nil {
+		// endpointFilter end
+		request.GetRPCContext(true).Tc.PutResSpan(&Span{Name: EpFilterEnd, Time: time.Now()})
+	}
+	return response
 }
 
 func (l *lastClusterFilter) HasNext() bool {

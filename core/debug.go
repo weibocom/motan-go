@@ -67,9 +67,9 @@ func (t *traceHolder) newTrace(rid uint64) *TraceContext {
 type TraceContext struct {
 	Rid      uint64                 `json:"requestid"`
 	Addr     string                 `json:"address"`
+	Values   map[string]interface{} `json:"values"`
 	ReqSpans []*Span                `json:"request_spans"`
 	ResSpans []*Span                `json:"response_spans"`
-	Values   map[string]interface{} `json:"values"`
 	lock     sync.Mutex
 }
 

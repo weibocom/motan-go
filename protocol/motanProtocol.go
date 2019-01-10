@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -81,8 +81,14 @@ const (
 )
 
 var (
-	defaultSerialize = Simple
 	DefaultGzipLevel = gzip.BestSpeed
+
+	defaultSerialize = Simple
+	writerPool       = &sync.Pool{}                         // for gzip writer
+	readBufPool      = &sync.Pool{}                         // for gzip read buffer
+	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
+		return &bytes.Buffer{}
+	}}
 )
 
 // errors
@@ -377,7 +383,7 @@ func DecodeGzipBody(body []byte) []byte {
 
 func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
 	tempbytes := make([]byte, size)
-	var s, n int = 0, 0
+	var s, n = 0, 0
 	var err error
 	for s < size && err == nil {
 		n, err = buf.Read(tempbytes[s:])
@@ -386,22 +392,34 @@ func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
 	return tempbytes, err
 }
 
-// EncodeGzip : encode gzip
 func EncodeGzip(data []byte) ([]byte, error) {
 	if len(data) > 0 {
-		var b bytes.Buffer
-		w, _ := gzip.NewWriterLevel(&b, DefaultGzipLevel)
-		defer w.Close()
-		_, e1 := w.Write(data)
-		if e1 != nil {
-			return nil, e1
+		buf := writeBufPool.Get().(*bytes.Buffer)
+		var w *gzip.Writer
+		temp := writerPool.Get()
+		if temp == nil {
+			w, _ = gzip.NewWriterLevel(buf, DefaultGzipLevel)
+		} else {
+			w = temp.(*gzip.Writer)
+			w.Reset(buf)
 		}
-		e2 := w.Flush()
-		if e2 != nil {
-			return nil, e2
+		defer func() {
+			buf.Reset()
+			writeBufPool.Put(buf)
+			writerPool.Put(w)
+		}()
+		_, err := w.Write(data)
+		if err != nil {
+			return nil, err
+		}
+		err = w.Flush()
+		if err != nil {
+			return nil, err
 		}
 		w.Close()
-		return b.Bytes(), nil
+		ret := make([]byte, buf.Len())
+		copy(ret, buf.Bytes())
+		return ret, nil
 	}
 	return data, nil
 }
@@ -418,20 +436,43 @@ func EncodeMessageGzip(msg *Message, gzipSize int) {
 	}
 }
 
-// DecodeGzip : decode gzip
-func DecodeGzip(data []byte) ([]byte, error) {
+func DecodeGzip(data []byte) (ret []byte, err error) {
 	if len(data) > 0 {
-		b := bytes.NewBuffer(data)
-		r, e1 := gzip.NewReader(b)
-		if e1 != nil {
-			return nil, e1
+		r, err := gzip.NewReader(bytes.NewBuffer(data))
+		if err != nil {
+			return nil, err
 		}
-		defer r.Close()
-		ret, e2 := ioutil.ReadAll(r)
-		if e2 != nil {
-			return nil, e2
+		var buf *bytes.Buffer
+		temp := readBufPool.Get()
+		if temp == nil {
+			size := len(data)
+			if size < 5000 {
+				size = 2 * size
+			} else {
+				size = 4 * size
+			}
+			buf = bytes.NewBuffer(make([]byte, 0, size))
+		} else {
+			buf = temp.(*bytes.Buffer)
 		}
-		return ret, nil
+		defer func() {
+			buf.Reset()
+			readBufPool.Put(buf)
+			e := recover()
+			if e == nil {
+				return
+			}
+			if panicErr, ok := e.(error); ok && panicErr == bytes.ErrTooLarge {
+				err = panicErr
+			} else {
+				panic(e)
+			}
+		}()
+
+		_, err = buf.ReadFrom(r)
+		ret := make([]byte, buf.Len())
+		copy(ret, buf.Bytes())
+		return ret, err
 	}
 	return data, nil
 }
