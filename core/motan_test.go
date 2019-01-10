@@ -4,6 +4,9 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExtFactory(t *testing.T) {
@@ -64,6 +67,34 @@ func TestMotanRequest_Clone(t *testing.T) {
 	}
 }
 
+func TestServiceInGroup(t *testing.T) {
+	registry := &mockRegistry{}
+	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
+	assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+}
+
+func TestServiceInGroupParallel(t *testing.T) {
+	registry := &mockRegistry{}
+	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	registryGroupServiceInfoMaxCacheTime = 10 * time.Millisecond
+	for i := 0; i < 10000; i++ {
+		assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
+		assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+	}
+}
+
+func BenchmarkServiceInGroup(b *testing.B) {
+	registry := &mockRegistry{}
+	registry.url = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ServiceInGroup(registry, "testGroup", "testService")
+		}
+	})
+
+}
+
 func newHa(url *URL) HaStrategy {
 	return nil
 }
@@ -98,4 +129,64 @@ func newMsHandler() MessageHandler {
 
 func newSerial() Serialization {
 	return nil
+}
+
+type mockRegistry struct {
+	url *URL
+}
+
+func (r *mockRegistry) GetName() string {
+	return "mockRegistry"
+}
+
+func (r *mockRegistry) GetURL() *URL {
+	return r.url
+}
+
+func (r *mockRegistry) SetURL(url *URL) {
+	r.url = url
+}
+
+func (r *mockRegistry) Subscribe(url *URL, listener NotifyListener) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) Unsubscribe(url *URL, listener NotifyListener) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) Discover(url *URL) []*URL {
+	panic("implement me")
+}
+
+func (r *mockRegistry) Register(serverURL *URL) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) UnRegister(serverURL *URL) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) Available(serverURL *URL) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) Unavailable(serverURL *URL) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) GetRegisteredServices() []*URL {
+	panic("implement me")
+}
+
+func (r *mockRegistry) StartSnapshot(conf *SnapshotConf) {
+	panic("implement me")
+}
+
+func (r *mockRegistry) DiscoverAllServices(group string) ([]string, error) {
+	return []string{"testService"}, nil
+}
+
+func (r *mockRegistry) DiscoverAllGroups() ([]string, error) {
+	return []string{"testService"}, nil
 }

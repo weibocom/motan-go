@@ -29,7 +29,9 @@ func init() {
 
 const (
 	DefaultAttachmentSize = 16
+)
 
+var (
 	registryGroupInfoMaxCacheTime        = time.Hour
 	registryGroupServiceInfoMaxCacheTime = time.Hour
 )
@@ -952,8 +954,8 @@ type registryGroupServiceCacheInfo struct {
 	sr          ServiceDiscoverableRegistry
 	group       string
 	lastUpdTime time.Time
-	services    []string
-	serviceMap  map[string]string
+	services    atomic.Value // []string
+	serviceMap  atomic.Value // map[string]string
 	lock        sync.Mutex
 }
 
@@ -970,7 +972,7 @@ func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]stri
 			vlog.Warningf("Task pool is full, refresh service of group [%s] delay", c.group)
 		}
 	}
-	return c.services, c.serviceMap
+	return c.services.Load().([]string), c.serviceMap.Load().(map[string]string)
 }
 
 func (c *registryGroupServiceCacheInfo) refreshServices() {
@@ -985,12 +987,12 @@ func (c *registryGroupServiceCacheInfo) refreshServices() {
 		return
 	}
 	c.lastUpdTime = time.Now()
-	c.services = services
+	c.services.Store(services)
 	serviceMap := make(map[string]string, len(services))
 	for _, service := range services {
 		serviceMap[service] = service
 	}
-	c.serviceMap = serviceMap
+	c.serviceMap.Store(serviceMap)
 }
 
 func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry, group string) ([]string, map[string]string) {
@@ -1002,9 +1004,12 @@ func (rc *registryGroupServiceCache) getServices(sr ServiceDiscoverableRegistry,
 		defer rc.lock.Unlock()
 		cacheInfo, ok = rc.cachedInfos.Load(key)
 		if !ok {
-			cacheInfo = &registryGroupServiceCacheInfo{sr: sr, group: group}
-			cacheInfo.(*registryGroupServiceCacheInfo).refreshServices()
-			rc.cachedInfos.Store(key, cacheInfo)
+			serviceCacheInfo := &registryGroupServiceCacheInfo{sr: sr, group: group}
+			serviceCacheInfo.services.Store(make([]string, 0, 1))
+			serviceCacheInfo.serviceMap.Store(make(map[string]string))
+			serviceCacheInfo.refreshServices()
+			rc.cachedInfos.Store(key, serviceCacheInfo)
+			cacheInfo = serviceCacheInfo
 		}
 	}
 	return cacheInfo.(*registryGroupServiceCacheInfo).getServices()
