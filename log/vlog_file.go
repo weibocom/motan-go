@@ -25,11 +25,10 @@ func createLogDirs() {
 }
 
 var (
-	pid        = os.Getpid()
-	program    = filepath.Base(os.Args[0])
-	host       = "unknownhost"
-	userName   = "unknownuser"
-	outputChan chan string
+	pid      = os.Getpid()
+	program  = filepath.Base(os.Args[0])
+	host     = "unknownhost"
+	userName = "unknownuser"
 )
 
 func init() {
@@ -44,9 +43,6 @@ func init() {
 	}
 
 	userName = strings.Replace(userName, `\`, "_", -1)
-
-	outputChan = make(chan string, defaultOutPutChanSize)
-	outputLoop()
 }
 
 func shortHostname(hostname string) string {
