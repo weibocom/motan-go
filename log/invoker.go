@@ -1,15 +1,10 @@
 package vlog
 
-import (
-	"fmt"
-	goLog "log"
-)
-
-const defaultOutPutChanSize = 1000
+import goLog "log"
 
 func Infoln(args ...interface{}) {
 	if log != nil {
-		writeLogln(args...)
+		log.Infoln(args...)
 	} else {
 		goLog.Println(args...)
 	}
@@ -17,7 +12,7 @@ func Infoln(args ...interface{}) {
 
 func Infof(format string, args ...interface{}) {
 	if log != nil {
-		writeLogf(format, args...)
+		log.Infof(format, args...)
 	} else {
 		goLog.Printf(format, args...)
 	}
@@ -75,24 +70,4 @@ func Flush() {
 	if log != nil {
 		log.Flush()
 	}
-}
-
-// Temporarily solved the vlog asynchronous output.
-func outputLoop() {
-	go func() {
-		for {
-			select {
-			case logStr := <-outputChan:
-				log.Infof(logStr)
-			}
-		}
-	}()
-}
-
-func writeLogf(format string, args ...interface{}) {
-	outputChan <- fmt.Sprintf(format, args...)
-}
-
-func writeLogln(args ...interface{}) {
-	outputChan <- fmt.Sprintln(args...)
 }

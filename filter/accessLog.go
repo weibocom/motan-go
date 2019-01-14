@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"fmt"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -50,7 +51,7 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	if response.GetException() != nil {
 		success = false
 	}
-	vlog.Infof("access log--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
+	writeLog("access log--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
 	return response
 }
 
@@ -68,4 +69,29 @@ func (t *AccessLogEndPointFilter) GetNext() motan.EndPointFilter {
 
 func (t *AccessLogEndPointFilter) GetType() int32 {
 	return motan.EndPointFilterType
+}
+
+// Temporarily solved the vlog asynchronous output.
+const DefaultOutPutChanSize = 1000
+
+var outputChan chan string
+
+func init() {
+	outputChan = make(chan string, DefaultOutPutChanSize)
+	outputLoop()
+}
+
+func outputLoop() {
+	go func() {
+		for {
+			select {
+			case logStr := <-outputChan:
+				vlog.Infof(logStr)
+			}
+		}
+	}()
+}
+
+func writeLog(format string, args ...interface{}) {
+	outputChan <- fmt.Sprintf(format, args...)
 }
