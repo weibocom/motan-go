@@ -8,11 +8,11 @@ import (
 	"github.com/weibocom/motan-go/core"
 )
 
-type HttpTestRegistry struct {
+type HTTPTestRegistry struct {
 	core.TestRegistry
 }
 
-func (t *HttpTestRegistry) Discover(url *core.URL) []*core.URL {
+func (t *HTTPTestRegistry) Discover(url *core.URL) []*core.URL {
 	return []*core.URL{url}
 }
 
@@ -24,7 +24,7 @@ func TestHTTPCluster_Call(t *testing.T) {
 	context.Initialize()
 	extFactory := getCustomExt()
 	extFactory.RegistExtRegistry("test", func(url *core.URL) core.Registry {
-		registry := &HttpTestRegistry{}
+		registry := &HTTPTestRegistry{}
 		registry.URL = url
 		registry.GroupService = map[string][]string{domain: {"test"}}
 		return registry

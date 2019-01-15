@@ -222,7 +222,7 @@ func (t *TestRegistry) DiscoverAllGroups() ([]string, error) {
 		return nil, errors.New("group discover error")
 	}
 	groups := make([]string, 0, len(t.GroupService))
-	for k, _ := range t.GroupService {
+	for k := range t.GroupService {
 		groups = append(groups, k)
 	}
 	return groups, nil

@@ -101,14 +101,6 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		if strings.Index(hostAndPort, ":") == -1 {
 			hostAndPort += ":80"
 		}
-		if httpReq.RequestURI()[0] == '/' {
-			for _, d := range s.deny {
-				if hostAndPort == d {
-					ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
-					return
-				}
-			}
-		}
 
 		host, _, _ := net.SplitHostPort(hostAndPort)
 		httpCluster := s.clusterGetter.GetHTTPCluster(host)
@@ -121,6 +113,16 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 				return
 			}
 		}
+		// no cluster found, if direct request the host ip and do not set Host header we should reject it
+		if httpReq.RequestURI()[0] == '/' {
+			for _, d := range s.deny {
+				if hostAndPort == d {
+					ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
+					return
+				}
+			}
+		}
+		// TODO: if the request is form this server itself, we should reject it
 		s.doHTTPProxy(ctx)
 	}
 
