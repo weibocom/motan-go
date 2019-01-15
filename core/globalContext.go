@@ -31,11 +31,6 @@ const (
 	basicReferKey   = "basicRefer"
 	basicServiceKey = "basicService"
 
-	// default config file and path
-	configFile = "./motan.yaml"
-	configPath = "./"
-	fileSuffix = ".yaml"
-
 	// const for application pool
 	basicConfig       = "basic.yaml"
 	servicePath       = "services/"
@@ -59,6 +54,11 @@ type Context struct {
 }
 
 var (
+	// default config file and path
+	defaultConfigFile = "./motan.yaml"
+	defaultConfigPath = "./"
+	defaultFileSuffix = ".yaml"
+
 	urlFields = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
 )
 
@@ -133,7 +133,7 @@ func (c *Context) Initialize() {
 	var err error
 	if *Pool != "" { // parse application pool configs
 		if c.ConfigFile == "" {
-			c.ConfigFile = configPath
+			c.ConfigFile = defaultConfigPath
 		}
 		if !strings.HasSuffix(c.ConfigFile, "/") {
 			c.ConfigFile = c.ConfigFile + "/"
@@ -144,7 +144,7 @@ func (c *Context) Initialize() {
 		}
 	} else { // parse single config file and dynamic file
 		if c.ConfigFile == "" {
-			c.ConfigFile = configFile
+			c.ConfigFile = defaultConfigFile
 		}
 		if cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile); err != nil {
 			fmt.Printf("parse config fail. err:%s\n", err.Error())
@@ -209,7 +209,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 	if application == "" && len(poolPart) > 0 { // the first part be the application name
 		application = poolPart[0]
 	}
-	application = path + applicationPath + application + fileSuffix
+	application = path + applicationPath + application + defaultFileSuffix
 	if application != "" {
 		appconfig, err = cfg.NewConfigFromFile(application)
 		if err == nil && appconfig != nil {
@@ -218,7 +218,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 			if err == nil && is != nil {
 				if li, ok := is.([]interface{}); ok {
 					for _, r := range li {
-						tempcfg, err = cfg.NewConfigFromFile(path + servicePath + r.(string) + fileSuffix)
+						tempcfg, err = cfg.NewConfigFromFile(path + servicePath + r.(string) + defaultFileSuffix)
 						if err == nil && tempcfg != nil {
 							c.Merge(tempcfg)
 						}
@@ -235,7 +235,7 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		base := ""
 		for _, v := range poolPart {
 			base = base + v
-			tempcfg, err = cfg.NewConfigFromFile(path + poolPath + base + fileSuffix)
+			tempcfg, err = cfg.NewConfigFromFile(path + poolPath + base + defaultFileSuffix)
 			if err == nil && tempcfg != nil {
 				c.Merge(tempcfg)
 			}

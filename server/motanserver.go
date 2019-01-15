@@ -141,9 +141,8 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
-				tc.PutResSpan(&motan.Span{Name: motan.ClustFliter, Time: time.Now()})
+				tc.PutResSpan(&motan.Span{Name: motan.ClFilter, Time: time.Now()})
 			}
-			//TODO oneway
 			if mres != nil {
 				mres.GetRPCContext(true).Proxy = m.proxy
 				res, err = mpro.ConvertToResMessage(mres, serialization)

@@ -401,7 +401,7 @@ func StartReporter(ctx *motan.Context) {
 		var m metric
 		err := ctx.Config.GetStruct("metrics", &m)
 		if err != nil {
-			vlog.Warningf("get metrics config fail. %s\n", err.Error())
+			vlog.Warningf("get metrics config fail:%s, use default config:{Period:%s, Processor:%d, Graphite:[]}\n", err.Error(), defaultSinkDuration, defaultEventProcessor)
 		} else {
 			if m.Period > 0 {
 				rp.interval = time.Duration(m.Period) * time.Second
