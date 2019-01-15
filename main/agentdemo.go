@@ -1,13 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-
 	"github.com/weibocom/motan-go"
 	motancore "github.com/weibocom/motan-go/core"
+	"net"
+	"net/http"
+	"net/http/httputil"
 )
 
 func main() {
@@ -16,14 +15,19 @@ func main() {
 
 func runAgentDemo() {
 	go func() {
+		var addr = ":9090"
 		handler := &http.ServeMux{}
 		handler.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
-			request.ParseForm()
-			bs, _ := json.Marshal(request.Form)
-			writer.Write([]byte("request_url:" + request.URL.String() + "\r\n"))
-			writer.Write(bs)
+			writer.Header().Add("server-address", motancore.GetLocalIP()+addr)
+			_, _ = fmt.Fprint(writer, "request url: "+request.URL.String()+"\n")
+			rawRequestBytes, err := httputil.DumpRequest(request, true)
+			if err != nil {
+				http.Error(writer, fmt.Sprint(err), http.StatusInternalServerError)
+				return
+			}
+			fmt.Println(string(rawRequestBytes))
 		})
-		http.ListenAndServe(":9090", handler)
+		http.ListenAndServe(addr, handler)
 	}()
 	motan.PermissionCheck = func(r *http.Request) bool {
 		host, _, _ := net.SplitHostPort(r.RemoteAddr)

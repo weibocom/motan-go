@@ -15,14 +15,15 @@ import (
 )
 
 var (
-	defaultChannelPoolSize     = 3
-	defaultRequestTimeout      = 1000 * time.Millisecond
-	defaultConnectTimeout      = 1000 * time.Millisecond
-	defaultKeepaliveInterval   = 10 * time.Second
-	defaultErrorCountThreshold = 10
-	ErrChannelShutdown         = fmt.Errorf("The channel has been shutdown")
-	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
-	ErrRecvRequestTimeout      = fmt.Errorf("Timeout err: receive request timeout")
+	defaultChannelPoolSize      = 3
+	defaultRequestTimeout       = 1000 * time.Millisecond
+	defaultConnectTimeout       = 1000 * time.Millisecond
+	defaultConnectRetryInterval = 60 * time.Second
+	defaultKeepaliveInterval    = 10 * time.Second
+	defaultErrorCountThreshold  = 10
+	ErrChannelShutdown          = fmt.Errorf("The channel has been shutdown")
+	ErrSendRequestTimeout       = fmt.Errorf("Timeout err: send request timeout")
+	ErrRecvRequestTimeout       = fmt.Errorf("Timeout err: receive request timeout")
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
@@ -30,14 +31,15 @@ var (
 )
 
 type MotanEndpoint struct {
-	url        *motan.URL
-	channels   *ChannelPool
-	destroyCh  chan struct{}
-	available  bool
-	errorCount uint32
-	proxy      bool
+	url            *motan.URL
+	channels       *ChannelPool
+	destroyCh      chan struct{}
+	available      bool
+	errorCount     uint32
+	errorThreshold int
+	proxy          bool
 
-	// for heartbeat requestid
+	// for heartbeat requestID
 	keepaliveID   uint64
 	serialization motan.Serialization
 }
@@ -56,7 +58,12 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 
 func (m *MotanEndpoint) Initialize() {
 	m.destroyCh = make(chan struct{}, 1)
-	connectTimeout := m.url.GetTimeDuration("connectTimeout", time.Millisecond, defaultConnectTimeout)
+	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
+	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
+	m.errorThreshold = int(m.url.GetIntValue(motan.ErrorThresholdKey, int64(defaultErrorCountThreshold)))
+	if m.errorThreshold < 0 {
+		m.errorThreshold = 0
+	}
 
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
@@ -67,7 +74,8 @@ func (m *MotanEndpoint) Initialize() {
 		// retry connect
 		go func() {
 			defer motan.HandlePanic(nil)
-			ticker := time.NewTicker(60 * time.Second)
+			// TODO: retry after 2^n * timeUnit
+			ticker := time.NewTicker(connectRetryInterval)
 			defer ticker.Stop()
 			for {
 				select {
@@ -152,6 +160,9 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	recvMsg.Header.SetProxy(m.proxy)
 	recvMsg.Header.RequestID = request.GetRequestID()
 	response, err := mpro.ConvertToResponse(recvMsg, m.serialization)
+	if rc.Tc != nil {
+		rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
+	}
 	if err != nil {
 		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
@@ -174,7 +185,10 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(defaultErrorCountThreshold) {
+	if m.errorThreshold == 0 {
+		return
+	}
+	if errCount == uint32(m.errorThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 		go m.keepalive()
@@ -294,7 +308,7 @@ type Stream struct {
 	deadline time.Time
 
 	rc          *motan.RPCContext
-	isClose     bool
+	isClose     atomic.Value // bool
 	isHeartBeat bool
 }
 
@@ -394,6 +408,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		deadline:     time.Now().Add(1 * time.Second),
 		rc:           rc,
 	}
+	s.isClose.Store(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
 	if msg.Header.IsHeartbeat() {
@@ -410,7 +425,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 }
 
 func (s *Stream) Close() {
-	if !s.isClose {
+	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
@@ -420,7 +435,7 @@ func (s *Stream) Close() {
 			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose = true
+		s.isClose.Store(true)
 	}
 }
 

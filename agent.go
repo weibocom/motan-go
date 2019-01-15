@@ -13,6 +13,7 @@ import (
 
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
+	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
@@ -80,7 +81,7 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	return agent
 }
 
-func (a *Agent) initProxyURL(url *motan.URL) {
+func (a *Agent) initProxyServiceURL(url *motan.URL) {
 	export := url.GetParam(motan.ExportKey, "")
 	url.Protocol, url.Port, _ = motan.ParseExportInfo(export)
 	url.Host = motan.GetLocalIP()
@@ -109,9 +110,9 @@ func (a *Agent) StartMotanAgent() {
 	a.initAgentURL()
 	a.initStatus()
 	a.initClusters()
+	a.startServerAgent()
 	a.initHTTPClusters()
 	a.startHTTPAgent()
-	a.startServerAgent()
 	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
 	go a.registerAgent()
@@ -121,6 +122,10 @@ func (a *Agent) StartMotanAgent() {
 	} else {
 		defer f.Close()
 		f.WriteString(strconv.Itoa(os.Getpid()))
+	}
+	if a.status == http.StatusOK {
+		// recover form a unexpected case
+		a.availableAllServices()
 	}
 	vlog.Infoln("Motan agent is starting...")
 	a.startAgent()
@@ -241,13 +246,16 @@ func (a *Agent) initParam() {
 
 func (a *Agent) initHTTPClusters() {
 	for id, url := range a.Context.HTTPClientURLs {
-		domain := url.GetParam("domain", "")
-		if domain == "" {
-			vlog.Errorf("HTTP client for %s has no domain config", id)
-			continue
+		if application := url.GetParam(motan.ApplicationKey, ""); application == "" {
+			url.PutParam(motan.ApplicationKey, a.agentURL.GetParam(motan.ApplicationKey, ""))
 		}
 		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
-		a.httpClusterMap.Store(domain, httpCluster)
+		if httpCluster == nil {
+			vlog.Errorf("Create http cluster %s failed", id)
+			continue
+		}
+		// here the domain has value
+		a.httpClusterMap.Store(url.GetParam(mhttp.DomainKey, ""), httpCluster)
 	}
 }
 
@@ -256,35 +264,18 @@ func (a *Agent) startHTTPAgent() {
 	url := a.agentURL.Copy()
 	url.Port = a.hport
 	httpProxyServer := mserver.NewHTTPProxyServer(url)
-	httpProxyServer.Open(false, true, &httpProxyMessageHandler{a: a})
+	httpProxyServer.Open(false, true, &httpClusterGetter{a: a})
 	vlog.Infof("Start http forward proxy server on port %d", a.hport)
 }
 
-// HTTPProxyMessageHandler for multiple http domain handler
-type httpProxyMessageHandler struct {
+type httpClusterGetter struct {
 	a *Agent
 }
 
-func (h *httpProxyMessageHandler) Call(request motan.Request) (res motan.Response) {
-	domain := request.GetAttachment("domain")
-	return h.a.httpClusterMap.LoadOrNil(domain).(*cluster.HTTPCluster).Call(request)
-}
-
-func (h *httpProxyMessageHandler) GetHTTPCluster(host string) *cluster.HTTPCluster {
+func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 	if c, ok := h.a.httpClusterMap.Load(host); ok {
 		return c.(*cluster.HTTPCluster)
 	}
-	return nil
-}
-
-func (h *httpProxyMessageHandler) AddProvider(p motan.Provider) error {
-	return nil
-}
-
-func (h *httpProxyMessageHandler) RmProvider(p motan.Provider) {
-}
-
-func (h *httpProxyMessageHandler) GetProvider(serviceName string) motan.Provider {
 	return nil
 }
 
@@ -434,9 +425,23 @@ func (a *agentMessageHandler) GetProvider(serviceName string) motan.Provider {
 func (a *Agent) startServerAgent() {
 	globalContext := a.Context
 	for _, url := range globalContext.ServiceURLs {
-		a.initProxyURL(url)
+		a.initProxyServiceURL(url)
 		a.doExportService(url)
 	}
+}
+
+func (a *Agent) availableAllServices() {
+	a.serviceRegistries.Range(func(k, v interface{}) bool {
+		v.(motan.Registry).Available(nil)
+		return true
+	})
+}
+
+func (a *Agent) unavailableAllServices() {
+	a.serviceRegistries.Range(func(k, v interface{}) bool {
+		v.(motan.Registry).Unavailable(nil)
+		return true
+	})
 }
 
 func (a *Agent) doExportService(url *motan.URL) {
@@ -482,10 +487,6 @@ func (a *Agent) doExportService(url *motan.URL) {
 			a.serviceRegistries.Store(rid, r)
 		}
 	}
-
-	if a.status == http.StatusOK {
-		exporter.Available()
-	}
 }
 
 type serverAgentMessageHandler struct {
@@ -530,6 +531,7 @@ func getClusterKey(group, version, protocol, path string) string {
 }
 
 func initLog(logdir string) {
+	// TODO: remove after a better handle
 	if logdir == "stdout" {
 		return
 	}

@@ -30,7 +30,20 @@ func (m *MotanProvider) Initialize() {
 		return
 	}
 	host := m.url.GetParam(ProxyHostKey, DefaultHost)
-	m.ep = m.extFactory.GetEndPoint(&motan.URL{Protocol: protocol, Host: host, Port: port})
+	endpointURL := m.url.Copy()
+	endpointURL.Protocol = protocol
+	endpointURL.Host = host
+	endpointURL.Port = port
+	// when as reverse proxy for a motan service, we can retry connect in less time
+	if endpointURL.GetParam(motan.ConnectRetryIntervalKey, "") == "" {
+		// 5000ms
+		endpointURL.PutParam(motan.ConnectRetryIntervalKey, "5000")
+	}
+	// no need disable endpoint when error occurs
+	if endpointURL.GetParam(motan.ErrorThresholdKey, "") == "" {
+		endpointURL.PutParam(motan.ErrorThresholdKey, "0")
+	}
+	m.ep = m.extFactory.GetEndPoint(endpointURL)
 	if m.ep == nil {
 		vlog.Errorf("Can not find %s endpoint in ExtensionFactory!\n", protocol)
 		return

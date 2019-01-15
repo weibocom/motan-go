@@ -4,6 +4,7 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/metrics"
 )
 
 type ClusterMetricsFilter struct {
@@ -56,6 +57,8 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 		role = "motan-client-agent"
 	}
 	key := role + ":" + request.GetAttachment("M_s") + ":" + request.GetMethod()
-	addMetric(request.GetAttachment("M_g")+".cluster", request.GetAttachment("M_p"), key, time.Since(start).Nanoseconds()/1e6, response)
+	addMetric(metrics.Escape(request.GetAttachment("M_g"))+".cluster",
+		metrics.Escape(request.GetAttachment("M_p")),
+		metrics.Escape(key), time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }

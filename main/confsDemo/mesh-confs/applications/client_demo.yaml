@@ -1,0 +1,14 @@
+motan-agent:
+  port: 19981
+  hport: 19983
+  mport: 18002
+  log_dir: "/data1/weibo/logs"
+  snapshot_dir: "/data1/snapshot"
+  application: "client_demo"
+
+dynamic-param:
+  refer.i_api_weibo_com.preload: "test"
+
+import-refer:
+  - api.demo.com
+

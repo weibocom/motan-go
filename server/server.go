@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
@@ -35,16 +34,14 @@ func RegistDefaultMessageHandlers(extFactory motan.ExtensionFactory) {
 }
 
 type DefaultExporter struct {
-	url            *motan.URL
-	Registries     []motan.Registry
-	extFactory     motan.ExtensionFactory
-	server         motan.Server
-	provider       motan.Provider
-	lock           sync.Mutex
-	available      bool
-	tmpUnavailable bool
-	exported       bool
-	stopChan       chan struct{}
+	url        *motan.URL
+	Registries []motan.Registry
+	extFactory motan.ExtensionFactory
+	server     motan.Server
+	provider   motan.Provider
+	lock       sync.Mutex
+	available  bool
+	exported   bool
 
 	// 服务管理单位，负责服务注册、心跳、导出和销毁，内部包含provider，与provider是一对一关系
 }
@@ -86,70 +83,22 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extension
 		}
 	}
 	d.Registries = registries
-
+	// TODO heartbeat or 200 switcher
 	d.exported = true
-
-	d.stopChan = make(chan struct{})
-	d.available = false
-	d.tmpUnavailable = true
-
-	go func() {
-		ticker := time.NewTicker(1 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				d.checkProvider()
-			case <-d.stopChan:
-				return
-			}
-		}
-	}()
+	d.available = true
 	vlog.Infof("export url %s success.\n", d.url.GetIdentity())
 	return nil
-}
-
-func (d *DefaultExporter) checkProvider() {
-	defer motan.HandlePanic(nil)
-	d.lock.Lock()
-	defer d.lock.Unlock()
-
-	// 503 status
-	if !d.available {
-		return
-	}
-
-	// 200 status
-	if d.provider.IsAvailable() && d.tmpUnavailable {
-		d.doAvailable()
-		d.tmpUnavailable = false
-		return
-	}
-
-	if !d.provider.IsAvailable() && !d.tmpUnavailable {
-		d.doUnavailable()
-		d.tmpUnavailable = true
-		return
-	}
 }
 
 func (d *DefaultExporter) Unexport() error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-
 	if !d.exported {
 		return nil
 	}
-
-	d.stopChan <- struct{}{}
-
-	d.doUnavailable()
-	d.available = false
-
 	for _, r := range d.Registries {
 		r.UnRegister(d.url)
 	}
-
 	d.server.GetMessageHandler().RmProvider(d.provider)
 	d.exported = false
 	// TODO: gracefully destroy provider
@@ -167,36 +116,17 @@ func (d *DefaultExporter) GetProvider() motan.Provider {
 func (d *DefaultExporter) Available() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	// here just set the flag, the checkProvider function will probe the the service when provider is available
 	d.available = true
-}
-
-func (d *DefaultExporter) doAvailable() {
-	for _, r := range d.Registries {
-		r.Available(d.provider.GetURL())
-	}
 }
 
 func (d *DefaultExporter) Unavailable() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-
-	if !d.tmpUnavailable {
-		// force unavailable
-		d.doUnavailable()
-		d.tmpUnavailable = true
-	}
 	d.available = false
 }
 
-func (d *DefaultExporter) doUnavailable() {
-	for _, r := range d.Registries {
-		r.Unavailable(d.provider.GetURL())
-	}
-}
-
 func (d *DefaultExporter) IsAvailable() bool {
-	return d.available && !d.tmpUnavailable
+	return d.available
 }
 
 func (d *DefaultExporter) GetURL() *motan.URL {

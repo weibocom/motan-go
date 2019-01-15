@@ -12,13 +12,13 @@ motan-agent:
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
-    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
+    host: localhost # direct server ip in single ip. if has host, address will disable.
     port: 9982 #direct server port
     # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
 
   zk-registry:
     protocol: zookeeper
-    host: 127.0.0.1
+    host: localhost
     port: 2181
     registrySessionTimeout: 10000
     requestTimeout: 5000
@@ -32,8 +32,8 @@ motan-service:
     export: "motan2:9982"
     provider: http
     serialization: simple
-    proxyAddress: 127.0.0.1:9090
-#    filter: "accessLog,metric"
+    proxyAddress: localhost:9090
+    filter: "accessLog,metrics"
     requestTimeout: 2000
 
 http-locations:
@@ -41,27 +41,20 @@ http-locations:
     - match: /test
       type: start
       upstream: test
-      script: |
-        rmatch $request_uri ^(/test1/.*)
-        jt L1
-        ret
-        L1:
-        rewrite /test1/(.*) /backend/test1/$1
-        ret
 
     - match: /test2
       type: start
       upstream: test2
 
-    - match: /test3/*
+    - match: ^/test3/.*
       type: regexp
       upstream: test3
 
     - match: ^/(tst|2).*
-      type: regexp
+      type: regexp #regexp (regexp)|iregexp (case insensitive regexp)|start (prefix match) |exact (whole world match)
       upstream: test
       rewriteRules:
-        # condition_type(! means not) condition regexp replacement
+        # condition_type(! means not, value mean same as match type) condition regexp replacement
         - "!regexp ^/2/.*  ^/(.*) /2/$1"
 
 http-client:
@@ -71,6 +64,7 @@ http-client:
     group: test.domain
     preload: test
     serialization: simple
+    filter: "accessLog,metrics"
     requestTimeout: 2000
     protocol: motan2 # this is the default endpoint type,the client use motan2 transport data to remote server, but it provider a http server when as the agent
 

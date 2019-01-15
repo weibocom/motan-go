@@ -42,18 +42,12 @@ func (s *StatusHandler) SetAgent(agent *Agent) {
 func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
 	case "/200":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Available()
-			return true
-		})
+		s.a.availableAllServices()
 		s.a.status = http.StatusOK
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/503":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Unavailable()
-			return true
-		})
+		s.a.unavailableAllServices()
 		s.a.status = http.StatusServiceUnavailable
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))
@@ -172,6 +166,9 @@ func formatTc(tc *motan.TraceContext) string {
 	processReqSpan(tc.ReqSpans)
 	processResSpan(tc.ResSpans)
 	if len(tc.ReqSpans) > 0 && len(tc.ResSpans) > 0 {
+		tc.Values["requestTime"] = strconv.FormatInt(tc.ReqSpans[len(tc.ReqSpans)-1].Time.UnixNano()-tc.ReqSpans[0].Time.UnixNano(), 10)
+		tc.Values["responseTime"] = strconv.FormatInt(tc.ResSpans[len(tc.ResSpans)-1].Time.UnixNano()-tc.ResSpans[0].Time.UnixNano(), 10)
+		tc.Values["remoteTime"] = strconv.FormatInt(tc.ResSpans[0].Time.UnixNano()-tc.ReqSpans[len(tc.ReqSpans)-1].Time.UnixNano(), 10)
 		tc.Values["totalTime"] = strconv.FormatInt(tc.ResSpans[len(tc.ResSpans)-1].Time.UnixNano()-tc.ReqSpans[0].Time.UnixNano(), 10)
 	}
 	data, _ := json.MarshalIndent(tc, "", "    ")

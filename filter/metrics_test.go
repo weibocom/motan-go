@@ -51,7 +51,8 @@ func TestMetricsFilter(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			mf.Filter(test.caller, test.request)
 			time.Sleep(10 * time.Millisecond)
-			assert.Equal(t, 1, int(metrics.GetStatItem(testGroup, testService).SnapshotAndClear().Count(test.key+".total_count")), "metric count")
+			// The metrics filter has do escape
+			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(metrics.Escape(test.key)+".total_count")), "metric count")
 		})
 	}
 }

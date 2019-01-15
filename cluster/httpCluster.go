@@ -6,13 +6,14 @@ import (
 	"github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
 	HTTPProxyPreloadKey = "preload"
 )
 
-type cacheCluster struct {
+type clusterHolder struct {
 	initialized bool
 	url         *core.URL
 	lock        sync.Mutex
@@ -22,7 +23,7 @@ type cacheCluster struct {
 	context     *core.Context
 }
 
-func (c *cacheCluster) getCluster() *MotanCluster {
+func (c *clusterHolder) getCluster() *MotanCluster {
 	if c.initialized {
 		return c.cluster
 	}
@@ -38,7 +39,7 @@ func (c *cacheCluster) getCluster() *MotanCluster {
 	return c.cluster
 }
 
-func (c *cacheCluster) destroy() {
+func (c *clusterHolder) destroy() {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if !c.initialized {
@@ -48,8 +49,8 @@ func (c *cacheCluster) destroy() {
 	c.initialized = false
 }
 
-func newCacheCluster(url *core.URL, context *core.Context, extFactory core.ExtensionFactory, proxy bool) *cacheCluster {
-	return &cacheCluster{
+func newClusterHolder(url *core.URL, context *core.Context, extFactory core.ExtensionFactory, proxy bool) *clusterHolder {
+	return &clusterHolder{
 		url:        url,
 		proxy:      proxy,
 		extFactory: extFactory,
@@ -58,11 +59,12 @@ func newCacheCluster(url *core.URL, context *core.Context, extFactory core.Exten
 }
 
 type HTTPCluster struct {
-	url              *core.URL
-	serviceDiscover  http.ServiceDiscover
+	url *core.URL
+	// for get the service from uri
+	uriConverter     http.URIConverter
 	proxy            bool
-	upstreamClusters map[string]*cacheCluster
-	lock             sync.Mutex
+	upstreamClusters map[string]*clusterHolder
+	lock             sync.RWMutex
 	extFactory       core.ExtensionFactory
 	context          *core.Context
 	serviceRegistry  core.ServiceDiscoverableRegistry
@@ -75,13 +77,13 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 		context:    context,
 		extFactory: extFactory,
 	}
-	domain := url.GetParam("domain", "")
+	domain := url.GetParam(http.DomainKey, "")
 	if domain == "" {
-		vlog.Errorf("When use a http proxy client domain must configured")
+		vlog.Errorf("HTTP client has no domain config")
 		return nil
 	}
-
 	registryID := url.GetParam(core.RegistryKey, "")
+	// TODO: for multiple registry
 	if registryURL, ok := context.RegistryURLs[registryID]; ok {
 		registry := extFactory.GetRegistry(registryURL)
 		if registry == nil {
@@ -92,8 +94,10 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 			c.serviceRegistry = sr
 		}
 	}
-	c.serviceDiscover = http.NewLocationMatcherFromContext(domain, context)
+	c.upstreamClusters = make(map[string]*clusterHolder, 16)
+	c.uriConverter = http.NewLocationMatcherFromContext(domain, context)
 	preload := core.TrimSplit(url.GetParam(HTTPProxyPreloadKey, ""), ",")
+	// TODO: find service by location then do warm up
 	for _, service := range preload {
 		if service == "" {
 			continue
@@ -104,13 +108,15 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 }
 
 func (c *HTTPCluster) CanServe(uri string) (string, bool) {
-	service := c.serviceDiscover.DiscoverService(uri)
+	service := c.uriConverter.URIToServiceName(uri)
 	if service == "" {
 		return "", false
 	}
 	// if the registry can not find all service of it
 	// we just use preload services
 	if c.serviceRegistry == nil {
+		c.lock.RLock()
+		defer c.lock.RUnlock()
 		if _, ok := c.upstreamClusters[service]; ok {
 			return service, true
 		}
@@ -147,45 +153,38 @@ func (c *HTTPCluster) IsAvailable() bool {
 }
 
 func (c *HTTPCluster) getMotanCluster(service string) *MotanCluster {
-	if cc, ok := c.upstreamClusters[service]; ok {
-		return cc.getCluster()
+	c.lock.RLock()
+	if holder, ok := c.upstreamClusters[service]; ok {
+		c.lock.RUnlock()
+		return holder.getCluster()
 	}
-	c.lock.Lock()
-	if cc, ok := c.upstreamClusters[service]; ok {
-		c.lock.Unlock()
-		return cc.getCluster()
-	}
-	newUpstreamClusters := make(map[string]*cacheCluster, len(c.upstreamClusters)+1)
-	for u, cc := range c.upstreamClusters {
-		newUpstreamClusters[u] = cc
-	}
-	url := c.url.Copy()
-	url.Path = service
-	cc := newCacheCluster(url, c.context, c.extFactory, c.proxy)
-	newUpstreamClusters[service] = cc
-	c.upstreamClusters = newUpstreamClusters
-	c.lock.Unlock()
-	return cc.getCluster()
+	c.lock.RUnlock()
+	holder := func() *clusterHolder {
+		c.lock.Lock()
+		defer c.lock.Unlock()
+		if holder, ok := c.upstreamClusters[service]; ok {
+			return holder
+		}
+		url := c.url.Copy()
+		url.Path = service
+		holder := newClusterHolder(url, c.context, c.extFactory, c.proxy)
+		c.upstreamClusters[service] = holder
+		return holder
+	}()
+	return holder.getCluster()
 }
 
 func (c *HTTPCluster) removeMotanCluster(service string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	if _, ok := c.upstreamClusters[service]; ok {
-		return
-	}
-	newUpstreamClusters := make(map[string]*cacheCluster, len(c.upstreamClusters))
-	for upstream, cluster := range c.upstreamClusters {
-		if upstream == service {
-			continue
-		}
-		newUpstreamClusters[upstream] = cluster
-	}
-	c.upstreamClusters = newUpstreamClusters
+	delete(c.upstreamClusters, service)
 }
 
 func (c *HTTPCluster) Call(request core.Request) core.Response {
 	cluster := c.getMotanCluster(request.GetServiceName())
+	if request.GetAttachment(protocol.MSource) == "" {
+		request.SetAttachment(protocol.MSource, c.url.GetParam(core.ApplicationKey, ""))
+	}
 	return cluster.Call(request)
 }
 
@@ -195,7 +194,7 @@ func (c *HTTPCluster) Destroy() {
 	for _, cc := range c.upstreamClusters {
 		cc.destroy()
 	}
-	c.upstreamClusters = make(map[string]*cacheCluster)
+	c.upstreamClusters = make(map[string]*clusterHolder)
 }
 
 func (c *HTTPCluster) SetSerialization(s core.Serialization) {

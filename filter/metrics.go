@@ -77,7 +77,9 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
 	key := role + ":" + application + ":" + request.GetMethod()
-	addMetric(request.GetAttachment("M_g"), request.GetAttachment("M_p"), key, time.Since(start).Nanoseconds()/1e6, response)
+	addMetric(metrics.Escape(request.GetAttachment("M_g")),
+		metrics.Escape(request.GetAttachment("M_p")),
+		metrics.Escape(key), time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
 

@@ -2,8 +2,14 @@ package protocol
 
 import (
 	"bufio"
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"math/rand"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/weibocom/motan-go/core"
 )
@@ -177,3 +183,77 @@ func assertTrue(b bool, msg string, t *testing.T) {
 }
 
 //TODO convert
+
+func BenchmarkEncodeGzip(b *testing.B) {
+	DefaultGzipLevel = gzip.BestSpeed
+	bs := buildBytes(10 * 1024)
+	for i := 0; i < b.N; i++ {
+		EncodeGzip(bs)
+	}
+}
+
+func BenchmarkDecodeGzip(b *testing.B) {
+	bs := buildBytes(10 * 1024)
+	result, _ := EncodeGzip(bs)
+	for i := 0; i < b.N; i++ {
+		DecodeGzip(result)
+	}
+}
+
+func BenchmarkEncodeGzipConcurrent(b *testing.B) {
+	DefaultGzipLevel = gzip.BestSpeed
+	bs := buildBytes(10 * 1024)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			EncodeGzip(bs)
+		}
+	})
+}
+
+func BenchmarkDecodeGzipConcurrent(b *testing.B) {
+	bs := buildBytes(10 * 1024)
+	result, _ := EncodeGzip(bs)
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			DecodeGzip(result)
+		}
+	})
+}
+
+func TestConcurrentGzip(t *testing.T) {
+	size := 100
+	wg := sync.WaitGroup{}
+	wg.Add(size)
+	var count, errCount int64
+	datas := make([][]byte, size)
+	for i := 0; i < size; i++ {
+		datas[i] = buildBytes(10 * 1024)
+	}
+	for i := 0; i < size; i++ {
+		j := i
+		go func() {
+			temp, _ := EncodeGzip(datas[j])
+			nb, _ := DecodeGzip(temp)
+			if string(nb) != string(datas[j]) {
+				t.Errorf("concurrent gzip not correct.\n")
+				atomic.AddInt64(&errCount, 1)
+			} else {
+				atomic.AddInt64(&count, 1)
+
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	fmt.Printf("count:%v, errCount: %v\n", count, errCount)
+}
+
+func buildBytes(size int) []byte {
+	baseBytes := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
+	result := bytes.NewBuffer(make([]byte, 0, size))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < size; i++ {
+		result.WriteByte(baseBytes[r.Intn(len(baseBytes))])
+	}
+	return result.Bytes()
+}

@@ -23,34 +23,36 @@ const (
 	DefaultTimeout      = 5 * time.Second
 )
 
-type HTTPMessageHandler interface {
-	core.MessageHandler
+type HTTPClusterGetter interface {
 	GetHTTPCluster(host string) *cluster.HTTPCluster
 }
 
 type HTTPProxyServer struct {
-	url            *core.URL
-	messageHandler HTTPMessageHandler
-	httpHandler    fasthttp.RequestHandler
-	httpServer     *fasthttp.Server
-	httpClient     *fasthttp.Client
-	deny           []string
-	keepalive      bool
+	url           *core.URL
+	clusterGetter HTTPClusterGetter
+	httpHandler   fasthttp.RequestHandler
+	httpServer    *fasthttp.Server
+	httpClient    *fasthttp.Client
+	deny          []string
+	keepalive     bool
+	defaultDomain string
 }
 
 func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
 	return &HTTPProxyServer{url: url}
 }
 
-func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandler) error {
+func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPClusterGetter) error {
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
-	s.messageHandler = handler
+	s.clusterGetter = clusterGetter
 	s.keepalive, _ = strconv.ParseBool(s.url.GetParam("httpProxyKeepalive", "true"))
+	s.defaultDomain = s.url.GetParam("httpProxyDefaultDomain", "")
 	s.deny = append(s.deny, "127.0.0.1:"+s.url.GetPortStr())
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
 
+	// TODO: configurable timeout
 	s.httpClient = &fasthttp.Client{
 		Name: "motan",
 		Dial: func(addr string) (net.Conn, error) {
@@ -65,7 +67,9 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 	}
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
-		defer core.HandlePanic(nil)
+		defer core.HandlePanic(func() {
+			vlog.Errorf("Http proxy handler for [%s] panic", string(ctx.Request.URI().String()))
+		})
 		httpReq := &ctx.Request
 		if ctx.IsConnect() {
 			// For https proxy we just proxy it to the real domain
@@ -97,6 +101,19 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 		if strings.Index(hostAndPort, ":") == -1 {
 			hostAndPort += ":80"
 		}
+
+		host, _, _ := net.SplitHostPort(hostAndPort)
+		httpCluster := s.clusterGetter.GetHTTPCluster(host)
+		if httpCluster == nil && s.defaultDomain != "" {
+			httpCluster = s.clusterGetter.GetHTTPCluster(s.defaultDomain)
+		}
+		if httpCluster != nil {
+			if service, ok := httpCluster.CanServe(string(ctx.Path())); ok {
+				s.doHTTPRpcProxy(ctx, httpCluster, service)
+				return
+			}
+		}
+		// no cluster found, if direct request the host ip and do not set Host header we should reject it
 		if httpReq.RequestURI()[0] == '/' {
 			for _, d := range s.deny {
 				if hostAndPort == d {
@@ -105,14 +122,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, handler HTTPMessageHandle
 				}
 			}
 		}
-
-		host, _, _ := net.SplitHostPort(hostAndPort)
-		if httpCluster := s.messageHandler.GetHTTPCluster(host); httpCluster != nil {
-			if service, ok := httpCluster.CanServe(string(ctx.Path())); ok {
-				s.doHTTPRpcProxy(ctx, host, service)
-				return
-			}
-		}
+		// TODO: if the request is form this server itself, we should reject it
 		s.doHTTPProxy(ctx)
 	}
 
@@ -147,9 +157,9 @@ func (s *HTTPProxyServer) Destroy() {
 }
 
 func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
-	// TODO: accessLog
 	httpReq := &ctx.Request
 	httpRes := &ctx.Response
+	start := time.Now()
 	if s.keepalive {
 		httpReq.Header.Del("Connection")
 	}
@@ -162,16 +172,17 @@ func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
 		httpRes.Header.SetServer(HTTPProxyServerName)
 		httpRes.Header.SetStatusCode(fasthttp.StatusBadGateway)
 	}
+	// TODO: configurable
+	vlog.Infof("http-proxy %s %s %d %d", httpReq.Host(), httpReq.RequestURI(), httpRes.Header.StatusCode(), time.Now().Sub(start)/1e6)
 }
 
-func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, service string) {
+func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *cluster.HTTPCluster, service string) {
 	motanRequest := &core.MotanRequest{}
 	motanRequest.ServiceName = service
 	motanRequest.Method = string(ctx.Path())
-	motanRequest.SetAttachment("domain", host)
 	motanRequest.SetAttachment(http.Proxy, "true")
 
-	headerBuffer := bytes.NewBuffer(nil)
+	headerBuffer := &bytes.Buffer{}
 	headerWriter := bufio.NewWriter(headerBuffer)
 
 	// server do the url rewrite
@@ -180,24 +191,29 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, host string, 
 	ctx.Request.Header.WriteTo(headerWriter)
 	headerWriter.Flush()
 	headerBytes := headerBuffer.Bytes()
+	// no need to copy body, because we hold it until request finished
 	bodyBytes := ctx.Request.Body()
-
 	motanRequest.SetArguments([]interface{}{headerBytes, bodyBytes})
 	var reply []interface{}
 	motanRequest.GetRPCContext(true).Reply = &reply
-	motanResponse := s.messageHandler.Call(motanRequest)
+	motanResponse := httpCluster.Call(motanRequest)
+	// exception is a motan internal exception
+	// TODO: should we check the motanResponse nil?
 	if motanResponse.GetException() != nil {
+		vlog.Errorf("Http rpc proxy call failed: %s", motanResponse.GetException().ErrMsg)
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetBodyString("err_msg: " + motanResponse.GetException().ErrMsg)
 		return
 	}
 	// we need process deserialize here, maybe the httpCluster should initialize without proxy as a normal client
 	// and the serialization proceed by cluster itself
 	err := motanResponse.ProcessDeserializable(&reply)
 	if err != nil {
-		vlog.Errorf("deserialize rpc response failed: %s", err.Error())
+		vlog.Errorf("Deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
 		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetBodyString("err_msg: " + err.Error())
 		return
 	}
 	if reply[0] != nil {

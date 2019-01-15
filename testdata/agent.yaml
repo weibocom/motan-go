@@ -1,0 +1,57 @@
+motan-agent:
+  port: 9981
+  eport: 9982
+  mport: 8002
+  log_dir: "stdout"
+  registry: "direct-registry"
+  application: "agent-test"
+
+motan-registry:
+  direct-registry:
+    protocol: direct
+    host: localhost
+    port: 9982
+
+motan-service:
+  test.domain:
+    registry: direct-registry
+    group: test.domain
+    domain: test.domain
+    path: test
+    export: "motan2:9982"
+    provider: http
+    serialization: simple
+    proxyAddress: localhost:9090
+#    filter: "accessLog,metrics"
+    requestTimeout: 2000
+
+http-locations:
+  test.domain:
+  - match: /test
+    type: start
+    upstream: test
+
+  - match: /test2
+    type: start
+    upstream: test2
+
+  - match: ^/test3/.*
+    type: regexp
+    upstream: test3
+
+  - match: ^/(tst|2).*
+    type: regexp
+    upstream: test
+    rewriteRules:
+    - "!regexp ^/2/.*  ^/(.*) /2/$1"
+
+http-client:
+  test.domain:
+    registry: direct-registry
+    domain: test.domain
+    group: test.domain
+    preload: test
+    serialization: simple
+#    filter: "accessLog,metrics"
+    requestTimeout: 2000
+    protocol: motan2

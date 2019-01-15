@@ -1,6 +1,7 @@
 # Motan-go
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/weibocom/motan/blob/master/LICENSE)
 [![Build Status](https://img.shields.io/travis/weibocom/motan-go/master.svg?label=Build)](https://travis-ci.org/weibocom/motan-go)
+[![codecov](https://codecov.io/gh/weibocom/motan-go/branch/master/graph/badge.svg)](https://codecov.io/gh/weibocom/motan-go)
 [![GoDoc](https://godoc.org/github.com/weibocom/motan-go?status.svg&style=flat)](https://godoc.org/github.com/weibocom/motan-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/weibocom/motan-go)](https://goreportcard.com/report/github.com/weibocom/motan-go)
 
