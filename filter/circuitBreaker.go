@@ -13,12 +13,14 @@ const (
 	RequestVolumeThresholdField = "circuitBreaker.requestThreshold"
 	SleepWindowField            = "circuitBreaker.sleepWindow"  //ms
 	ErrorPercentThreshold       = "circuitBreaker.errorPercent" //%
+	IncludeBizException         = "circuitBreaker.bizException"
 )
 
 type CircuitBreakerFilter struct {
-	url            *motan.URL
-	next           motan.EndPointFilter
-	circuitBreaker *hystrix.CircuitBreaker
+	url                 *motan.URL
+	next                motan.EndPointFilter
+	circuitBreaker      *hystrix.CircuitBreaker
+	includeBizException bool
 }
 
 func (c *CircuitBreakerFilter) GetIndex() int {
@@ -30,18 +32,15 @@ func (c *CircuitBreakerFilter) GetName() string {
 }
 
 func (c *CircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
-	circuitBreaker := newCircuitBreaker(c.GetName(), url)
-	return &CircuitBreakerFilter{url: url, circuitBreaker: circuitBreaker}
+	bizException := newCircuitBreaker(c.GetName(), url)
+	return &CircuitBreakerFilter{url: url, includeBizException: bizException}
 }
 
 func (c *CircuitBreakerFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	var response motan.Response
 	err := hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(caller, request)
-		if ex := response.GetException(); ex != nil {
-			return errors.New(ex.ErrMsg)
-		}
-		return nil
+		return checkException(response, c.includeBizException)
 	}, nil)
 	if err != nil {
 		return defaultErrMotanResponse(request, err.Error())
@@ -65,12 +64,21 @@ func (c *CircuitBreakerFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func newCircuitBreaker(filterName string, url *motan.URL) *hystrix.CircuitBreaker {
+func newCircuitBreaker(filterName string, url *motan.URL) bool {
+	bizExceptionStr := url.GetParam(IncludeBizException, "true")
+	bizException, err := strconv.ParseBool(bizExceptionStr)
+	if err != nil {
+		bizException = true
+		vlog.Warningf("[%s] parse config %s error, use default", filterName, IncludeBizException)
+	}
 	commandConfig := buildCommandConfig(filterName, url)
 	hystrix.ConfigureCommand(url.GetIdentity(), *commandConfig)
-	circuitBreaker, _, _ := hystrix.GetCircuit(url.GetIdentity())
-	vlog.Infof("[%s] new circuit success. url:%v, config{%s}\n", filterName, url.GetIdentity(), getConfigStr(commandConfig))
-	return circuitBreaker
+	if _, _, err = hystrix.GetCircuit(url.GetIdentity()); err != nil {
+		vlog.Errorf("[%s] new circuit fail. err:%s, url:%v, config{%s}\n", err.Error(), filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
+	} else {
+		vlog.Infof("[%s] new circuit success. url:%v, config{%s}\n", filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
+	}
+	return bizException
 }
 
 func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfig {
@@ -132,4 +140,11 @@ func getConfigStr(config *hystrix.CommandConfig) string {
 		ret += "errorPercent:" + strconv.Itoa(hystrix.DefaultErrorPercentThreshold) + " "
 	}
 	return ret
+}
+
+func checkException(response motan.Response, includeBizException bool) error {
+	if ex := response.GetException(); ex != nil && (includeBizException || ex.ErrType != motan.BizException) {
+		return errors.New(ex.ErrMsg)
+	}
+	return nil
 }

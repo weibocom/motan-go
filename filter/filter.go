@@ -8,7 +8,7 @@ import (
 const (
 	AccessLog             = "accessLog"
 	Metrics               = "metrics"
-	CircuitBreaker        = "endpointCircuitBreaker"
+	CircuitBreaker        = "circuitBreaker"
 	ClusterCircuitBreaker = "clusterCircuitBreaker"
 	FailFast              = "failfast"
 	ClusterMetrics        = "clusterMetrics"

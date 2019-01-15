@@ -1,16 +1,14 @@
 package filter
 
 import (
-	"errors"
-
 	"github.com/afex/hystrix-go/hystrix"
 	motan "github.com/weibocom/motan-go/core"
 )
 
 type ClusterCircuitBreakerFilter struct {
-	url            *motan.URL
-	next           motan.ClusterFilter
-	circuitBreaker *hystrix.CircuitBreaker
+	url                 *motan.URL
+	next                motan.ClusterFilter
+	includeBizException bool
 }
 
 func (c *ClusterCircuitBreakerFilter) GetIndex() int {
@@ -18,18 +16,15 @@ func (c *ClusterCircuitBreakerFilter) GetIndex() int {
 }
 
 func (c *ClusterCircuitBreakerFilter) NewFilter(url *motan.URL) motan.Filter {
-	circuitBreaker := newCircuitBreaker(c.GetName(), url)
-	return &ClusterCircuitBreakerFilter{url: url, circuitBreaker: circuitBreaker}
+	bizException := newCircuitBreaker(c.GetName(), url)
+	return &ClusterCircuitBreakerFilter{url: url, includeBizException: bizException}
 }
 
 func (c *ClusterCircuitBreakerFilter) Filter(ha motan.HaStrategy, lb motan.LoadBalance, request motan.Request) motan.Response {
 	var response motan.Response
 	err := hystrix.Do(c.url.GetIdentity(), func() error {
 		response = c.GetNext().Filter(ha, lb, request)
-		if ex := response.GetException(); ex != nil {
-			return errors.New(ex.ErrMsg)
-		}
-		return nil
+		return checkException(response, c.includeBizException)
 	}, nil)
 	if err != nil {
 		return defaultErrMotanResponse(request, err.Error())
