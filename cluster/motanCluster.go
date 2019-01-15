@@ -74,7 +74,7 @@ func (m *MotanCluster) initCluster() bool {
 	m.HaStrategy = m.extFactory.GetHa(m.url)
 	//lb
 	m.LoadBalance = m.extFactory.GetLB(m.url)
-	//filter
+	//filter should initialize after HaStrategy
 	m.initFilters()
 
 	if m.clusterFilter == nil {

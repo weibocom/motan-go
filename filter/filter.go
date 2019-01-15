@@ -6,13 +6,14 @@ import (
 
 // ext name
 const (
-	AccessLog      = "accessLog"
-	Metrics        = "metrics"
-	CircuitBreaker = "circuitbreaker"
-	FailFast       = "failfast"
-	ClusterMetrics = "clusterMetrics"
-	Trace          = "trace"
-	RateLimit      = "rateLimit"
+	AccessLog             = "accessLog"
+	Metrics               = "metrics"
+	CircuitBreaker        = "circuitBreaker"
+	ClusterCircuitBreaker = "clusterCircuitBreaker"
+	FailFast              = "failfast"
+	ClusterMetrics        = "clusterMetrics"
+	Trace                 = "trace"
+	RateLimit             = "rateLimit"
 )
 
 func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
@@ -25,7 +26,11 @@ func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
 	})
 
 	extFactory.RegistExtFilter(CircuitBreaker, func() motan.Filter {
-		return &CircuitBreakerEndPointFilter{}
+		return &CircuitBreakerFilter{}
+	})
+
+	extFactory.RegistExtFilter(ClusterCircuitBreaker, func() motan.Filter {
+		return &ClusterCircuitBreakerFilter{}
 	})
 
 	extFactory.RegistExtFilter(FailFast, func() motan.Filter {

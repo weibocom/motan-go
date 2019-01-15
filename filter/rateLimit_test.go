@@ -19,7 +19,7 @@ func TestRateLimitFilter(t *testing.T) {
 	request := &core.MotanRequest{Method: "testMethod"}
 
 	//Test NewFilter
-	param := map[string]string{"rateLimit": "1", "conf-id": "zha"}
+	param := map[string]string{"rateLimit": "10", "conf-id": "zha"}
 	filterURL := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	f := defaultExtFactory.GetFilter("rateLimit")
 	if f == nil {
@@ -31,28 +31,28 @@ func TestRateLimitFilter(t *testing.T) {
 
 	//Test serviceFilter
 	startTime := time.Now()
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < 1002; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
-		t.Error("Test serviceFilter failed!")
+	if elapsed1 := time.Since(startTime); elapsed1 < 200*time.Millisecond {
+		t.Error("Test serviceFilter failed! elapsed1:", elapsed1)
 	}
 
 	//Test methodFilter
-	param = map[string]string{"rateLimit.testMethod": "1", "conf-id": "zha"}
+	param = map[string]string{"rateLimit.testMethod": "10", "conf-id": "zha"}
 	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 	startTime = time.Now()
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < 1002; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 < time.Second {
-		t.Error("Test methodFilter failed!")
+	if elapsed1 := time.Since(startTime); elapsed1 < 200*time.Millisecond {
+		t.Error("Test methodFilter failed! elapsed1:", elapsed1)
 	}
 
 	//Test switcher
-	param = map[string]string{"rateLimit.testMethod": "1", "conf-id": "zha"}
+	param = map[string]string{"rateLimit.testMethod": "10", "conf-id": "zha"}
 	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
@@ -61,7 +61,7 @@ func TestRateLimitFilter(t *testing.T) {
 	for i := 0; i < 1001; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 > time.Second {
-		t.Error("Test switcher failed!")
+	if elapsed1 := time.Since(startTime); elapsed1 > 100*time.Millisecond {
+		t.Error("Test switcher failed! elapsed:", elapsed1)
 	}
 }

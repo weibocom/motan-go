@@ -83,10 +83,7 @@ func (r *RateLimitFilter) GetName() string {
 }
 
 func (r *RateLimitFilter) HasNext() bool {
-	if r.next != nil {
-		return true
-	}
-	return false
+	return r.next != nil
 }
 
 func (r *RateLimitFilter) GetIndex() int {
