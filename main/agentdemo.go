@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/weibocom/motan-go"
-	motancore "github.com/weibocom/motan-go/core"
 	"net"
 	"net/http"
 	"net/http/httputil"
+
+	"github.com/weibocom/motan-go"
+	motancore "github.com/weibocom/motan-go/core"
 )
 
 func main() {
