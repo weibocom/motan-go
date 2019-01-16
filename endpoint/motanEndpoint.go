@@ -650,6 +650,7 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *Config, serializat
 			channelPool.Close()
 			return nil, err
 		}
+		_ = conn.(*net.TCPConn).SetNoDelay(true)
 		channelPool.channels <- buildChannel(conn, config, serialization)
 	}
 	return channelPool, nil
