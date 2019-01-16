@@ -1,12 +1,16 @@
 package filter
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/endpoint"
 )
+
+var offset = 2
+var rate = 10 // times per second
 
 func TestRateLimitFilter(t *testing.T) {
 	//Init
@@ -19,7 +23,7 @@ func TestRateLimitFilter(t *testing.T) {
 	request := &core.MotanRequest{Method: "testMethod"}
 
 	//Test NewFilter
-	param := map[string]string{"rateLimit": "10", "conf-id": "zha"}
+	param := map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "zha"}
 	filterURL := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	f := defaultExtFactory.GetFilter("rateLimit")
 	if f == nil {
@@ -31,37 +35,37 @@ func TestRateLimitFilter(t *testing.T) {
 
 	//Test serviceFilter
 	startTime := time.Now()
-	for i := 0; i < 1002; i++ {
+	for i := 0; i < defaultCapacity+offset; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 < 200*time.Millisecond {
-		t.Error("Test serviceFilter failed! elapsed1:", elapsed1)
+	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+		t.Error("Test serviceFilter failed! elapsed:", elapsed)
 	}
 
 	//Test methodFilter
-	param = map[string]string{"rateLimit.testMethod": "10", "conf-id": "zha"}
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"}
 	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 	startTime = time.Now()
-	for i := 0; i < 1002; i++ {
+	for i := 0; i < defaultCapacity+offset; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 < 200*time.Millisecond {
-		t.Error("Test methodFilter failed! elapsed1:", elapsed1)
+	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+		t.Error("Test methodFilter failed! elapsed:", elapsed)
 	}
 
 	//Test switcher
-	param = map[string]string{"rateLimit.testMethod": "10", "conf-id": "zha"}
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"}
 	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
 	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 	core.GetSwitcherManager().GetSwitcher("zha_rateLimit").SetValue(false)
 	startTime = time.Now()
-	for i := 0; i < 1001; i++ {
+	for i := 0; i < defaultCapacity+offset; i++ {
 		ef.Filter(caller, request)
 	}
-	if elapsed1 := time.Since(startTime); elapsed1 > 100*time.Millisecond {
-		t.Error("Test switcher failed! elapsed:", elapsed1)
+	if elapsed := time.Since(startTime); elapsed > time.Duration(offset+1)*time.Second/time.Duration(rate) {
+		t.Error("Test switcher failed! elapsed:", elapsed)
 	}
 }
