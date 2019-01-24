@@ -405,10 +405,34 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 			vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
 			res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
 		}
-	} else {
-		res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
-		vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
+		return res
 	}
+	// if normal cluster not found we try http cluster, here service of request represent domain
+	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
+		httpCluster := httpCluster.(*cluster.HTTPCluster)
+		if service, ok := httpCluster.CanServe(request.GetMethod()); ok {
+			if request.GetAttachment(mpro.MSource) == "" {
+				application := httpCluster.GetURL().GetParam(motan.ApplicationKey, "")
+				if application == "" {
+					application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+				}
+				request.SetAttachment(mpro.MSource, application)
+			}
+			request.SetAttachment(mpro.MPath, service)
+			if motanRequest, ok := request.(*motan.MotanRequest); ok {
+				motanRequest.ServiceName = service
+			}
+			res = httpCluster.Call(request)
+			if res == nil {
+				vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
+				res = getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
+			}
+			return res
+		}
+	}
+
+	res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
+	vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
 	return res
 }
 

@@ -105,6 +105,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		host, _, _ := net.SplitHostPort(hostAndPort)
 		httpCluster := s.clusterGetter.GetHTTPCluster(host)
 		if httpCluster == nil && s.defaultDomain != "" {
+			httpReq.Header.SetHost(s.defaultDomain)
 			httpCluster = s.clusterGetter.GetHTTPCluster(s.defaultDomain)
 		}
 		if httpCluster != nil {
@@ -113,7 +114,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 				return
 			}
 		}
-		// no cluster found, if direct request the host ip and do not set Host header we should reject it
+		// no upstream handler found, if direct request the host ip and do not set Host header we should reject it
 		if httpReq.RequestURI()[0] == '/' {
 			for _, d := range s.deny {
 				if hostAndPort == d {
@@ -183,13 +184,10 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	motanRequest.SetAttachment(http.Proxy, "true")
 
 	headerBuffer := &bytes.Buffer{}
-	headerWriter := bufio.NewWriter(headerBuffer)
-
 	// server do the url rewrite
 	requestURI := ctx.Request.URI()
 	ctx.Request.SetRequestURIBytes(requestURI.RequestURI())
-	ctx.Request.Header.WriteTo(headerWriter)
-	headerWriter.Flush()
+	ctx.Request.Header.WriteTo(headerBuffer)
 	headerBytes := headerBuffer.Bytes()
 	// no need to copy body, because we hold it until request finished
 	bodyBytes := ctx.Request.Body()
