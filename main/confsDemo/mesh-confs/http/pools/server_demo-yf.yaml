@@ -1,0 +1,13 @@
+import-http-location:
+  - api.demo.com
+
+motan-service:
+  yf-api.demo.com-test1:
+    registry: direct-registry
+    group: "yf-api.demo.com"
+    domain: api.demo.com
+    path: test1
+    export: "motan2:19982"
+    provider: http
+    serialization: simple
+    proxyAddress: 127.0.0.1:9090

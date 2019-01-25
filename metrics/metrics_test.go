@@ -166,7 +166,7 @@ func TestStat(t *testing.T) {
 	item := GetStatItem(group, service)
 	assert.NotNil(t, item, "item not exist")
 	snap := item.SnapshotAndClear()
-	// test counter
+	// test counters
 	assert.NotNil(t, snap, "snapshot not exist")
 	assert.Equal(t, int64(length), snap.Count("c1"), "count")
 	assert.Equal(t, int64(length*2), snap.Count("c2"), "count")

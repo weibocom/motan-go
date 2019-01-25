@@ -521,29 +521,33 @@ func (sa *serverAgentMessageHandler) Initialize() {
 	sa.providers = motan.NewCopyOnWriteMap()
 }
 
+func getServiceKey(group, path string) string {
+	return group + "_" + path
+}
+
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
 	})
-	if p := sa.providers.LoadOrNil(request.GetServiceName()); p != nil {
+	serviceKey := getServiceKey(request.GetAttachment(mpro.MGroup), request.GetServiceName())
+	if p := sa.providers.LoadOrNil(serviceKey); p != nil {
 		p := p.(motan.Provider)
 		res = p.Call(request)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
 	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
-	// TODO: use group and service or more information as identifier
-	sa.providers.Store(p.GetPath(), p)
+	sa.providers.Store(getServiceKey(p.GetURL().Group, p.GetPath()), p)
 	return nil
 }
 
 func (sa *serverAgentMessageHandler) RmProvider(p motan.Provider) {
-	sa.providers.Delete(p.GetPath())
+	sa.providers.Delete(getServiceKey(p.GetURL().Group, p.GetPath()))
 }
 
 func (sa *serverAgentMessageHandler) GetProvider(serviceName string) motan.Provider {

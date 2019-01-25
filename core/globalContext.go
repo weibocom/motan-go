@@ -40,6 +40,7 @@ const (
 	poolPath          = "pools/"
 	httpServicePath   = "http/service/"
 	httpLocationPath  = "http/location/"
+	httpPoolPath      = "http/pools/"
 	poolNameSeparator = "-"
 )
 
@@ -197,6 +198,7 @@ func (c *Context) Initialize() {
 	c.parseHTTPClients()
 }
 
+// importCfgIgnoreError import the config with specified section
 func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, section string, root string, includeDir string, parsedHTTPLocation map[string]bool) {
 	is, err := parsingConfig.DIY(section)
 	if err != nil || is == nil {
@@ -205,7 +207,6 @@ func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, se
 	isHTTPLocation := section == importHTTPLocationSection
 	if li, ok := is.([]interface{}); ok {
 		for _, r := range li {
-			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + defaultFileSuffix)
 			if isHTTPLocation {
 				if parsedHTTPLocation[r.(string)] {
 					continue
@@ -213,6 +214,7 @@ func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, se
 					parsedHTTPLocation[r.(string)] = true
 				}
 			}
+			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + defaultFileSuffix)
 			if err != nil || tempCfg == nil {
 				continue
 			}
@@ -234,7 +236,6 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 
 	parsedHTTPLocation := make(map[string]bool)
 
-	// application
 	poolPart := strings.Split(pool, poolNameSeparator)
 	applicationName := *Application
 	if applicationName == "" && len(poolPart) > 0 { // the first part be the application name
@@ -248,6 +249,15 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		config.Merge(httpServiceCfg)
 	}
 
+	// http pool
+	httpPool := path + httpPoolPath + pool + defaultFileSuffix
+	httpPoolCfg, err := cfg.NewConfigFromFile(httpPool)
+	if err == nil && httpPoolCfg != nil {
+		importCfgIgnoreError(config, httpPoolCfg, importHTTPLocationSection, path, httpLocationPath, parsedHTTPLocation)
+		config.Merge(httpPoolCfg)
+	}
+
+	// application
 	application := path + applicationPath + applicationName + defaultFileSuffix
 	if application != "" {
 		appConfig, err := cfg.NewConfigFromFile(application)

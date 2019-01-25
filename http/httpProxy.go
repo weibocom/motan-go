@@ -330,7 +330,7 @@ func (m *LocationMatcher) URIToServiceName(uri string) string {
 
 // MotanRequestToFasthttpRequest convert a motan request to a fasthttp request
 // For http mesh server side: rpc - motan2-> clientAgent - motan2 -> serverAgent - motan request convert to http request-> httpServer
-// We use meta element HTTP_Method as http method, HTTP_QueryString as query string, any other meta exclude which has M_ prefix as http header
+// We use meta element HTTP_Method as http method, HTTP_QueryString as query string
 // Request method as request uri
 // Body will transform to a http body with following rules:
 //  if body is a map[string]string we transform it as a form data
