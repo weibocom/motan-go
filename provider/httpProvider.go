@@ -155,11 +155,12 @@ func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error)
 
 func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res string, err error) {
 	paramsTmp := request.GetArguments()
+
 	var buffer bytes.Buffer
-	if paramsTmp != nil && len(paramsTmp) > 0 {
-		// @if is simple, then only have paramsTmp[0]
-		// @TODO multi value support
+	if paramsTmp[0] != nil && len(paramsTmp) > 0 {
+		// @if is simple serialization, only have paramsTmp[0]
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
+
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
 		buffer.WriteString("requestIdFromClient=")
 		buffer.WriteString(fmt.Sprintf("%d", request.GetRequestID()))
@@ -288,7 +289,6 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	})
 
 	req.Header.Add("x-forwarded-for", ip)
-	req.Header.Set("Accept-Encoding", "") //强制不走gzip
 
 	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
 	c := http.Client{
@@ -311,9 +311,10 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		fillException(resp, t, err)
 		return resp
 	}
+	defer httpResp.Body.Close()
 	headers := httpResp.Header
 	statusCode := httpResp.StatusCode
-	defer httpResp.Body.Close()
+
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
