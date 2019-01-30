@@ -1,10 +1,10 @@
 package cluster
 
 import (
-	"github.com/stretchr/testify/assert"
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/core"
 )
 

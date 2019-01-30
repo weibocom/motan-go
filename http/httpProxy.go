@@ -1,22 +1,30 @@
 package http
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 
+	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
 
 const (
-	Proxy = "HTTP_PROXY"
+	Proxy       = "HTTP_PROXY"
+	Method      = "HTTP_Method"
+	QueryString = "HTTP_QueryString"
 )
+
 const (
 	DomainKey           = "domain"
 	KeepaliveTimeoutKey = "keepaliveTimeout"
 )
+
 const (
 	proxyMatchTypeUnknown = iota
 
@@ -28,6 +36,8 @@ const (
 
 var (
 	WhitespaceSplitPattern = regexp.MustCompile(`\s+`)
+
+	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString}
 )
 
 func PatternSplit(s string, pattern *regexp.Regexp) []string {
@@ -316,4 +326,98 @@ func (m *LocationMatcher) URIToServiceName(uri string) string {
 		return s
 	}
 	return ""
+}
+
+// MotanRequestToFasthttpRequest convert a motan request to a fasthttp request
+// For http mesh server side: rpc - motan2-> clientAgent - motan2 -> serverAgent - motan request convert to http request-> httpServer
+// We use meta element HTTP_Method as http method, HTTP_QueryString as query string
+// Request method as request uri
+// Body will transform to a http body with following rules:
+//  if body is a map[string]string we transform it as a form data
+//  if body is a string or []byte just use it
+//  else is unsupported
+func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *fasthttp.Request, defaultHTTPMethod string) error {
+	httpMethod := motanRequest.GetAttachment(Method)
+	if httpMethod == "" {
+		httpMethod = defaultHTTPMethod
+	}
+	fasthttpRequest.Header.SetMethod(httpMethod)
+	queryString := motanRequest.GetAttachment(QueryString)
+	if queryString != "" {
+		fasthttpRequest.URI().SetQueryString(queryString)
+	}
+	motanRequest.GetAttachments().Range(func(k, v string) bool {
+		// ignore some specified key
+		for _, attachmentKey := range httpProxySpecifiedAttachments {
+			if attachmentKey == k {
+				return true
+			}
+		}
+		if k == core.HostKey {
+			return true
+		}
+		// fasthttp will use a special field to store this header
+		if k == "Host" {
+			fasthttpRequest.Header.SetHost(v)
+			return true
+		}
+		k = strings.Replace(k, "M_", "MOTAN-", -1)
+		fasthttpRequest.Header.Add(k, v)
+		return true
+	})
+	// TODO: should we force disable http gzip?
+	fasthttpRequest.Header.Del("Accept-Encoding")
+	fasthttpRequest.Header.Del("Connection")
+	arguments := motanRequest.GetArguments()
+	if len(arguments) > 1 {
+		return errors.New("http rpc only support one parameter")
+	}
+	if len(arguments) == 1 {
+		var buffer bytes.Buffer
+		arg0 := arguments[0]
+		if arg0 != nil {
+			switch arg0.(type) {
+			case map[string]string:
+				for k, v := range arg0.(map[string]string) {
+					buffer.WriteString("&")
+					buffer.WriteString(k)
+					buffer.WriteString("=")
+					buffer.WriteString(url.QueryEscape(v))
+				}
+				if buffer.Len() != 0 {
+					// the first character is '&', we need remove it
+					if httpMethod == "GET" && queryString == "" {
+						fasthttpRequest.URI().SetQueryStringBytes(buffer.Bytes()[1:])
+					} else {
+						fasthttpRequest.Header.SetContentType("application/x-www-form-urlencoded")
+						fasthttpRequest.SetBody(buffer.Bytes()[1:])
+					}
+				}
+			case string:
+				fasthttpRequest.SetBody([]byte(arg0.(string)))
+			case []byte:
+				fasthttpRequest.SetBody(arg0.([]byte))
+			default:
+				return errors.New("http rpc unsupported parameter type: " + reflect.TypeOf(arg0).String())
+			}
+		}
+	}
+	return nil
+}
+
+// FasthttpResponseToMotanResponse convert a http response to a motan response
+// For http mesh server side, the httpServer response to the server agent but client need a motan response
+// Contrast to request convert, we put all headers to meta, an body maybe just use it with type []byte
+func FasthttpResponseToMotanResponse(motanResponse core.Response, fasthttpResponse *fasthttp.Response) {
+	fasthttpResponse.Header.VisitAll(func(k, v []byte) {
+		motanResponse.SetAttachment(string(k), string(v))
+	})
+	if resp, ok := motanResponse.(*core.MotanResponse); ok {
+		httpResponseBody := fasthttpResponse.Body()
+		if httpResponseBody != nil {
+			motanResponseBody := make([]byte, len(httpResponseBody))
+			copy(motanResponseBody, httpResponseBody)
+			resp.Value = motanResponseBody
+		}
+	}
 }

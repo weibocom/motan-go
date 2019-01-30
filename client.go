@@ -84,6 +84,7 @@ func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 	}
 	req.SetAttachment(mpro.MSource, application)
 	req.SetAttachment(mpro.MGroup, c.url.Group)
+	req.SetAttachment(mpro.MPath, req.GetServiceName())
 	return req
 }
 

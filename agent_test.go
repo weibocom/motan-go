@@ -13,13 +13,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/weibocom/motan-go/cluster"
+	"github.com/weibocom/motan-go/core"
+	mhttp "github.com/weibocom/motan-go/http"
+)
+
+const (
+	goNum      = 5
+	requestNum = 10000
 )
 
 var proxyClient *http.Client
 
-func TestHttpProxy(t *testing.T) {
-	goNum := 5
-	requestNum := 2000
+func TestHTTPProxy(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(goNum)
 	requests := make(chan int, requestNum)
@@ -38,7 +44,9 @@ func TestHttpProxy(t *testing.T) {
 					continue
 				}
 				resp.Body.Close()
-				assert.True(t, strings.HasSuffix(string(bytes), suffix))
+				if !strings.HasSuffix(string(bytes), suffix) {
+					t.Errorf("wrong response")
+				}
 			}
 		}()
 	}
@@ -47,6 +55,58 @@ func TestHttpProxy(t *testing.T) {
 	}
 	close(requests)
 	wg.Wait()
+}
+
+func TestRpcToHTTPProxy(t *testing.T) {
+	context := &core.Context{}
+	context.RegistryURLs = make(map[string]*core.URL)
+	context.ClientURL = &core.URL{}
+	context.ClientURL.PutParam(core.ApplicationKey, "motan-test-client")
+
+	extFactory := GetDefaultExtFactory()
+	registryURL := &core.URL{Protocol: "direct", Host: "127.0.0.1", Port: 9981}
+	context.RegistryURLs["direct-registry"] = registryURL
+
+	clientURL := &core.URL{}
+	clientURL.Protocol = "motan2"
+	clientURL.Path = "test.domain"
+	clientURL.PutParam(core.RegistryKey, "direct-registry")
+	clientURL.PutParam(core.TimeOutKey, "100000")
+	clientCluster := cluster.NewCluster(context, extFactory, clientURL, false)
+	client := Client{url: clientURL, cluster: clientCluster, extFactory: extFactory}
+	request := client.BuildRequest("/tst/xxxx/111", []interface{}{map[string]string{"a": "a"}})
+	var reply []byte
+	client.BaseCall(request, &reply)
+	assert.Equal(t, "/2/tst/xxxx/111?a=a", string(reply))
+	request.SetAttachment(mhttp.QueryString, "b=b")
+	request.SetAttachment(mhttp.Method, "POST")
+	client.BaseCall(request, &reply)
+	assert.Equal(t, "/2/tst/xxxx/111?b=b", string(reply))
+
+	wg := &sync.WaitGroup{}
+	wg.Add(goNum)
+	requests := make(chan int, requestNum)
+	for i := 0; i < goNum; i++ {
+		go func() {
+			defer wg.Done()
+			for req := range requests {
+				suffix := "test" + strconv.Itoa(req)
+				request := client.BuildRequest("/tst/"+suffix, nil)
+				request.SetAttachment(mhttp.Method, "POST")
+				var reply []byte
+				client.BaseCall(request, &reply)
+				if !strings.HasSuffix(string(reply), suffix) {
+					t.Errorf("wrong response")
+				}
+			}
+		}()
+	}
+	for i := 0; i < requestNum; i++ {
+		requests <- i
+	}
+	close(requests)
+	wg.Wait()
+
 }
 
 func TestMain(m *testing.M) {
@@ -65,8 +125,8 @@ func TestMain(m *testing.M) {
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
-	proxyUrl, _ := url.Parse("http://localhost:9983")
-	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyUrl)}}
+	proxyURL, _ := url.Parse("http://localhost:9983")
+	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	time.Sleep(1 * time.Second)
 	for i := 0; i < 100; i++ {
 		resp, err := proxyClient.Get("http://test.domain/tst/test")

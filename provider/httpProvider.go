@@ -32,11 +32,13 @@ type HTTPProvider struct {
 	gctx      *motan.Context
 	mixVars   []string
 	// for transparent http proxy
-	fastClient      *fasthttp.HostClient
-	proxyAddr       string
-	proxySchema     string
-	locationMatcher *mhttp.LocationMatcher
-	maxConnections  int
+	fastClient        *fasthttp.HostClient
+	proxyAddr         string
+	proxySchema       string
+	locationMatcher   *mhttp.LocationMatcher
+	maxConnections    int
+	domain            string
+	defaultHTTPMethod string
 }
 
 const (
@@ -73,8 +75,13 @@ func (h *HTTPProvider) Initialize() {
 			h.srvURLMap[confID.(string)] = srvConf
 		}
 	}
-	domain := h.url.GetParam(mhttp.DomainKey, "")
-	h.locationMatcher = mhttp.NewLocationMatcherFromContext(domain, h.gctx)
+	if getHTTPReqMethod, ok := h.url.Parameters["HTTP_REQUEST_METHOD"]; ok {
+		h.defaultHTTPMethod = getHTTPReqMethod
+	} else {
+		h.defaultHTTPMethod = DefaultMotanHTTPMethod
+	}
+	h.domain = h.url.GetParam(mhttp.DomainKey, "")
+	h.locationMatcher = mhttp.NewLocationMatcherFromContext(h.domain, h.gctx)
 	h.proxyAddr = h.url.GetParam("proxyAddress", "")
 	h.proxySchema = h.url.GetParam("proxySchema", "http")
 	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 512))
@@ -113,12 +120,7 @@ func (h *HTTPProvider) SetContext(context *motan.Context) {
 func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error) {
 	method := request.GetMethod()
 	httpReqURLFmt := h.url.Parameters["URL_FORMAT"]
-	httpReqMethod := ""
-	if getHTTPReqMethod, ok := h.url.Parameters["HTTP_REQUEST_METHOD"]; ok {
-		httpReqMethod = getHTTPReqMethod
-	} else {
-		httpReqMethod = DefaultMotanHTTPMethod
-	}
+	httpReqMethod := h.defaultHTTPMethod
 	// when set a extconf check the specific method conf first,then use the DefaultMotanMethodConfKey conf
 	if _, haveExtConf := h.srvURLMap[h.url.Parameters[motan.URLConfKey]]; haveExtConf {
 		var specificConf = make(map[string]string, 2)
@@ -203,6 +205,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	if doTransparentProxy {
 		// Header and body with []byte
 		toType = []interface{}{&headerBytes, &bodyBytes}
+	} else if h.proxyAddr != "" {
+		toType = nil
 	} else {
 		toType = make([]interface{}, 1)
 	}
@@ -243,15 +247,43 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			return resp
 		}
 		headerBuffer := &bytes.Buffer{}
-		headerWriter := bufio.NewWriter(headerBuffer)
 		httpRes.Header.Del("Connection")
-		httpRes.Header.WriteTo(headerWriter)
-		headerWriter.Flush()
+		httpRes.Header.WriteTo(headerBuffer)
 		body := httpRes.Body()
 		// copy response body is needed
 		responseBodyBytes := make([]byte, len(body))
 		copy(responseBodyBytes, body)
 		resp.Value = []interface{}{headerBuffer.Bytes(), responseBodyBytes}
+		return resp
+	}
+
+	if h.proxyAddr != "" {
+		// rpc client call to this server
+		upstream, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+		if !ok || upstream != h.url.Path {
+			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+			return resp
+		}
+		httpReq := fasthttp.AcquireRequest()
+		httpRes := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseRequest(httpReq)
+		defer fasthttp.ReleaseResponse(httpRes)
+		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)
+		if err != nil {
+			fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
+		}
+		httpReq.URI().SetScheme(h.proxySchema)
+		httpReq.URI().SetPath(rewritePath)
+		if len(httpReq.Header.Host()) == 0 {
+			httpReq.Header.SetHost(h.domain)
+		}
+		httpReq.Header.Add("X-Forwarded-For", ip)
+		err = h.fastClient.Do(httpReq, httpRes)
+		if err != nil {
+			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)
+			return resp
+		}
+		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
 		return resp
 	}
 
