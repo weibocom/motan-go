@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/weibocom/motan-go"
 	"os"
+
+	"github.com/weibocom/motan-go"
 )
 
 func main() {

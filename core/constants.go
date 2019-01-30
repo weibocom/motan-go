@@ -61,9 +61,9 @@ const (
 	Receive       = "receive"
 	Decode        = "decode"
 	Convert       = "convert"
-	ClustFliter   = "clustFilter"
-	EpFilterStart = "selectEp"
-	EpFilterEnd   = "epFilter"
+	ClFilter      = "clusterFilter"
+	EpFilterStart = "selectEndpoint"
+	EpFilterEnd   = "endpointFilter"
 	Encode        = "encode"
 	Send          = "send"
 )

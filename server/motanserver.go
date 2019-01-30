@@ -65,7 +65,7 @@ func (m *MotanServer) Destroy() {
 	if err != nil {
 		vlog.Errorf("motan server destroy fail.url %v, err :%s\n", m.URL, err.Error())
 	} else {
-		vlog.Infof("motan server destroy sucess.url %v\n", m.URL)
+		vlog.Infof("motan server destroy success.url %v\n", m.URL)
 	}
 }
 
@@ -75,7 +75,7 @@ func (m *MotanServer) run() {
 		if err != nil {
 			vlog.Errorf("motan server accept from port %v fail. err:%s\n", m.listener.Addr(), err.Error())
 		} else {
-
+			_ = conn.(*net.TCPConn).SetNoDelay(true)
 			go m.handleConn(conn)
 		}
 	}
@@ -141,9 +141,8 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
-				tc.PutResSpan(&motan.Span{Name: motan.ClustFliter, Time: time.Now()})
+				tc.PutResSpan(&motan.Span{Name: motan.ClFilter, Time: time.Now()})
 			}
-			//TODO oneway
 			if mres != nil {
 				mres.GetRPCContext(true).Proxy = m.proxy
 				res, err = mpro.ConvertToResMessage(mres, serialization)

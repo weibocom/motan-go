@@ -405,10 +405,34 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 			vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
 			res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
 		}
-	} else {
-		res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
-		vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
+		return res
 	}
+	// if normal cluster not found we try http cluster, here service of request represent domain
+	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
+		httpCluster := httpCluster.(*cluster.HTTPCluster)
+		if service, ok := httpCluster.CanServe(request.GetMethod()); ok {
+			if request.GetAttachment(mpro.MSource) == "" {
+				application := httpCluster.GetURL().GetParam(motan.ApplicationKey, "")
+				if application == "" {
+					application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+				}
+				request.SetAttachment(mpro.MSource, application)
+			}
+			request.SetAttachment(mpro.MPath, service)
+			if motanRequest, ok := request.(*motan.MotanRequest); ok {
+				motanRequest.ServiceName = service
+			}
+			res = httpCluster.Call(request)
+			if res == nil {
+				vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
+				res = getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
+			}
+			return res
+		}
+	}
+
+	res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
+	vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
 	return res
 }
 
@@ -497,29 +521,33 @@ func (sa *serverAgentMessageHandler) Initialize() {
 	sa.providers = motan.NewCopyOnWriteMap()
 }
 
+func getServiceKey(group, path string) string {
+	return group + "_" + path
+}
+
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
 	})
-	if p := sa.providers.LoadOrNil(request.GetServiceName()); p != nil {
+	serviceKey := getServiceKey(request.GetAttachment(mpro.MGroup), request.GetServiceName())
+	if p := sa.providers.LoadOrNil(serviceKey); p != nil {
 		p := p.(motan.Provider)
 		res = p.Call(request)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
 	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
-	// TODO: use group and service or more information as identifier
-	sa.providers.Store(p.GetPath(), p)
+	sa.providers.Store(getServiceKey(p.GetURL().Group, p.GetPath()), p)
 	return nil
 }
 
 func (sa *serverAgentMessageHandler) RmProvider(p motan.Provider) {
-	sa.providers.Delete(p.GetPath())
+	sa.providers.Delete(getServiceKey(p.GetURL().Group, p.GetPath()))
 }
 
 func (sa *serverAgentMessageHandler) GetProvider(serviceName string) motan.Provider {
