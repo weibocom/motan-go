@@ -1,21 +1,20 @@
-##only support 3 level config info
-#config fo agent
+# only support 3 level config info
+# config fo agent
 motan-agent:
   port: 9981 # agent serve port.
   eport: 9982 # service export port when as a reverse proxy
   mport: 8002 # agent manage port
-  log_dir: "./agentlogs"
-  registry: "direct-registry" # registry id for registering agent info
-  application: "agent-test" # agent identify. for agent command notify and so on
+  log_dir: ./agentlogs
+  registry: direct-registry # registry id for registering agent info
+  application: agent-test # agent identify. for agent command notify and so on
 
-#config of registries
+# config of registries
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
     host: localhost # direct server ip in single ip. if has host, address will disable.
     port: 9982 #direct server port
-    # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
-
+#    address: 10.210.21.1:8002,10.210.21.2:8002 # direct server in multi ip
   zk-registry:
     protocol: zookeeper
     host: localhost
@@ -23,8 +22,7 @@ motan-registry:
     registrySessionTimeout: 10000
     requestTimeout: 5000
 
-
-#conf of extensions. any custom config
+# conf of extensions. any custom config
 testextconf:
   foo: xxx
   bar:
