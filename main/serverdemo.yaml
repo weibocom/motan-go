@@ -1,8 +1,7 @@
 #config fo server
 motan-server:
-  mport: 8002 # agent manage port
-  log_dir: "./serverlogs"
-  application: "server-test" # server identify.
+  log_dir: ./serverlogs
+  application: server-test # server identify.
 
 #config of registries
 motan-registry:
@@ -10,25 +9,22 @@ motan-registry:
     protocol: direct   # registry type. will get instance from extFactory.
     host: localhost # direct server ip in single ip. if has host, address will disable.
     port: 8012 #direct server port
-    # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
-
+    # address: 10.210.21.1:8002,10.210.21.2:8002 # direct server in multi ip
   mesh-registry:
     protocol: mesh
     host: localhost
     port: 8002
     meshPort: 9981
-#    proxyRegistry: "zookeeper://localhost:2181"
-    proxyRegistry: "direct://localhost:9982"
-
+    #    proxyRegistry: zookeeper://localhost:2181
+    proxyRegistry: direct://localhost:9982
 
 #conf of basic service
 motan-basicService:
   mybasicService: # basic refer id
-    application: "server-test"
+    application: server-test
     group: motan-demo-rpc # group name
-    protocol: motan2 # rpc protocol
     registry: direct-registry # registry id
-    filter: "accessLog" # filter registed in extFactory
+    filter: accessLog # filter registered in extFactory
     serialization: simple
     nodeType: server
 
@@ -37,10 +33,10 @@ motan-service:
   mytest-motan2:
     path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
     basicService: mybasicService
-    ref : "main.Motan2TestService"
-    export: "motan2:8100"
+    ref: main.Motan2TestService
+    export: 8100
   mytest-demo:
     path: com.weibo.motan.demo.service.MotanDemoService # e.g. service name for subscribe
     basicService: mybasicService # basic service id
-    ref : "main.MotanDemoService"
-    export: "motan2:8100"
+    ref: main.MotanDemoService
+    export: 8100

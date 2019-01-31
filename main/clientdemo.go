@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/weibocom/motan-go"
 	motancore "github.com/weibocom/motan-go/core"
@@ -44,5 +45,5 @@ func runClientDemo() {
 	} else {
 		fmt.Printf("motan call success! reply:%s\n", reply)
 	}
-
+	time.Sleep(time.Second)
 }
