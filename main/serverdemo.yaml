@@ -1,24 +1,21 @@
-#config fo server
+# config fo server
 motan-server:
   log_dir: ./serverlogs
   application: server-test # server identify.
 
-#config of registries
+# config of registries
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
-    host: localhost # direct server ip in single ip. if has host, address will disable.
-    port: 8012 #direct server port
-    # address: 10.210.21.1:8002,10.210.21.2:8002 # direct server in multi ip
   mesh-registry:
     protocol: mesh
     host: localhost
     port: 8002
     meshPort: 9981
-    #    proxyRegistry: zookeeper://localhost:2181
+#    proxyRegistry: zookeeper://localhost:2181
     proxyRegistry: direct://localhost:9982
 
-#conf of basic service
+# conf of basic service
 motan-basicService:
   mybasicService: # basic refer id
     application: server-test
@@ -28,7 +25,7 @@ motan-basicService:
     serialization: simple
     nodeType: server
 
-#conf of services
+# conf of services
 motan-service:
   mytest-motan2:
     path: com.weibo.motan2.test.Motan2TestService # e.g. service name for subscribe
