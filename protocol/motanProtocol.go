@@ -425,7 +425,7 @@ func EncodeGzip(data []byte) ([]byte, error) {
 }
 
 func EncodeMessageGzip(msg *Message, gzipSize int) {
-	if gzipSize > 0 && len(msg.Body) > gzipSize {
+	if gzipSize > 0 && len(msg.Body) > gzipSize && msg.Header.IsGzip() {
 		data, err := EncodeGzip(msg.Body)
 		if err != nil {
 			vlog.Warningf("encode gzip fail! request id:%d, err:%s\n", msg.Header.RequestID, err.Error())
