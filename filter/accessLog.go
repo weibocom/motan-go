@@ -8,24 +8,23 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-type AccessLogEndPointFilter struct {
+type AccessLogFilter struct {
 	next motan.EndPointFilter
 }
 
-func (t *AccessLogEndPointFilter) GetIndex() int {
+func (t *AccessLogFilter) GetIndex() int {
 	return 1
 }
 
-func (t *AccessLogEndPointFilter) GetName() string {
+func (t *AccessLogFilter) GetName() string {
 	return AccessLog
 }
 
-func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
-	return &AccessLogEndPointFilter{}
+func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
+	return &AccessLogFilter{}
 }
 
-// Filter : Filter
-func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
+func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	role := "server"
 	var ip string
 	switch caller.(type) {
@@ -51,23 +50,23 @@ func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Requ
 	if response.GetException() != nil {
 		success = false
 	}
-	writeLog("access log--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
+	writeLog("accessLog--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
 	return response
 }
 
-func (t *AccessLogEndPointFilter) HasNext() bool {
+func (t *AccessLogFilter) HasNext() bool {
 	return t.next != nil
 }
 
-func (t *AccessLogEndPointFilter) SetNext(nextFilter motan.EndPointFilter) {
+func (t *AccessLogFilter) SetNext(nextFilter motan.EndPointFilter) {
 	t.next = nextFilter
 }
 
-func (t *AccessLogEndPointFilter) GetNext() motan.EndPointFilter {
+func (t *AccessLogFilter) GetNext() motan.EndPointFilter {
 	return t.next
 }
 
-func (t *AccessLogEndPointFilter) GetType() int32 {
+func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
