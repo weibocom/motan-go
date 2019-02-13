@@ -503,6 +503,7 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Body = DecodeGzipBody(request.Body)
 			request.Header.SetGzip(false)
 		}
+		rc.BodySize = len(request.Body)
 		if !rc.Proxy && serialize == nil {
 			return nil, ErrSerializeNil
 		}
@@ -519,6 +520,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
+			rc.BodySize = len(msg.Body)
 			EncodeMessageGzip(msg, rc.GzipSize)
 			return msg, nil
 		}
@@ -555,6 +557,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	}
 
 	req.Metadata = request.GetAttachments()
+	rc.BodySize = len(req.Body)
 	EncodeMessageGzip(req, rc.GzipSize)
 	if rc.Oneway {
 		req.Header.SetOneWay(true)
@@ -573,7 +576,6 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 		req.Metadata.Store(MMethodDesc, request.GetMethodDesc())
 	}
 	return req, nil
-
 }
 
 // ConvertToResMessage convert motan Response to protocol response
@@ -645,6 +647,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Body = DecodeGzipBody(response.Body)
 			response.Header.SetGzip(false)
 		}
+		rc.BodySize = len(response.Body)
 		if !rc.Proxy && serialize == nil {
 			return nil, ErrSerializeNil
 		}

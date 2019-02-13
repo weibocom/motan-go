@@ -37,20 +37,7 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	success := true
-	l := 0
-	if response.GetValue() != nil {
-		if b, ok := response.GetValue().([]byte); ok {
-			l = len(b)
-		}
-		if s, ok := response.GetValue().(string); ok {
-			l = len(s)
-		}
-	}
-	if response.GetException() != nil {
-		success = false
-	}
-	writeLog("accessLog--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
+	doAccessLog(t.GetName(), start, request, response, role+":"+ip+","+caller.GetURL().GetPortStr()+",")
 	return response
 }
 
@@ -68,6 +55,14 @@ func (t *AccessLogFilter) GetNext() motan.EndPointFilter {
 
 func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
+}
+
+func doAccessLog(filterName string, start time.Time, request motan.Request, response motan.Response, address string) {
+	writeLog("[%s] %spt:%d,size:%d/%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n",
+		filterName, address, response.GetProcessTime(),
+		request.GetRPCContext(true).BodySize, response.GetRPCContext(true).BodySize,
+		request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), response.GetRequestID(),
+		time.Since(start)/1000000, response.GetException() == nil, response.GetException())
 }
 
 // Temporarily solved the vlog asynchronous output.

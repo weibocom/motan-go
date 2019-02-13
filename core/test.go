@@ -22,7 +22,7 @@ func (t *TestFilter) NewFilter(url *URL) Filter {
 }
 
 func (t *TestFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
-	fmt.Println("do mock in testfilter with cluster mode")
+	fmt.Println("do mock in testFilter with cluster mode")
 
 	return t.GetNext().Filter(haStrategy, loadBalance, request)
 
@@ -123,6 +123,10 @@ type TestHaStrategy struct {
 	URL *URL
 }
 
+func (t *TestHaStrategy) GetName() string {
+	return "TestHaStrategy"
+}
+
 func (t *TestHaStrategy) GetURL() *URL {
 	return t.URL
 }
@@ -130,7 +134,7 @@ func (t *TestHaStrategy) SetURL(url *URL) {
 	t.URL = url
 }
 func (t *TestHaStrategy) Call(request Request, loadBalance LoadBalance) Response {
-	fmt.Println("in testHastrategy call")
+	fmt.Println("in testHaStrategy call")
 	refer := loadBalance.Select(request)
 	return refer.Call(request)
 }
@@ -143,7 +147,7 @@ func (t *TestLoadBalance) OnRefresh(endpoints []EndPoint) {
 	t.Endpoints = endpoints
 }
 func (t *TestLoadBalance) Select(request Request) EndPoint {
-	fmt.Println("in testLoadbalance select")
+	fmt.Println("in testLoadBalance select")
 	endpoint := &TestEndPoint{}
 	filterEndPoint := &FilterEndPoint{}
 	efilter1 := &TestEndPointFilter{}

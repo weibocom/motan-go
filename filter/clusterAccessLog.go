@@ -25,20 +25,7 @@ func (t *ClusterAccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 func (t *ClusterAccessLogFilter) Filter(haStrategy motan.HaStrategy, loadBalance motan.LoadBalance, request motan.Request) motan.Response {
 	start := time.Now()
 	response := t.GetNext().Filter(haStrategy, loadBalance, request)
-	success := true
-	size := 0
-	if response.GetValue() != nil {
-		if b, ok := response.GetValue().([]byte); ok {
-			size = len(b)
-		}
-		if s, ok := response.GetValue().(string); ok {
-			size = len(s)
-		}
-	}
-	if response.GetException() != nil {
-		success = false
-	}
-	writeLog("clusterAccessLog--pt:%d,size:%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n", response.GetProcessTime(), size, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
+	doAccessLog(t.GetName(), start, request, response, "")
 	return response
 }
 
