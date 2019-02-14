@@ -220,6 +220,36 @@ func BenchmarkDecodeGzipConcurrent(b *testing.B) {
 	})
 }
 
+func TestConcurrentMessageGzip(t *testing.T) {
+	size := 100
+	wg := sync.WaitGroup{}
+	wg.Add(size)
+	var count, errCount int64
+	messages := make([]*Message, size)
+	originalBody := make([][]byte, size)
+	for i := 0; i < size; i++ {
+		messages[i] = &Message{Header: &Header{}}
+		originalBody[i] = buildBytes(10 * 1024)
+		messages[i].Body = originalBody[i]
+	}
+	for i := 0; i < size; i++ {
+		j := i
+		go func() {
+			EncodeMessageGzip(messages[j], 1)
+			nb := DecodeGzipBody(messages[j].Body)
+			if string(nb) != string(originalBody[j]) {
+				t.Errorf("concurrent message gzip not correct.\n")
+				atomic.AddInt64(&errCount, 1)
+			} else {
+				atomic.AddInt64(&count, 1)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	t.Logf("count:%v, errCount: %v\n", count, errCount)
+}
+
 func TestConcurrentGzip(t *testing.T) {
 	size := 100
 	wg := sync.WaitGroup{}

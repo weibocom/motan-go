@@ -8,67 +8,67 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
-type AccessLogEndPointFilter struct {
+const (
+	defaultRole     = "server"
+	clientAgentRole = "client-agent"
+	serverAgentRole = "server-agent"
+)
+
+type AccessLogFilter struct {
 	next motan.EndPointFilter
 }
 
-func (t *AccessLogEndPointFilter) GetIndex() int {
+func (t *AccessLogFilter) GetIndex() int {
 	return 1
 }
 
-func (t *AccessLogEndPointFilter) GetName() string {
+func (t *AccessLogFilter) GetName() string {
 	return AccessLog
 }
 
-func (t *AccessLogEndPointFilter) NewFilter(url *motan.URL) motan.Filter {
-	return &AccessLogEndPointFilter{}
+func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
+	return &AccessLogFilter{}
 }
 
-// Filter : Filter
-func (t *AccessLogEndPointFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	role := "server"
+func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
+	role := defaultRole
 	var ip string
 	switch caller.(type) {
 	case motan.Provider:
-		role = "server-agent"
+		role = serverAgentRole
 		ip = request.GetAttachment(motan.HostKey)
 	case motan.EndPoint:
-		role = "client-agent"
+		role = clientAgentRole
 		ip = caller.GetURL().Host
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	success := true
-	l := 0
-	if response.GetValue() != nil {
-		if b, ok := response.GetValue().([]byte); ok {
-			l = len(b)
-		}
-		if s, ok := response.GetValue().(string); ok {
-			l = len(s)
-		}
-	}
-	if response.GetException() != nil {
-		success = false
-	}
-	writeLog("access log--%s:%s,%d,pt:%d,size:%d,req:%s,%s,%s,%d, res:%d,%t,%+v\n", role, ip, caller.GetURL().Port, response.GetProcessTime(), l, request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), request.GetRequestID(), time.Since(start)/1000000, success, response.GetException())
+	doAccessLog(role, ip+":"+caller.GetURL().GetPortStr(), t.GetName(), start, request, response)
 	return response
 }
 
-func (t *AccessLogEndPointFilter) HasNext() bool {
+func (t *AccessLogFilter) HasNext() bool {
 	return t.next != nil
 }
 
-func (t *AccessLogEndPointFilter) SetNext(nextFilter motan.EndPointFilter) {
+func (t *AccessLogFilter) SetNext(nextFilter motan.EndPointFilter) {
 	t.next = nextFilter
 }
 
-func (t *AccessLogEndPointFilter) GetNext() motan.EndPointFilter {
+func (t *AccessLogFilter) GetNext() motan.EndPointFilter {
 	return t.next
 }
 
-func (t *AccessLogEndPointFilter) GetType() int32 {
+func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
+}
+
+func doAccessLog(role string, address string, filterName string, start time.Time, request motan.Request, response motan.Response) {
+	writeLog("[%s] %s,%s,pt:%d,size:%d/%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n",
+		filterName, role, address, response.GetProcessTime(),
+		request.GetRPCContext(true).BodySize, response.GetRPCContext(true).BodySize,
+		request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), response.GetRequestID(),
+		time.Since(start)/1000000, response.GetException() == nil, response.GetException())
 }
 
 // Temporarily solved the vlog asynchronous output.
