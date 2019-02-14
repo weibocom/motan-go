@@ -8,6 +8,12 @@ import (
 	"github.com/weibocom/motan-go/log"
 )
 
+const (
+	defaultRole     = "server"
+	clientAgentRole = "client-agent"
+	serverAgentRole = "server-agent"
+)
+
 type AccessLogFilter struct {
 	next motan.EndPointFilter
 }
@@ -25,19 +31,19 @@ func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 }
 
 func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	role := "server"
+	role := defaultRole
 	var ip string
 	switch caller.(type) {
 	case motan.Provider:
-		role = "server-agent"
+		role = serverAgentRole
 		ip = request.GetAttachment(motan.HostKey)
 	case motan.EndPoint:
-		role = "client-agent"
+		role = clientAgentRole
 		ip = caller.GetURL().Host
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	doAccessLog(t.GetName(), start, request, response, role+":"+ip+","+caller.GetURL().GetPortStr()+",")
+	doAccessLog(role, ip+":"+caller.GetURL().GetPortStr(), t.GetName(), start, request, response)
 	return response
 }
 
@@ -57,9 +63,9 @@ func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func doAccessLog(filterName string, start time.Time, request motan.Request, response motan.Response, address string) {
-	writeLog("[%s] %spt:%d,size:%d/%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n",
-		filterName, address, response.GetProcessTime(),
+func doAccessLog(role string, address string, filterName string, start time.Time, request motan.Request, response motan.Response) {
+	writeLog("[%s] %s,%s,pt:%d,size:%d/%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n",
+		filterName, role, address, response.GetProcessTime(),
 		request.GetRPCContext(true).BodySize, response.GetRPCContext(true).BodySize,
 		request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), response.GetRequestID(),
 		time.Since(start)/1000000, response.GetException() == nil, response.GetException())

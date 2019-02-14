@@ -425,7 +425,7 @@ func EncodeGzip(data []byte) ([]byte, error) {
 }
 
 func EncodeMessageGzip(msg *Message, gzipSize int) {
-	if gzipSize > 0 && len(msg.Body) > gzipSize && msg.Header.IsGzip() {
+	if gzipSize > 0 && len(msg.Body) > gzipSize && !msg.Header.IsGzip() {
 		data, err := EncodeGzip(msg.Body)
 		if err != nil {
 			vlog.Warningf("encode gzip fail! request id:%d, err:%s\n", msg.Header.RequestID, err.Error())
@@ -499,11 +499,11 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 	rc.OriginalMessage = request
 	rc.Proxy = request.Header.IsProxy()
 	if request.Body != nil && len(request.Body) > 0 {
+		rc.BodySize = len(request.Body)
 		if request.Header.IsGzip() {
 			request.Body = DecodeGzipBody(request.Body)
 			request.Header.SetGzip(false)
 		}
-		rc.BodySize = len(request.Body)
 		if !rc.Proxy && serialize == nil {
 			return nil, ErrSerializeNil
 		}
@@ -520,8 +520,8 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
-			rc.BodySize = len(msg.Body)
 			EncodeMessageGzip(msg, rc.GzipSize)
+			rc.BodySize = len(msg.Body)
 			return msg, nil
 		}
 	}
@@ -557,8 +557,8 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	}
 
 	req.Metadata = request.GetAttachments()
-	rc.BodySize = len(req.Body)
 	EncodeMessageGzip(req, rc.GzipSize)
+	rc.BodySize = len(req.Body)
 	if rc.Oneway {
 		req.Header.SetOneWay(true)
 	}
@@ -624,6 +624,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 
 	res.Metadata = response.GetAttachments()
 	EncodeMessageGzip(res, rc.GzipSize)
+	rc.BodySize = len(res.Body)
 	if rc.Proxy {
 		res.Header.SetProxy(true)
 	}
@@ -643,11 +644,11 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 		}
 	}
 	if response.Header.GetStatus() == Normal && len(response.Body) > 0 {
+		rc.BodySize = len(response.Body)
 		if response.Header.IsGzip() {
 			response.Body = DecodeGzipBody(response.Body)
 			response.Header.SetGzip(false)
 		}
-		rc.BodySize = len(response.Body)
 		if !rc.Proxy && serialize == nil {
 			return nil, ErrSerializeNil
 		}
