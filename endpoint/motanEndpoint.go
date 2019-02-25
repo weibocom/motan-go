@@ -14,11 +14,16 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 )
 
+const (
+	errorCountThresholdKey = "errorCountThreshold"
+	keepaliveIntervalKey   = "keepaliveInterval"
+)
+
 var (
 	defaultChannelPoolSize     = 3
 	defaultRequestTimeout      = 1000 * time.Millisecond
 	defaultConnectTimeout      = 1000 * time.Millisecond
-	defaultKeepaliveInterval   = 10 * time.Second
+	defaultKeepaliveInterval   = 1000 * time.Millisecond
 	defaultErrorCountThreshold = 10
 	ErrChannelShutdown         = fmt.Errorf("The channel has been shutdown")
 	ErrSendRequestTimeout      = fmt.Errorf("Timeout err: send request timeout")
@@ -30,12 +35,14 @@ var (
 )
 
 type MotanEndpoint struct {
-	url        *motan.URL
-	channels   *ChannelPool
-	destroyCh  chan struct{}
-	available  bool
-	errorCount uint32
-	proxy      bool
+	url                 *motan.URL
+	channels            *ChannelPool
+	destroyCh           chan struct{}
+	available           bool
+	errorCount          uint32
+	proxy               bool
+	errorCountThreshold int64
+	keepaliveInterval   time.Duration
 
 	// for heartbeat requestid
 	keepaliveID   uint64
@@ -57,6 +64,8 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 func (m *MotanEndpoint) Initialize() {
 	m.destroyCh = make(chan struct{}, 1)
 	connectTimeout := m.url.GetTimeDuration("connectTimeout", time.Millisecond, defaultConnectTimeout)
+	m.errorCountThreshold = m.url.GetIntValue(errorCountThresholdKey, int64(defaultErrorCountThreshold))
+	m.keepaliveInterval = m.url.GetTimeDuration(keepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
 
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
@@ -177,7 +186,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(defaultErrorCountThreshold) {
+	if errCount == uint32(m.errorCountThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 		go m.keepalive()
@@ -190,7 +199,7 @@ func (m *MotanEndpoint) resetErr() {
 
 func (m *MotanEndpoint) keepalive() {
 	defer motan.HandlePanic(nil)
-	ticker := time.NewTicker(defaultKeepaliveInterval)
+	ticker := time.NewTicker(m.keepaliveInterval)
 	defer ticker.Stop()
 	for {
 		select {
