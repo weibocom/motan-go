@@ -105,7 +105,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		host, _, _ := net.SplitHostPort(hostAndPort)
 		httpCluster := s.clusterGetter.GetHTTPCluster(host)
 		if httpCluster == nil && s.defaultDomain != "" {
-			httpReq.Header.SetHost(s.defaultDomain)
+			httpReq.Header.Set("Host", s.defaultDomain)
 			httpCluster = s.clusterGetter.GetHTTPCluster(s.defaultDomain)
 		}
 		if httpCluster != nil {
