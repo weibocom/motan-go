@@ -26,8 +26,7 @@ const (
 )
 
 const (
-	proxyMatchTypeUnknown = iota
-
+	proxyMatchTypeUnknown ProxyMatchType = iota
 	proxyMatchTypeRegexp
 	proxyMatchTypeRegexpIgnoreCase
 	proxyMatchTypeStart

@@ -46,7 +46,8 @@ const (
 	ProxyRegistryKey        = "proxyRegistry"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
-	ErrorThresholdKey       = "errorThreshold"
+	ErrorCountThresholdKey  = "errorCountThreshold"
+	KeepaliveIntervalKey    = "keepaliveInterval"
 )
 
 // nodeType

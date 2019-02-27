@@ -339,6 +339,7 @@ type RPCContext struct {
 	Oneway          bool
 	Proxy           bool
 	GzipSize        int
+	BodySize        int
 	SerializeNum    int
 	Serialized      bool
 
