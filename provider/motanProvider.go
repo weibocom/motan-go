@@ -40,8 +40,8 @@ func (m *MotanProvider) Initialize() {
 		endpointURL.PutParam(motan.ConnectRetryIntervalKey, "5000")
 	}
 	// no need disable endpoint when error occurs
-	if endpointURL.GetParam(motan.ErrorThresholdKey, "") == "" {
-		endpointURL.PutParam(motan.ErrorThresholdKey, "0")
+	if endpointURL.GetParam(motan.ErrorCountThresholdKey, "") == "" {
+		endpointURL.PutParam(motan.ErrorCountThresholdKey, "0")
 	}
 	m.ep = m.extFactory.GetEndPoint(endpointURL)
 	if m.ep == nil {
