@@ -129,9 +129,10 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 	}
 
 	s.httpServer = &fasthttp.Server{
-		Handler:               s.httpHandler,
-		Name:                  HTTPProxyServerName,
-		NoDefaultServerHeader: true,
+		Handler:                       s.httpHandler,
+		Name:                          HTTPProxyServerName,
+		NoDefaultServerHeader:         true,
+		DisableHeaderNamesNormalizing: true,
 	}
 	if block {
 		s.httpServer.ListenAndServe(":" + s.url.GetPortStr())
