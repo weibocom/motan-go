@@ -34,7 +34,7 @@ func TestHTTPProxy(t *testing.T) {
 			defer wg.Done()
 			for req := range requests {
 				suffix := "test" + strconv.Itoa(req)
-				resp, err := proxyClient.Get("http://test.domain/tst/" + suffix)
+				resp, err := proxyClient.Get("http://test.domain/tst/test?index=" + suffix)
 				if err != nil {
 					continue
 				}
@@ -91,8 +91,8 @@ func TestRpcToHTTPProxy(t *testing.T) {
 			defer wg.Done()
 			for req := range requests {
 				suffix := "test" + strconv.Itoa(req)
-				request := client.BuildRequest("/tst/"+suffix, nil)
-				request.SetAttachment(mhttp.Method, "POST")
+				request := client.BuildRequest("/tst/test", []interface{}{map[string]string{"index=": suffix}})
+				request.SetAttachment(mhttp.Method, "GET")
 				var reply []byte
 				client.BaseCall(request, &reply)
 				if !strings.HasSuffix(string(reply), suffix) {
