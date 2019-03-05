@@ -93,6 +93,11 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 	url.ClearCachedInfo()
 }
 
+// get Agent server
+func (a *Agent)GetAgentServer() motan.Server {
+	return a.agentServer
+}
+
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
@@ -350,11 +355,11 @@ func (a *Agent) startAgent() {
 	server.SetMessageHandler(handler)
 	vlog.Infof("Motan agent is started. port:%d\n", a.port)
 	fmt.Println("Motan agent start.")
+	a.agentServer = server
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
 		vlog.Fatalf("start agent fail. port :%d, err: %v\n", a.port, err)
 	}
-	a.agentServer = server
 	fmt.Println("Motan agent start fail!")
 }
 
