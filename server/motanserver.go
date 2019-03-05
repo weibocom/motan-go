@@ -14,14 +14,16 @@ import (
 )
 
 type MotanServer struct {
-	URL        *motan.URL
-	handler    motan.MessageHandler
-	listener   net.Listener
-	extFactory motan.ExtensionFactory
-	proxy      bool
+	URL         *motan.URL
+	handler     motan.MessageHandler
+	listener    net.Listener
+	extFactory  motan.ExtensionFactory
+	proxy       bool
+	isDestroyed chan bool
 }
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
+	m.isDestroyed = make(chan bool, 1)
 	lis, err := net.Listen("tcp", ":"+strconv.Itoa(int(m.URL.Port)))
 	if err != nil {
 		vlog.Errorf("listen port:%d fail. err: %v\n", m.URL.Port, err)
@@ -62,10 +64,11 @@ func (m *MotanServer) GetName() string {
 
 func (m *MotanServer) Destroy() {
 	err := m.listener.Close()
-	if err != nil {
-		vlog.Errorf("motan server destroy fail.url %v, err :%s\n", m.URL, err.Error())
-	} else {
+	if err == nil {
+		m.isDestroyed <- true
 		vlog.Infof("motan server destroy success.url %v\n", m.URL)
+	} else {
+		vlog.Errorf("motan server destroy fail.url %v, err :%s\n", m.URL, err.Error())
 	}
 }
 
@@ -73,7 +76,13 @@ func (m *MotanServer) run() {
 	for {
 		conn, err := m.listener.Accept()
 		if err != nil {
-			vlog.Errorf("motan server accept from port %v fail. err:%s\n", m.listener.Addr(), err.Error())
+			select {
+			case <-m.isDestroyed:
+				vlog.Infof("Motan agent server been Destroyed and stoped.")
+				return
+			default:
+				vlog.Errorf("motan server accept from port %v fail. err:%s\n", m.listener.Addr(), err.Error())
+			}
 		} else {
 			_ = conn.(*net.TCPConn).SetNoDelay(true)
 			go m.handleConn(conn)
