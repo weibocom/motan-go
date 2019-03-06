@@ -230,6 +230,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
+		httpReq.Header.DisableNormalizing()
+		httpRes.Header.DisableNormalizing()
 		defer fasthttp.ReleaseRequest(httpReq)
 		defer fasthttp.ReleaseResponse(httpRes)
 		httpReq.Header.Read(bufio.NewReader(bytes.NewReader(headerBytes)))
@@ -266,6 +268,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
+		httpReq.Header.DisableNormalizing()
+		httpRes.Header.DisableNormalizing()
 		defer fasthttp.ReleaseRequest(httpReq)
 		defer fasthttp.ReleaseResponse(httpRes)
 		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)

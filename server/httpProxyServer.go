@@ -106,6 +106,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		httpCluster := s.clusterGetter.GetHTTPCluster(host)
 		if httpCluster == nil && s.defaultDomain != "" {
 			httpReq.Header.SetHost(s.defaultDomain)
+			hostAndPort = s.defaultDomain + ":80"
 			httpCluster = s.clusterGetter.GetHTTPCluster(s.defaultDomain)
 		}
 		if httpCluster != nil {
@@ -128,9 +129,10 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 	}
 
 	s.httpServer = &fasthttp.Server{
-		Handler:               s.httpHandler,
-		Name:                  HTTPProxyServerName,
-		NoDefaultServerHeader: true,
+		Handler:                       s.httpHandler,
+		Name:                          HTTPProxyServerName,
+		NoDefaultServerHeader:         true,
+		DisableHeaderNamesNormalizing: true,
 	}
 	if block {
 		s.httpServer.ListenAndServe(":" + s.url.GetPortStr())
