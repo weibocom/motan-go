@@ -98,6 +98,18 @@ func (a *Agent)GetAgentServer() motan.Server {
 	return a.agentServer
 }
 
+func (a *Agent)SetAllServicesAvailable()  {
+	a.availableAllServices()
+	a.status = http.StatusOK
+	a.saveStatus()
+}
+
+func (a *Agent)SetAllServicesUnavailable()  {
+	a.unavailableAllServices()
+	a.status = http.StatusServiceUnavailable
+	a.saveStatus()
+}
+
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
