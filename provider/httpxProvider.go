@@ -161,6 +161,9 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 	req.Header.SetMethod(httpReqMethod)
 	request.GetAttachments().Range(func(k, v string) bool {
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
+		if k == motan.HostKey {
+			return true
+		}
 		req.Header.Add(k, v)
 		return true
 	})
@@ -175,7 +178,7 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 
 	err = h.httpClient.Do(req, httpResp)
 	if err != nil {
-		vlog.Errorf("new HTTP Provider Do HTTP Call err: %v", err)
+		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v",req, err)
 		fillException(resp, t, err)
 		return resp
 	}
