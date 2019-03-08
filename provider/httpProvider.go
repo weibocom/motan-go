@@ -187,6 +187,7 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 				buffer.WriteString(URL.QueryEscape(v))
 			}
 		case "string":
+			buffer.WriteString("&")
 			buffer.WriteString(URL.QueryEscape(paramsTmp[0].(string)))
 		}
 	}
@@ -245,7 +246,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		err := h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
-			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)
+			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
 		headerBuffer := &bytes.Buffer{}
@@ -284,7 +285,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpReq.Header.Add("X-Forwarded-For", ip)
 		err = h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
-			fillExceptionWithCode(resp, http.StatusBadGateway, t, err)
+			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
