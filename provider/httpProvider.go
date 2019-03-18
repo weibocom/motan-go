@@ -224,8 +224,9 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}
 	// Ok here we do transparent http proxy and return
 	if doTransparentProxy {
-		upstream, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok || upstream != h.url.Path {
+		// Do not check upstream for compatibility
+		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+		if !ok {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
 			return resp
 		}
@@ -262,8 +263,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 
 	if h.proxyAddr != "" {
 		// rpc client call to this server
-		upstream, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok || upstream != h.url.Path {
+		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+		if !ok {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
 			return resp
 		}

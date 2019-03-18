@@ -91,7 +91,7 @@ func TestRpcToHTTPProxy(t *testing.T) {
 			defer wg.Done()
 			for req := range requests {
 				suffix := "test" + strconv.Itoa(req)
-				request := client.BuildRequest("/tst/test", []interface{}{map[string]string{"index=": suffix}})
+				request := client.BuildRequest("/tst/test", []interface{}{map[string]string{"index": suffix}})
 				request.SetAttachment(mhttp.Method, "GET")
 				var reply []byte
 				client.BaseCall(request, &reply)
