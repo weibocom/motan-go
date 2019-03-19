@@ -11,6 +11,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"github.com/weibocom/motan-go/registry"
 )
 
 type MotanServer struct {
@@ -24,7 +25,11 @@ type MotanServer struct {
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
-	lis, err := net.Listen("tcp", ":"+strconv.Itoa(int(m.URL.Port)))
+	addr := ":" + strconv.Itoa(int(m.URL.Port))
+	if registry.IsAgent(m.URL) {
+		addr = m.URL.Host + addr
+	}
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		vlog.Errorf("listen port:%d fail. err: %v\n", m.URL.Port, err)
 		return err

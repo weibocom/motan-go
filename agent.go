@@ -333,10 +333,6 @@ func (a *Agent) SetSanpshotConf() {
 
 func (a *Agent) initAgentURL() {
 	agentURL := a.Context.AgentURL
-	if agentURL.Host == "" {
-		agentURL.Host = motan.GetLocalIP()
-	}
-
 	if application, ok := agentURL.Parameters[motan.ApplicationKey]; ok {
 		agentURL.Group = application // agent's application is same with agent group.
 	} else {
@@ -363,7 +359,8 @@ func (a *Agent) initAgentURL() {
 }
 
 func (a *Agent) startAgent() {
-	url := &motan.URL{Port: a.port}
+	url := a.agentURL.Copy()
+	url.Port = a.port
 	handler := &agentMessageHandler{agent: a}
 	server := &mserver.MotanServer{URL: url}
 	server.SetMessageHandler(handler)
@@ -380,22 +377,26 @@ func (a *Agent) startAgent() {
 func (a *Agent) registerAgent() {
 	vlog.Infoln("start agent registry.")
 	if reg, exit := a.agentURL.Parameters[motan.RegistryKey]; exit {
+		agentURL := a.agentURL.Copy()
+		if agentURL.Host == "" {
+			agentURL.Host = motan.GetLocalIP()
+		}
 		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
 			registry := a.extFactory.GetRegistry(registryURL)
 			if registry != nil {
-				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), a.agentURL.GetIdentity())
-				registry.Register(a.agentURL)
+				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), agentURL.GetIdentity())
+				registry.Register(agentURL)
 				//TODO 503, heartbeat
 				if commandRegisry, ok := registry.(motan.DiscoverCommand); ok {
 					listener := &AgentListener{agent: a}
-					commandRegisry.SubscribeCommand(a.agentURL, listener)
-					commandInfo := commandRegisry.DiscoverCommand(a.agentURL)
+					commandRegisry.SubscribeCommand(agentURL, listener)
+					commandInfo := commandRegisry.DiscoverCommand(agentURL)
 					listener.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 					vlog.Infof("agent subscribe command. init command: %s\n", commandInfo)
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL.GetIdentity())
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", agentURL.GetIdentity())
 		}
 	}
 }
@@ -671,7 +672,6 @@ func (a *Agent) startMServer() {
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
-
 	vlog.Infof("start listen manage port %d ...\n", a.mport)
 	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 	if err != nil {
