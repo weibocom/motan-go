@@ -140,10 +140,10 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		DisableHeaderNamesNormalizing: true,
 	}
 	if block {
-		s.httpServer.ListenAndServe(":" + s.url.GetPortStr())
+		s.httpServer.ListenAndServe(s.url.Host + ":" + s.url.GetPortStr())
 	} else {
 		go func() {
-			s.httpServer.ListenAndServe(":" + s.url.GetPortStr())
+			s.httpServer.ListenAndServe(s.url.Host + ":" + s.url.GetPortStr())
 		}()
 	}
 	return nil
