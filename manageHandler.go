@@ -78,11 +78,10 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (i *InfoHandler) getReferService() []byte {
 	mbody := body{Service: []rpcService{}}
-	i.a.clustermap.Range(func(_, v interface{}) bool {
+	i.a.clustermap.Range(func(k, v interface{}) bool {
 		cls := v.(*cluster.MotanCluster)
-		rpc := cls.GetURL().Path
 		available := cls.IsAvailable()
-		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
+		mbody.Service = append(mbody.Service, rpcService{Name: k.(string), Status: available})
 		return true
 	})
 	retData := jsonRetData{Code: 200, Body: mbody}
