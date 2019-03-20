@@ -94,17 +94,17 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 }
 
 // get Agent server
-func (a *Agent)GetAgentServer() motan.Server {
+func (a *Agent) GetAgentServer() motan.Server {
 	return a.agentServer
 }
 
-func (a *Agent)SetAllServicesAvailable()  {
+func (a *Agent) SetAllServicesAvailable() {
 	a.availableAllServices()
 	a.status = http.StatusOK
 	a.saveStatus()
 }
 
-func (a *Agent)SetAllServicesUnavailable()  {
+func (a *Agent) SetAllServicesUnavailable() {
 	a.unavailableAllServices()
 	a.status = http.StatusServiceUnavailable
 	a.saveStatus()
@@ -312,6 +312,13 @@ func (a *Agent) initCluster(url *motan.URL) {
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
 	a.clustermap.Store(mapKey, c)
+
+	mapKeyWithoutGroup := getClusterKey("", url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	if _, ok := a.clustermap.Load(mapKeyWithoutGroup); ok {
+		a.clustermap.Store(mapKeyWithoutGroup, nil)
+	} else {
+		a.clustermap.Store(mapKeyWithoutGroup, c)
+	}
 }
 
 func (a *Agent) SetSanpshotConf() {
@@ -408,21 +415,25 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 		version = request.GetAttachment(mpro.MVersion)
 	}
 	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
-	if motanCluster := a.agent.clustermap.LoadOrNil(ck); motanCluster != nil {
-		motanCluster := motanCluster.(*cluster.MotanCluster)
-		if request.GetAttachment(mpro.MSource) == "" {
-			application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
-			if application == "" {
-				application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+	if motanCluster, ok := a.agent.clustermap.Load(ck); ok {
+		if motanCluster != nil {
+			motanCluster := motanCluster.(*cluster.MotanCluster)
+			if request.GetAttachment(mpro.MSource) == "" {
+				application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
+				if application == "" {
+					application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+				}
+				request.SetAttachment(mpro.MSource, application)
 			}
-			request.SetAttachment(mpro.MSource, application)
+			res = motanCluster.Call(request)
+			if res == nil {
+				vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
+				res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
+			}
+			return res
 		}
-		res = motanCluster.Call(request)
-		if res == nil {
-			vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
-			res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
-		}
-		return res
+		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d\n", ck, request.GetRequestID())
+		return getDefaultResponse(request.GetRequestID(), "empty group is not supported, maybe this service belongs to multiple groups, cluster:"+ck)
 	}
 	// if normal cluster not found we try http cluster, here service of request represent domain
 	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
@@ -449,7 +460,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 
 	res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
-	vlog.Warningf("[Error]cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
+	vlog.Warningf("cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
 	return res
 }
 
