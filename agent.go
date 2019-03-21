@@ -40,17 +40,18 @@ type Agent struct {
 
 	agentServer motan.Server
 
-	clustermap     *motan.CopyOnWriteMap
-	httpClusterMap *motan.CopyOnWriteMap
-	status         int
-	agentURL       *motan.URL
-	logdir         string
-	port           int
-	mport          int
-	eport          int
-	hport          int
-	pidfile        string
-	runtimedir     string
+	clusterMap             *motan.CopyOnWriteMap
+	clusterMapWithoutGroup *motan.CopyOnWriteMap
+	httpClusterMap         *motan.CopyOnWriteMap
+	status                 int
+	agentURL               *motan.URL
+	logdir                 string
+	port                   int
+	mport                  int
+	eport                  int
+	hport                  int
+	pidfile                string
+	runtimedir             string
 
 	serviceExporters  *motan.CopyOnWriteMap
 	agentPortServer   map[int]motan.Server
@@ -72,7 +73,8 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	} else {
 		agent = &Agent{extFactory: extfactory}
 	}
-	agent.clustermap = motan.NewCopyOnWriteMap()
+	agent.clusterMap = motan.NewCopyOnWriteMap()
+	agent.clusterMapWithoutGroup = motan.NewCopyOnWriteMap()
 	agent.httpClusterMap = motan.NewCopyOnWriteMap()
 	agent.serviceExporters = motan.NewCopyOnWriteMap()
 	agent.agentPortServer = make(map[int]motan.Server)
@@ -311,13 +313,13 @@ func (a *Agent) initCluster(url *motan.URL) {
 	}
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
-	a.clustermap.Store(mapKey, c)
+	a.clusterMap.Store(mapKey, c)
 
 	mapKeyWithoutGroup := getClusterKey("", url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-	if _, ok := a.clustermap.Load(mapKeyWithoutGroup); ok {
-		a.clustermap.Store(mapKeyWithoutGroup, nil)
+	if _, ok := a.clusterMapWithoutGroup.Load(mapKeyWithoutGroup); ok {
+		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, nil)
 	} else {
-		a.clustermap.Store(mapKeyWithoutGroup, c)
+		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, c)
 	}
 }
 
@@ -409,28 +411,34 @@ type agentMessageHandler struct {
 	agent *Agent
 }
 
+func (a *agentMessageHandler) clusterCall(request motan.Request, ck string, motanCluster *cluster.MotanCluster) (res motan.Response) {
+	if request.GetAttachment(mpro.MSource) == "" {
+		application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
+		if application == "" {
+			application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+		}
+		request.SetAttachment(mpro.MSource, application)
+	}
+	res = motanCluster.Call(request)
+	if res == nil {
+		vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
+		res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
+	}
+	return res
+}
+
 func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	version := "0.1"
 	if request.GetAttachment(mpro.MVersion) != "" {
 		version = request.GetAttachment(mpro.MVersion)
 	}
 	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
-	if motanCluster, ok := a.agent.clustermap.Load(ck); ok {
+	if motanCluster, ok := a.agent.clusterMap.Load(ck); ok {
+		return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
+	}
+	if motanCluster, ok := a.agent.clusterMapWithoutGroup.Load(ck); ok {
 		if motanCluster != nil {
-			motanCluster := motanCluster.(*cluster.MotanCluster)
-			if request.GetAttachment(mpro.MSource) == "" {
-				application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
-				if application == "" {
-					application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
-				}
-				request.SetAttachment(mpro.MSource, application)
-			}
-			res = motanCluster.Call(request)
-			if res == nil {
-				vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
-				res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
-			}
-			return res
+			return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
 		}
 		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d\n", ck, request.GetRequestID())
 		return getDefaultResponse(request.GetRequestID(), "empty group is not supported, maybe this service belongs to multiple groups, cluster:"+ck)
@@ -459,9 +467,8 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 		}
 	}
 
-	res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
 	vlog.Warningf("cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
-	return res
+	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
 }
 
 func (a *agentMessageHandler) AddProvider(p motan.Provider) error {
@@ -620,7 +627,7 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 	//TODO notify according cluster
 	if commandInfo != a.CurrentCommandInfo {
 		a.CurrentCommandInfo = commandInfo
-		a.agent.clustermap.Range(func(k, v interface{}) bool {
+		a.agent.clusterMap.Range(func(k, v interface{}) bool {
 			cls := v.(*cluster.MotanCluster)
 			for _, registry := range cls.Registries {
 				if cr, ok := registry.(motan.CommandNotifyListener); ok {

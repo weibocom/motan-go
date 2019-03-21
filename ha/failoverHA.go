@@ -30,7 +30,7 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 	for i := 0; i <= int(retries); i++ {
 		ep := loadBalance.Select(request)
 		if ep == nil {
-			return getErrorResponse(request.GetRequestID(), fmt.Sprintf("No referers for request, RequestID: %d, Request info: %+v",
+			return getErrorResponse(request.GetRequestID(), fmt.Sprintf("No refers for request, RequestID: %d, Request info: %+v",
 				request.GetRequestID(), request.GetAttachments().RawMap()))
 		}
 		response := ep.Call(request)

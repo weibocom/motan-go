@@ -247,6 +247,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		errInfo := fmt.Sprintf("registry not found! url %+v", m.url)
 		err = errors.New(errInfo)
 		vlog.Errorln(errInfo)
+		return
 	}
 	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
