@@ -72,3 +72,8 @@ const (
 const (
 	DefaultWriteTimeout = 5 * time.Second
 )
+
+// errorCodes
+const (
+	ENoEndpoints = 1001
+)

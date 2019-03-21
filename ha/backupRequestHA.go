@@ -47,7 +47,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 
 	epList := loadBalance.SelectArray(request)
 	if len(epList) == 0 {
-		return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "no endpoints"))
+		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints, fmt.Sprintf("call backup request fail: %s", "no endpoints"))
 	}
 
 	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", 0)

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
@@ -56,6 +57,7 @@ type Agent struct {
 	serviceExporters  *motan.CopyOnWriteMap
 	agentPortServer   map[int]motan.Server
 	serviceRegistries *motan.CopyOnWriteMap
+	httpProxyServer   *mserver.HTTPProxyServer
 
 	manageHandlers map[string]http.Handler
 
@@ -282,8 +284,8 @@ func (a *Agent) startHTTPAgent() {
 	// reuse configuration of agent
 	url := a.agentURL.Copy()
 	url.Port = a.hport
-	httpProxyServer := mserver.NewHTTPProxyServer(url)
-	httpProxyServer.Open(false, true, &httpClusterGetter{a: a})
+	a.httpProxyServer = mserver.NewHTTPProxyServer(url)
+	a.httpProxyServer.Open(false, true, &httpClusterGetter{a: a})
 	vlog.Infof("Start http forward proxy server on port %d", a.hport)
 }
 
@@ -340,10 +342,6 @@ func (a *Agent) SetSanpshotConf() {
 
 func (a *Agent) initAgentURL() {
 	agentURL := a.Context.AgentURL
-	if agentURL.Host == "" {
-		agentURL.Host = motan.GetLocalIP()
-	}
-
 	if application, ok := agentURL.Parameters[motan.ApplicationKey]; ok {
 		agentURL.Group = application // agent's application is same with agent group.
 	} else {
@@ -370,7 +368,8 @@ func (a *Agent) initAgentURL() {
 }
 
 func (a *Agent) startAgent() {
-	url := &motan.URL{Port: a.port}
+	url := a.agentURL.Copy()
+	url.Port = a.port
 	handler := &agentMessageHandler{agent: a}
 	server := &mserver.MotanServer{URL: url}
 	server.SetMessageHandler(handler)
@@ -387,22 +386,26 @@ func (a *Agent) startAgent() {
 func (a *Agent) registerAgent() {
 	vlog.Infoln("start agent registry.")
 	if reg, exit := a.agentURL.Parameters[motan.RegistryKey]; exit {
+		agentURL := a.agentURL.Copy()
+		if agentURL.Host == "" {
+			agentURL.Host = motan.GetLocalIP()
+		}
 		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
 			registry := a.extFactory.GetRegistry(registryURL)
 			if registry != nil {
-				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), a.agentURL.GetIdentity())
-				registry.Register(a.agentURL)
+				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), agentURL.GetIdentity())
+				registry.Register(agentURL)
 				//TODO 503, heartbeat
 				if commandRegisry, ok := registry.(motan.DiscoverCommand); ok {
 					listener := &AgentListener{agent: a}
-					commandRegisry.SubscribeCommand(a.agentURL, listener)
-					commandInfo := commandRegisry.DiscoverCommand(a.agentURL)
+					commandRegisry.SubscribeCommand(agentURL, listener)
+					commandInfo := commandRegisry.DiscoverCommand(agentURL)
 					listener.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 					vlog.Infof("agent subscribe command. init command: %s\n", commandInfo)
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", a.agentURL.GetIdentity())
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", agentURL.GetIdentity())
 		}
 	}
 }
@@ -454,6 +457,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 				}
 				request.SetAttachment(mpro.MSource, application)
 			}
+			originalService := request.GetServiceName()
 			request.SetAttachment(mpro.MPath, service)
 			if motanRequest, ok := request.(*motan.MotanRequest); ok {
 				motanRequest.ServiceName = service
@@ -461,7 +465,33 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 			res = httpCluster.Call(request)
 			if res == nil {
 				vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
-				res = getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
+				return getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
+			}
+			if res.GetException() != nil && res.GetException().ErrCode == motan.ENoEndpoints {
+				err := request.ProcessDeserializable(nil)
+				if err != nil {
+					return getDefaultResponse(request.GetRequestID(), "bad request: "+err.Error())
+				}
+				httpRequest := fasthttp.AcquireRequest()
+				httpResponse := fasthttp.AcquireResponse()
+				defer fasthttp.ReleaseRequest(httpRequest)
+				defer fasthttp.ReleaseResponse(httpResponse)
+				httpRequest.Header.DisableNormalizing()
+				httpResponse.Header.DisableNormalizing()
+				err = mhttp.MotanRequestToFasthttpRequest(request, httpRequest, "GET")
+				if err != nil {
+					return getDefaultResponse(request.GetRequestID(), "bad motan-http request: "+err.Error())
+				}
+				httpRequest.Header.Del("Host")
+				httpRequest.SetRequestURI(request.GetMethod())
+				httpRequest.SetHost(originalService)
+				err = a.agent.httpProxyServer.GetHTTPClient().Do(httpRequest, httpResponse)
+				if err != nil {
+					return getDefaultResponse(request.GetRequestID(), "do http request failed : "+err.Error())
+				}
+				res = &motan.MotanResponse{RequestID: request.GetRequestID()}
+				mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
+				return res
 			}
 			return res
 		}
@@ -660,7 +690,6 @@ func (a *Agent) startMServer() {
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
-
 	vlog.Infof("start listen manage port %d ...\n", a.mport)
 	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 	if err != nil {
