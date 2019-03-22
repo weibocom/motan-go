@@ -61,8 +61,6 @@ type Context struct {
 
 	application string
 	pool        string
-	dynamicFile string
-	idc         string
 }
 
 var (
@@ -76,18 +74,17 @@ var (
 
 // all env flag in motan-go
 var (
-	Port         = flag.Int("port", 0, "agent listen port")
-	Eport        = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
-	Hport        = flag.Int("hport", 0, "http forward proxy server port")
-	Mport        = flag.Int("mport", 0, "agent manage port")
-	Pidfile      = flag.String("pidfile", "", "agent manage port")
-	CfgFile      = flag.String("c", "", "motan run conf")
-	LocalIP      = flag.String("localIP", "", "local ip for motan register")
-	IDC          = flag.String("idc", "", "the idc info for agent or client.")
-	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
-	Pool         = flag.String("pool", "", "application pool config. like 'application-idc-level'")
-	Application  = flag.String("application", "", "assist for application pool config.")
-	Recover      = flag.Bool("recover", false, "recover from accidental exit")
+	Port        = flag.Int("port", 0, "agent listen port")
+	Eport       = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
+	Hport       = flag.Int("hport", 0, "http forward proxy server port")
+	Mport       = flag.Int("mport", 0, "agent manage port")
+	Pidfile     = flag.String("pidfile", "", "agent manage port")
+	CfgFile     = flag.String("c", "", "motan run conf")
+	LocalIP     = flag.String("localIP", "", "local ip for motan register")
+	IDC         = flag.String("idc", "", "the idc info for agent or client.")
+	Pool        = flag.String("pool", "", "application pool config. like 'application-idc-level'")
+	Application = flag.String("application", "", "assist for application pool config.")
+	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
@@ -160,16 +157,10 @@ func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, se
 }
 
 func NewContext(configFile string, application string, pool string) *Context {
-	return NewContextWithDynamicConfiguration(configFile, application, pool, "", "")
-}
-
-func NewContextWithDynamicConfiguration(configFile string, application string, pool string, dynamicFile string, idc string) *Context {
 	context := Context{
 		ConfigFile:  configFile,
 		application: application,
 		pool:        pool,
-		dynamicFile: dynamicFile,
-		idc:         idc,
 	}
 	context.Initialize()
 	return &context
@@ -181,12 +172,6 @@ func (c *Context) Initialize() {
 	}
 	if c.application == "" {
 		c.application = *Application
-	}
-	if c.dynamicFile == "" {
-		c.dynamicFile = *DynamicConfs
-	}
-	if c.idc == "" {
-		c.idc = *IDC
 	}
 	if c.ConfigFile == "" {
 		c.ConfigFile = *CfgFile
@@ -246,33 +231,8 @@ func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {
 	if err != nil {
 		return nil, errors.New(fmt.Sprintf("parse configuration [%s] failed. err:%s", c.ConfigFile, err.Error()))
 	}
-	dynamicFile := c.dynamicFile
-	if dynamicFile == "" && c.idc != "" {
-		suffix := c.idc + ".yaml"
-		idx := strings.LastIndex(c.ConfigFile, "/")
-		if idx > -1 {
-			dynamicFile = c.ConfigFile[0:idx+1] + suffix
-		} else {
-			dynamicFile = suffix
-		}
-	}
-	dp, _ := config.GetSection(dynamicSection)
-	if dp == nil {
-		dp = make(map[interface{}]interface{})
-	}
-	if dynamicFile != "" {
-		if dc, err := cfg.NewConfigFromFile(c.dynamicFile); err != nil {
-			vlog.Warningf("load dynamic config file failed: %s", err.Error())
-		} else {
-			// dynamic file > dynamic-param section
-			for k, v := range dc.GetOriginMap() {
-				if sk, ok := k.(string); ok {
-					dp[sk] = v
-				}
-			}
-		}
-	}
-	if len(dp) > 0 {
+	dp, err := config.GetSection(dynamicSection)
+	if err == nil && len(dp) > 0 {
 		config.ReplacePlaceHolder(c.getDynamicParameters(dp))
 	}
 	return config, nil

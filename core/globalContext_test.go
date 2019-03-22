@@ -25,7 +25,6 @@ func TestGetContext(t *testing.T) {
 
 func TestNewContext(t *testing.T) {
 	configFile := filepath.Join("testdata", "app.yaml")
-	dynamicFile := filepath.Join("testdata", "dynamic.yaml")
 	pool1Context := NewContext(configFile, "app", "app-idc1")
 	pool2Context := NewContext(configFile, "app", "app-idc2")
 	pool3Context := NewContext(configFile, "app", "app-idc3")
@@ -50,12 +49,6 @@ func TestNewContext(t *testing.T) {
 	assert.Equal(t, "aaa_default", testPlaceholder["aaa"])
 	assert.Equal(t, "bbb_default", testPlaceholder["sub"].(map[interface{}]interface{})["bbb"])
 	assert.Equal(t, "ccc_default", testPlaceholder["ccc"])
-
-	dynamicContext := NewContextWithDynamicConfiguration(configFile, "app", "app-idc1", dynamicFile, "")
-	testPlaceholder, _ = dynamicContext.Config.GetSection("test_placeholder")
-	assert.Equal(t, "aaa", testPlaceholder["aaa"])
-	assert.Equal(t, "bbb", testPlaceholder["sub"].(map[interface{}]interface{})["bbb"])
-	assert.Equal(t, "ccc", testPlaceholder["ccc"])
 
 	pool1Context = NewContext("testdata", "app", "app-idc1")
 	testPlaceholder, _ = pool1Context.Config.GetSection("test_placeholder")
