@@ -1,0 +1,20 @@
+motan-basicRefer:
+  test-basic-refer:
+    group: motan-demo-rpc
+    protocol: motan2
+    registry: consul
+    requestTimeout: 1000
+    haStrategy: failover
+    loadbalance: random
+    filter: accessLog,metrics
+    maxClientConnection: 10
+    minClientConnection: 1
+    retries: 0
+    application: test
+
+motan-refer:
+  test-motan-refer:
+    path: motan.TestService
+    serialization: simple
+    basicRefer: test-basic-refer
+    requestTimeout: 1000
