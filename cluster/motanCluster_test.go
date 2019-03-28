@@ -18,7 +18,7 @@ func TestInitFilter(t *testing.T) {
 	cluster.url.Parameters["filter"] = "test1,test2,test3,test4,test5,test6"
 	cluster.initFilters()
 	checkClusterFilter(cluster.clusterFilter, 4, t)
-	checkEndpointFilter(cluster.Filters, 3, t)
+	checkEndpointFilter(cluster.filters, 3, t)
 }
 
 func checkClusterFilter(filter motan.ClusterFilter, expectDeep int, t *testing.T) {
@@ -52,26 +52,6 @@ func checkEndpointFilter(filters []motan.Filter, expectSize int, t *testing.T) {
 	}
 }
 
-func TestNotify(t *testing.T) {
-	cluster := initCluster()
-	urls := make([]*motan.URL, 0, 2)
-	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
-	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
-	cluster.Notify(RegistryURL, urls)
-	if len(cluster.Refers) != 2 {
-		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
-	}
-	//duplicate notify
-	cluster.Notify(RegistryURL, urls)
-	//ignore empty urls
-	urls = make([]*motan.URL, 0, 2)
-	cluster.Notify(RegistryURL, urls)
-	if len(cluster.Refers) == 0 {
-		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
-	}
-
-}
-
 func TestCall(t *testing.T) {
 	cluster := initCluster()
 	response := cluster.Call(&motan.MotanRequest{})
@@ -88,18 +68,6 @@ func initCluster() *MotanCluster {
 	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
 	url.Parameters[motan.Lbkey] = "random"
 	return NewCluster(&motan.Context{}, getCustomExt(), url, false)
-}
-
-func TestDestroy(t *testing.T) {
-	cluster := initCluster()
-	urls := make([]*motan.URL, 0, 2)
-	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
-	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8002, Protocol: "test"})
-	cluster.Notify(RegistryURL, urls)
-	cluster.Destroy()
-	if cluster.closed != true {
-		t.Fatalf("cluster destroy fail, closed not false")
-	}
 }
 
 //-------------test struct--------------------
