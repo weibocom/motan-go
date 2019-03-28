@@ -101,3 +101,7 @@ func TestSplitTrim(t *testing.T) {
 		assert.Equal(t, tt.expect, ret)
 	}
 }
+
+func TestIPPrefixBits(t *testing.T) {
+	assert.Equal(t, 30, IPPrefixBits("192.168.1.1", "192.168.1.2"))
+}

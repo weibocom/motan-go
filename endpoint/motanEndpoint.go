@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,11 +16,13 @@ import (
 )
 
 var (
-	defaultChannelPoolSize      = 3
+	defaultChannelPoolSize      = 2
 	defaultRequestTimeout       = 1000 * time.Millisecond
 	defaultConnectTimeout       = 1000 * time.Millisecond
 	defaultKeepaliveInterval    = 1000 * time.Millisecond
 	defaultConnectRetryInterval = 60 * time.Second
+	defaultChannelCheckInterval = 60 * time.Second
+	defaultChannelIdleInterval  = 300 * time.Second
 	defaultErrorCountThreshold  = 10
 	ErrChannelShutdown          = fmt.Errorf("The channel has been shutdown")
 	ErrSendRequestTimeout       = fmt.Errorf("Timeout err: send request timeout")
@@ -34,13 +37,16 @@ type MotanEndpoint struct {
 	url                       *motan.URL
 	lock                      sync.Mutex
 	channels                  *ChannelPool
-	destroyed                 bool
 	destroyCh                 chan struct{}
 	available                 bool
 	errorCount                uint32
 	proxy                     bool
 	errorCountThreshold       int64
 	keepaliveInterval         time.Duration
+	initialized               *motan.AtomicBool
+	channelPoolCheckCh        chan struct{}
+	lastChannelUsingTime      atomic.Value
+	destroyed                 bool
 	requestTimeoutMillisecond int64
 
 	// for heartbeat requestID
@@ -61,7 +67,51 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 	m.proxy = proxy
 }
 
+func (m *MotanEndpoint) checkChannelUsing() {
+	checkerTimer := time.NewTicker(defaultChannelCheckInterval)
+	defer motan.HandlePanic(nil)
+	defer checkerTimer.Stop()
+	for {
+		select {
+		case <-checkerTimer.C:
+			if m.lastChannelUsingTime.Load().(time.Time).Add(defaultChannelIdleInterval).After(time.Now()) {
+				m.lock.Lock()
+				// as a lazy init endpoint the channels may be nil here
+				if m.channels != nil {
+					m.channels.Close()
+				}
+				m.lock.Unlock()
+			}
+		case <-m.channelPoolCheckCh:
+			return
+		}
+	}
+}
+
 func (m *MotanEndpoint) Initialize() {
+	m.initialized = motan.NewAtomicBool(false)
+	m.lastChannelUsingTime.Store(time.Now())
+	isLazyInit := false
+	// TODO: lazyInit should be a channel connect number, when set to 0, will using lazy init
+	if lazyInit, err := strconv.ParseBool(m.url.GetParam(motan.LazyInitEndpointKey, "false")); err == nil {
+		isLazyInit = lazyInit
+	}
+	if !isLazyInit {
+		m.doInitialize()
+		return
+	}
+	// we need set it to available because the endpoint will not be called forever if not do this
+	// lb will not return unavailable node
+	m.setAvailable(true)
+	go m.checkChannelUsing()
+}
+
+func (m *MotanEndpoint) doInitialize() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if m.initialized.Get() {
+		return
+	}
 	m.destroyCh = make(chan struct{}, 1)
 	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
 	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
@@ -101,6 +151,7 @@ func (m *MotanEndpoint) Initialize() {
 		m.setAvailable(true)
 		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
 	}
+	m.initialized.Set(true)
 }
 
 func (m *MotanEndpoint) Destroy() {
@@ -124,18 +175,22 @@ func (m *MotanEndpoint) GetRequestTimeout(request motan.Request) time.Duration {
 }
 
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
-	rc := request.GetRPCContext(true)
-	rc.Proxy = m.proxy
-	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
+	if !m.initialized.Get() {
+		m.doInitialize()
+	}
+	reqCtx := request.GetRPCContext(true)
+	reqCtx.Proxy = m.proxy
+	reqCtx.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
 
 	if m.channels == nil {
 		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
+	m.lastChannelUsingTime.Store(time.Now())
 	startTime := time.Now().UnixNano()
-	if rc.AsyncCall {
-		rc.Result.StartTime = startTime
+	if reqCtx.AsyncCall {
+		reqCtx.Result.StartTime = startTime
 	}
 	// get a channel
 	channel, err := m.channels.Get()
@@ -162,23 +217,23 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		vlog.Errorf("convert motan request fail! ep: %s, req: %s, err:%s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert motan request fail!", ErrType: motan.ServiceException})
 	}
-	if rc.Tc != nil {
-		rc.Tc.PutReqSpan(&motan.Span{Name: motan.Convert, Addr: m.GetURL().GetAddressStr(), Time: time.Now()})
+	if reqCtx.Tc != nil {
+		reqCtx.Tc.PutReqSpan(&motan.Span{Name: motan.Convert, Addr: m.GetURL().GetAddressStr(), Time: time.Now()})
 	}
-	recvMsg, err := channel.Call(msg, deadline, rc)
+	recvMsg, err := channel.Call(msg, deadline, reqCtx)
 	if err != nil {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
 	}
-	if rc.AsyncCall {
+	if reqCtx.AsyncCall {
 		return defaultAsyncResponse
 	}
 	recvMsg.Header.SetProxy(m.proxy)
 	recvMsg.Header.RequestID = request.GetRequestID()
 	response, err := mpro.ConvertToResponse(recvMsg, m.serialization)
-	if rc.Tc != nil {
-		rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
+	if reqCtx.Tc != nil {
+		reqCtx.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 	}
 	if err != nil {
 		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
@@ -193,7 +248,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	}
 
 	if !m.proxy {
-		if err = response.ProcessDeserializable(rc.Reply); err != nil {
+		if err = response.ProcessDeserializable(reqCtx.Reply); err != nil {
 			return m.defaultErrMotanResponse(request, err.Error())
 		}
 	}
@@ -287,51 +342,6 @@ func (m *MotanEndpoint) IsAvailable() bool {
 	return m.available
 }
 
-// Config : Config
-type Config struct {
-	RequestTimeout time.Duration
-}
-
-func DefaultConfig() *Config {
-	return &Config{
-		RequestTimeout: defaultRequestTimeout,
-	}
-}
-
-func VerifyConfig(config *Config) error {
-	if config.RequestTimeout <= 0 {
-		return fmt.Errorf("RequestTimeout interval must be positive")
-	}
-	return nil
-}
-
-type Channel struct {
-	// config
-	config        *Config
-	serialization motan.Serialization
-	address       string
-
-	// connection
-	conn    net.Conn
-	bufRead *bufio.Reader
-
-	// send
-	sendCh chan sendReady
-
-	// stream
-	streams    map[uint64]*Stream
-	streamLock sync.Mutex
-	// heartbeat
-	heartbeats    map[uint64]*Stream
-	heartbeatLock sync.Mutex
-
-	// shutdown
-	shutdown     bool
-	shutdownErr  error
-	shutdownCh   chan struct{}
-	shutdownLock sync.Mutex
-}
-
 type Stream struct {
 	channel *Channel
 	sendMsg *mpro.Message
@@ -342,7 +352,7 @@ type Stream struct {
 	deadline time.Time
 
 	rc          *motan.RPCContext
-	isClose     atomic.Value // bool
+	isClose     *motan.AtomicBool
 	isHeartBeat bool
 }
 
@@ -428,6 +438,48 @@ func (s *Stream) SetDeadline(deadline time.Duration) {
 	s.deadline = time.Now().Add(deadline)
 }
 
+func (s *Stream) Close() {
+	if !s.isClose.Get() {
+		if s.isHeartBeat {
+			s.channel.heartbeatLock.Lock()
+			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
+			s.channel.heartbeatLock.Unlock()
+		} else {
+			s.channel.streamLock.Lock()
+			delete(s.channel.streams, s.sendMsg.Header.RequestID)
+			s.channel.streamLock.Unlock()
+		}
+		s.isClose.Set(true)
+	}
+}
+
+type Channel struct {
+	// config
+	config        *Config
+	serialization motan.Serialization
+	address       string
+
+	// connection
+	conn    net.Conn
+	bufRead *bufio.Reader
+
+	// send
+	sendCh chan sendReady
+
+	// stream
+	streams    map[uint64]*Stream
+	streamLock sync.Mutex
+	// heartbeat
+	heartbeats    map[uint64]*Stream
+	heartbeatLock sync.Mutex
+
+	// shutdown
+	shutdown     bool
+	shutdownErr  error
+	shutdownCh   chan struct{}
+	shutdownLock sync.Mutex
+}
+
 func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, error) {
 	if msg == nil || msg.Header == nil {
 		return nil, errors.New("msg is invalid")
@@ -442,7 +494,7 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		deadline:     time.Now().Add(1 * time.Second),
 		rc:           rc,
 	}
-	s.isClose.Store(false)
+	s.isClose = motan.NewAtomicBool(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
 	if msg.Header.IsHeartbeat() {
@@ -456,21 +508,6 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		c.streamLock.Unlock()
 	}
 	return s, nil
-}
-
-func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
-		if s.isHeartBeat {
-			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
-			s.channel.heartbeatLock.Unlock()
-		} else {
-			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.sendMsg.Header.RequestID)
-			s.channel.streamLock.Unlock()
-		}
-		s.isClose.Store(true)
-	}
 }
 
 type sendReady struct {
@@ -665,6 +702,24 @@ func (c *ChannelPool) Close() error {
 		if channel != nil {
 			channel.Close()
 		}
+	}
+	return nil
+}
+
+// Config : Config
+type Config struct {
+	RequestTimeout time.Duration
+}
+
+func DefaultConfig() *Config {
+	return &Config{
+		RequestTimeout: defaultRequestTimeout,
+	}
+}
+
+func VerifyConfig(config *Config) error {
+	if config.RequestTimeout <= 0 {
+		return fmt.Errorf("RequestTimeout interval must be positive")
 	}
 	return nil
 }
