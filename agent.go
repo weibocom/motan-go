@@ -620,6 +620,10 @@ func (sa *serverAgentMessageHandler) GetProvider(serviceName string) motan.Provi
 }
 
 func getClusterKey(group, version, protocol, path string) string {
+	// TODO: remove when cedrus is all instead
+	if protocol == "cedrus" {
+		protocol = "motan2"
+	}
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
