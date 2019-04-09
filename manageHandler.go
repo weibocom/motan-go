@@ -20,6 +20,7 @@ import (
 
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/protocol"
 )
 
@@ -289,6 +290,52 @@ func (s *SwitcherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result := switcher.GetAllSwitchers()
 		b, _ := json.Marshal(result)
 		w.Write(b)
+	}
+}
+
+type LogHandler struct{}
+
+func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		Code int    `json:"code"`
+		Body string `json:"body"`
+	}
+	enc := json.NewEncoder(w)
+	switch r.URL.Path {
+	case "/log/level":
+		_ = enc.Encode(response{Code: 200, Body: "Level:" + vlog.GetLevel().String()})
+	case "/log/set":
+		if lvlString := r.FormValue("level"); lvlString != "" {
+			var lvl vlog.LogLevel
+			if err := lvl.Set(lvlString); err == nil {
+				vlog.SetLevel(lvl)
+				_ = enc.Encode(response{Code: 200, Body: "set log level:" + lvlString})
+				vlog.Infoln("set log level:", lvlString)
+			} else {
+				_ = enc.Encode(response{Code: 500, Body: "set log level failed. err:" + err.Error()})
+				vlog.Warningln("set log level failed. err:", err.Error())
+			}
+		}
+		if access := r.FormValue("access"); access != "" {
+			if status, err := strconv.ParseBool(access); err == nil {
+				vlog.SetAccessLog(status)
+				_ = enc.Encode(response{Code: 200, Body: "set accessLog status:" + access})
+				vlog.Infoln("set accessLog status:", status)
+			} else {
+				_ = enc.Encode(response{Code: 500, Body: "set accessLog status failed. err:" + err.Error()})
+				vlog.Warningln("set accessLog status failed. err:", err.Error())
+			}
+		}
+		if metrics := r.FormValue("metrics"); metrics != "" {
+			if status, err := strconv.ParseBool(metrics); err == nil {
+				vlog.SetMetricsLog(status)
+				_ = enc.Encode(response{Code: 200, Body: "set metricsLog status:" + metrics})
+				vlog.Infoln("set metricsLog status:", status)
+			} else {
+				_ = enc.Encode(response{Code: 500, Body: "set metricsLog status failed. err:" + err.Error()})
+				vlog.Warningln("set metricsLog status failed. err:", err.Error())
+			}
+		}
 	}
 }
 

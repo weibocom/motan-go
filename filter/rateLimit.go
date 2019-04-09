@@ -28,7 +28,7 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	if rate, err := strconv.ParseFloat(url.GetParam(RateLimit, ""), 64); err == nil {
 		ret.bucket = ratelimit.NewBucketWithRate(rate, defaultCapacity)
 	} else {
-		vlog.Warningf("[rateLimit] parse %s config error:%v\n", RateLimit, err)
+		vlog.Warningf("[rateLimit] parse %s config error:%v", RateLimit, err)
 	}
 
 	//init methodBucket
@@ -38,10 +38,10 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 			if methodRate, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" {
 				methodBuckets[temp[1]] = ratelimit.NewBucketWithRate(methodRate, defaultCapacity)
 			} else {
-				vlog.Warningf("[rateLimit] parse %s config error:%s\n", key, err.Error())
+				vlog.Warningf("[rateLimit] parse %s config error:%s", key, err.Error())
 			}
 		} else {
-			vlog.Warningf("[rateLimit] parse %s config error\n", key)
+			vlog.Warningf("[rateLimit] parse %s config error", key)
 		}
 	}
 	ret.methodBuckets = methodBuckets

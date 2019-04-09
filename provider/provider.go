@@ -55,7 +55,7 @@ func (d *DefaultProvider) Initialize() {
 	if d.service != nil && d.url != nil {
 		v := reflect.ValueOf(d.service)
 		if v.Kind() != reflect.Ptr {
-			vlog.Errorf("can not init provider. service is not a pointer. service :%v, url:%v\n", d.service, d.url)
+			vlog.Errorf("can not init provider. service is not a pointer. service :%v, url:%v", d.service, d.url)
 			return
 		}
 		for i := 0; i < v.NumMethod(); i++ {
@@ -65,7 +65,7 @@ func (d *DefaultProvider) Initialize() {
 		}
 
 	} else {
-		vlog.Errorf("can not init provider. service :%v, url:%v\n", d.service, d.url)
+		vlog.Errorf("can not init provider. service :%v, url:%v", d.service, d.url)
 	}
 }
 
@@ -94,7 +94,7 @@ func (d *DefaultProvider) Destroy() {}
 func (d *DefaultProvider) Call(request motan.Request) (res motan.Response) {
 	m, exit := d.methods[motan.FirstUpper(request.GetMethod())]
 	if !exit {
-		vlog.Errorf("method not found in provider. %s\n", motan.GetReqInfo(request))
+		vlog.Errorf("method not found in provider. %s", motan.GetReqInfo(request))
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "method " + request.GetMethod() + " is not found in provider.", ErrType: motan.ServiceException})
 	}
 

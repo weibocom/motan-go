@@ -31,7 +31,7 @@ func (s *SwitcherManager) Register(name string, value bool, listeners ...Switche
 	s.switcherLock.Lock()
 	defer s.switcherLock.Unlock()
 	if _, ok := s.switcherMap[name]; ok {
-		vlog.Warningf("[switcher] register failed: %s has been registered\n", name)
+		vlog.Warningf("[switcher] register failed: %s has been registered", name)
 		return
 	}
 	newSwitcher := &Switcher{name: name, value: value, listeners: []SwitcherListener{}}
@@ -39,7 +39,7 @@ func (s *SwitcherManager) Register(name string, value bool, listeners ...Switche
 		newSwitcher.Watch(listeners...)
 	}
 	s.switcherMap[name] = newSwitcher
-	vlog.Infof("[switcher] register %s success, value:%v, len(listeners):%d\n", name, value, len(listeners))
+	vlog.Infof("[switcher] register %s success, value:%v, len(listeners):%d", name, value, len(listeners))
 }
 
 func (s *SwitcherManager) GetAllSwitchers() map[string]bool {
@@ -58,7 +58,7 @@ func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
 	if sw, ok := s.switcherMap[name]; ok {
 		return sw
 	}
-	vlog.Warningf("[switcher] get switcher failed: %s is not registered\n", name)
+	vlog.Warningf("[switcher] get switcher failed: %s is not registered", name)
 	return nil
 }
 
@@ -83,7 +83,7 @@ func (s *Switcher) Watch(listeners ...SwitcherListener) {
 	for _, listener := range listeners {
 		s.listeners = append(s.listeners, listener)
 	}
-	vlog.Infof("[switcher] watch %s success. len(listeners):%d\n", s.GetName(), len(listeners))
+	vlog.Infof("[switcher] watch %s success. len(listeners):%d", s.GetName(), len(listeners))
 }
 
 func (s *Switcher) SetValue(value bool) {
@@ -92,7 +92,7 @@ func (s *Switcher) SetValue(value bool) {
 		return
 	}
 	s.value = value
-	vlog.Infof("[switcher] value changed, name:%s, value:%v\n", name, value)
+	vlog.Infof("[switcher] value changed, name:%s, value:%v", name, value)
 	listeners := s.listeners
 	if listeners != nil {
 		go func() {
@@ -101,7 +101,7 @@ func (s *Switcher) SetValue(value bool) {
 			for _, listener := range listeners {
 				listener.Notify(value)
 			}
-			vlog.Infof("[switcher] notify %s all listeners. len(listeners):%d\n", name, len(listeners))
+			vlog.Infof("[switcher] notify %s all listeners. len(listeners):%d", name, len(listeners))
 		}()
 	}
 }

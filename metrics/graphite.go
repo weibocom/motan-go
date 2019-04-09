@@ -43,7 +43,7 @@ func newGraphite(ip, pool string, port int) *graphite {
 func (g *graphite) Write(snapshots []Snapshot) error {
 	conn, err := net.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
 	if err != nil {
-		vlog.Warningf("open graphite conn fail. err:%s\n", err.Error())
+		vlog.Warningf("open graphite conn fail. err:%s", err.Error())
 		return err
 	}
 	defer conn.Close()
@@ -53,6 +53,7 @@ func (g *graphite) Write(snapshots []Snapshot) error {
 
 	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
+		vlog.MetricsLog("\n" + message)
 		_, err = conn.Write([]byte(message))
 		if err != nil {
 			return err

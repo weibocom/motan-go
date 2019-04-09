@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
@@ -137,7 +136,7 @@ func (a *Agent) StartMotanAgent() {
 	go a.registerAgent()
 	f, err := os.Create(a.pidfile)
 	if err != nil {
-		vlog.Errorf("create file %s fail.\n", a.pidfile)
+		vlog.Errorf("create file %s fail.", a.pidfile)
 	} else {
 		defer f.Close()
 		f.WriteString(strconv.Itoa(os.Getpid()))
@@ -253,7 +252,7 @@ func (a *Agent) initParam() {
 		panic("Init runtime directory error: " + err.Error())
 	}
 
-	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s\n", port, mport, pidfile, logdir, runtimedir)
+	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s", port, mport, pidfile, logdir, runtimedir)
 	a.logdir = logdir
 	a.port = port
 	a.eport = eport
@@ -362,7 +361,7 @@ func (a *Agent) initAgentURL() {
 
 	agentURL.Parameters[motan.NodeTypeKey] = "agent"
 	a.agentURL = agentURL
-	vlog.Infof("Agent URL inited %s\n", a.agentURL.GetIdentity())
+	vlog.Infof("Agent URL inited %s", a.agentURL.GetIdentity())
 }
 
 func (a *Agent) startAgent() {
@@ -371,12 +370,12 @@ func (a *Agent) startAgent() {
 	handler := &agentMessageHandler{agent: a}
 	server := &mserver.MotanServer{URL: url}
 	server.SetMessageHandler(handler)
-	vlog.Infof("Motan agent is started. port:%d\n", a.port)
+	vlog.Infof("Motan agent is started. port:%d", a.port)
 	fmt.Println("Motan agent start.")
 	a.agentServer = server
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
-		vlog.Fatalf("start agent fail. port :%d, err: %v\n", a.port, err)
+		vlog.Fatalf("start agent fail. port :%d, err: %v", a.port, err)
 	}
 	fmt.Println("Motan agent start fail!")
 }
@@ -391,7 +390,7 @@ func (a *Agent) registerAgent() {
 		if registryURL, regexit := a.Context.RegistryURLs[reg]; regexit {
 			registry := a.extFactory.GetRegistry(registryURL)
 			if registry != nil {
-				vlog.Infof("agent register in registry:%s, agent url:%s\n", registry.GetURL().GetIdentity(), agentURL.GetIdentity())
+				vlog.Infof("agent register in registry:%s, agent url:%s", registry.GetURL().GetIdentity(), agentURL.GetIdentity())
 				registry.Register(agentURL)
 				//TODO 503, heartbeat
 				if commandRegisry, ok := registry.(motan.DiscoverCommand); ok {
@@ -399,11 +398,11 @@ func (a *Agent) registerAgent() {
 					commandRegisry.SubscribeCommand(agentURL, listener)
 					commandInfo := commandRegisry.DiscoverCommand(agentURL)
 					listener.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
-					vlog.Infof("agent subscribe command. init command: %s\n", commandInfo)
+					vlog.Infof("agent subscribe command. init command: %s", commandInfo)
 				}
 			}
 		} else {
-			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s\n", agentURL.GetIdentity())
+			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s", agentURL.GetIdentity())
 		}
 	}
 }
@@ -430,12 +429,12 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 			}
 			res = motanCluster.Call(request)
 			if res == nil {
-				vlog.Warningf("motanCluster Call return nil. cluster:%s\n", ck)
+				vlog.Warningf("motanCluster Call return nil. cluster:%s", ck)
 				res = getDefaultResponse(request.GetRequestID(), "motanCluster Call return nil. cluster:"+ck)
 			}
 			return res
 		}
-		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d\n", ck, request.GetRequestID())
+		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d", ck, request.GetRequestID())
 		return getDefaultResponse(request.GetRequestID(), "empty group is not supported, maybe this service belongs to multiple groups, cluster:"+ck)
 	}
 	// if normal cluster not found we try http cluster, here service of request represent domain
@@ -456,7 +455,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 			}
 			res = httpCluster.Call(request)
 			if res == nil {
-				vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
+				vlog.Warningf("httpCluster Call return nil. cluster:%s", ck)
 				return getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
 			}
 			if res.GetException() != nil && res.GetException().ErrCode == motan.ENoEndpoints {
@@ -490,7 +489,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 
 	res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
-	vlog.Warningf("cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
+	vlog.Warningf("cluster not found. cluster: %s, request id:%d", ck, request.GetRequestID())
 	return res
 }
 
@@ -534,7 +533,7 @@ func (a *Agent) doExportService(url *motan.URL) {
 	exporter := &mserver.DefaultExporter{}
 	provider := a.extFactory.GetProvider(url)
 	if provider == nil {
-		vlog.Errorf("Didn't have a %s provider, url:%+v\n", url.Protocol, url)
+		vlog.Errorf("Didn't have a %s provider, url:%+v", url.Protocol, url)
 		return
 	}
 	motan.CanSetContext(provider, globalContext)
@@ -549,7 +548,7 @@ func (a *Agent) doExportService(url *motan.URL) {
 		handler.AddProvider(provider)
 		err := server.Open(false, true, handler, a.extFactory)
 		if err != nil {
-			vlog.Fatalf("start server agent fail. port :%d, err: %v\n", url.Port, err)
+			vlog.Fatalf("start server agent fail. port :%d, err: %v", url.Port, err)
 		}
 		a.agentPortServer[url.Port] = server
 	} else if canShareChannel(*url, *server.GetURL()) {
@@ -557,12 +556,12 @@ func (a *Agent) doExportService(url *motan.URL) {
 	}
 	err := exporter.Export(server, a.extFactory, globalContext)
 	if err != nil {
-		vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
+		vlog.Errorf("service export fail! url:%v, err:%v", url, err)
 		return
 	}
 
 	a.serviceExporters.Store(url.GetIdentity(), exporter)
-	vlog.Infof("service export success. url:%v\n", url)
+	vlog.Infof("service export success. url:%v", url)
 	for _, r := range exporter.Registries {
 		rid := r.GetURL().GetIdentity()
 		if _, ok := a.serviceRegistries.Load(rid); !ok {
@@ -586,7 +585,7 @@ func getServiceKey(group, path string) string {
 func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
-		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
+		vlog.Errorf("provider call panic. req:%s", motan.GetReqInfo(request))
 	})
 	serviceKey := getServiceKey(request.GetAttachment(mpro.MGroup), request.GetServiceName())
 	if p := sa.providers.LoadOrNil(serviceKey); p != nil {
@@ -595,7 +594,7 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
+	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
 }
 
@@ -623,7 +622,6 @@ func initLog(logdir string) {
 	}
 	fmt.Printf("use log dir:%s\n", logdir)
 	flag.Set("log_dir", logdir)
-	vlog.FlushInterval = 1 * time.Second
 	vlog.LogInit(nil)
 }
 
@@ -646,7 +644,7 @@ type AgentListener struct {
 }
 
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
-	vlog.Infof("agentlistener command notify:%s\n", commandInfo)
+	vlog.Infof("agentlistener command notify:%s", commandInfo)
 	//TODO notify according cluster
 	if commandInfo != a.CurrentCommandInfo {
 		a.CurrentCommandInfo = commandInfo
@@ -683,18 +681,18 @@ func (a *Agent) startMServer() {
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
-	vlog.Infof("start listen manage port %d ...\n", a.mport)
+	vlog.Infof("start listen manage port %d ...", a.mport)
 	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 	if err != nil {
 		fmt.Printf("start listen manage port fail! port:%d, err:%s\n", a.mport, err.Error())
-		vlog.Warningf("start listen manage port fail! port:%d, err:%s\n", a.mport, err.Error())
+		vlog.Warningf("start listen manage port fail! port:%d, err:%s", a.mport, err.Error())
 	}
 }
 
 func (a *Agent) mhandle(k string, h http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
-			vlog.Warningf("manageHandler register fail. maybe the pattern '%s' already registered\n", k)
+			vlog.Warningf("manageHandler register fail. maybe the pattern '%s' already registered", k)
 		}
 	}()
 	if sa, ok := h.(SetAgent); ok {
@@ -712,7 +710,7 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 		}()
 		h.ServeHTTP(w, r)
 	})
-	vlog.Infof("add manage server handle path:%s\n", k)
+	vlog.Infof("add manage server handle path:%s", k)
 }
 
 func (a *Agent) getConfigData() []byte {

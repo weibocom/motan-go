@@ -59,6 +59,10 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/switcher/get"] = switcher
 		defaultManageHandlers["/switcher/getAll"] = switcher
 
+		log := &LogHandler{}
+		defaultManageHandlers["/log/level"] = log
+		defaultManageHandlers["/log/set"] = log
+
 		dynamicConfigurer := &DynamicConfigurerHandler{}
 		defaultManageHandlers["/registry/register"] = dynamicConfigurer
 		defaultManageHandlers["/registry/unregister"] = dynamicConfigurer
