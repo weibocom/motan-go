@@ -1,12 +1,12 @@
 package vlog
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	goLog "log"
+	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,12 +17,18 @@ import (
 )
 
 var (
-	log    Logger
-	once   sync.Once
-	logDir = flag.String("log_dir", "", "If non-empty, write log files in this directory")
+	loggerInstance Logger
+	once           sync.Once
+	logDir         = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
+	logAsync       = flag.Bool("log_async", true, "If false, write log sync, default is true")
 )
 
 const (
+	defaultLogMaxSize    = 500 //megabytes
+	defaultLogMaxAge     = 30  //days
+	defaultLogMaxBackups = 20
+	defaultAsyncLogLen   = 1000
+
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
@@ -66,44 +72,49 @@ func (l LogLevel) String() string {
 	}
 }
 
-func (l *LogLevel) UnmarshalText(text []byte) error {
+func (l *LogLevel) Set(level string) error {
 	if l == nil {
 		return errors.New("level is nil")
 	}
-	if !l.unmarshalText(text) && !l.unmarshalText(bytes.ToLower(text)) {
-		return errors.New("unrecognized level:" + string(text))
+	switch strings.ToLower(level) {
+	case "":
+		*l = defaultLogLevel
+	case "trace":
+		*l = TraceLevel
+	case "debug":
+		*l = DebugLevel
+	case "info":
+		*l = InfoLevel
+	case "warn":
+		*l = WarnLevel
+	case "error":
+		*l = ErrorLevel
+	case "dpanic":
+		*l = DPanicLevel
+	case "panic":
+		*l = PanicLevel
+	case "fatal":
+		*l = FatalLevel
+	default:
+		return errors.New("unrecognized level:" + string(level))
 	}
 	return nil
 }
 
-func (l *LogLevel) unmarshalText(text []byte) bool {
-	switch string(text) {
-	case "":
-		*l = defaultLogLevel
-	case "trace", "TRACE":
-		*l = TraceLevel
-	case "debug", "DEBUG":
-		*l = DebugLevel
-	case "info", "INFO":
-		*l = InfoLevel
-	case "warn", "WARN":
-		*l = WarnLevel
-	case "error", "ERROR":
-		*l = ErrorLevel
-	case "dpanic", "DPANIC":
-		*l = DPanicLevel
-	case "panic", "PANIC":
-		*l = PanicLevel
-	case "fatal", "FATAL":
-		*l = FatalLevel
-	default:
-		return false
-	}
-	return true
-}
-
-func (l *LogLevel) Set(s string) error {
-	return l.UnmarshalText([]byte(s))
+type AccessLogEntity struct {
+	Msg           string `json:"msg"`
+	Role          string `json:"role"`
+	RequestID     uint64 `json:"requestID"`
+	Service       string `json:"service"`
+	Method        string `json:"method"`
+	RemoteAddress string `json:"remoteAddress"`
+	Desc          string `json:"desc"`
+	ReqSize       int    `json:"reqSize"`
+	ResSize       int    `json:"resSize"`
+	BizTime       int64  `json:"bizTime"`
+	TotalTime     int64  `json:"totalTime"`
+	Success       bool   `json:"success"`
+	Exception     string `json:"exception"`
 }
 
 type Logger interface {
@@ -115,136 +126,170 @@ type Logger interface {
 	Errorf(string, ...interface{})
 	Fatalln(...interface{})
 	Fatalf(string, ...interface{})
-	AccessLog(string, ...interface{})
+	AccessLog(AccessLogEntity)
 	MetricsLog(string)
 	Flush()
+	SetAsync(bool)
 	GetLevel() LogLevel
 	SetLevel(LogLevel)
-	SetAccessLog(bool)
-	SetMetricsLog(bool)
+	GetAccessLogAvailable() bool
+	SetAccessLogAvailable(bool)
+	GetMetricsLogAvailable() bool
+	SetMetricsLogAvailable(bool)
 }
 
 func LogInit(logger Logger) {
 	once.Do(func() {
 		if logger == nil {
-			log = newDefaultLog(*logDir)
+			loggerInstance = newDefaultLog(*logDir)
 		} else {
-			log = logger
+			loggerInstance = logger
 		}
-		go Flush()
+		SetAsync(*logAsync)
+		startFlush()
 	})
 }
 
 func Infoln(args ...interface{}) {
-	if log != nil {
-		log.Infoln(args...)
+	if loggerInstance != nil {
+		loggerInstance.Infoln(args...)
 	} else {
-		goLog.Println(args...)
+		log.Println(args...)
 	}
 }
 
 func Infof(format string, args ...interface{}) {
-	if log != nil {
-		log.Infof(format, args...)
+	if loggerInstance != nil {
+		loggerInstance.Infof(format, args...)
 	} else {
-		goLog.Printf(format, args...)
+		log.Printf(format, args...)
 	}
 }
 
 func Warningln(args ...interface{}) {
-	if log != nil {
-		log.Warningln(args...)
+	if loggerInstance != nil {
+		loggerInstance.Warningln(args...)
 	} else {
-		goLog.Println(args...)
+		log.Println(args...)
 	}
 }
 
 func Warningf(format string, args ...interface{}) {
-	if log != nil {
-		log.Warningf(format, args...)
+	if loggerInstance != nil {
+		loggerInstance.Warningf(format, args...)
 	} else {
-		goLog.Printf(format, args...)
+		log.Printf(format, args...)
 	}
 }
 
 func Errorln(args ...interface{}) {
-	if log != nil {
-		log.Errorln(args...)
+	if loggerInstance != nil {
+		loggerInstance.Errorln(args...)
 	} else {
-		goLog.Println(args...)
+		log.Println(args...)
 	}
 }
 
 func Errorf(format string, args ...interface{}) {
-	if log != nil {
-		log.Errorf(format, args...)
+	if loggerInstance != nil {
+		loggerInstance.Errorf(format, args...)
 	} else {
-		goLog.Printf(format, args...)
+		log.Printf(format, args...)
 	}
 }
 
 func Fatalln(args ...interface{}) {
-	if log != nil {
-		log.Fatalln(args...)
+	if loggerInstance != nil {
+		loggerInstance.Fatalln(args...)
 	} else {
-		goLog.Println(args...)
+		log.Println(args...)
 	}
 }
 
 func Fatalf(format string, args ...interface{}) {
-	if log != nil {
-		log.Fatalf(format, args...)
+	if loggerInstance != nil {
+		loggerInstance.Fatalf(format, args...)
 	} else {
-		goLog.Printf(format, args...)
+		log.Printf(format, args...)
 	}
 }
 
-func AccessLog(filterName string, keValue ...interface{}) {
-	if log != nil {
-		log.AccessLog(filterName, keValue...)
-	} else {
-		goLog.Println(keValue...)
+func AccessLog(logType AccessLogEntity) {
+	if loggerInstance != nil {
+		loggerInstance.AccessLog(logType)
 	}
 }
 
 func MetricsLog(msg string) {
-	if log != nil {
-		log.MetricsLog(msg)
-	} else {
-		goLog.Println(msg)
+	if loggerInstance != nil {
+		loggerInstance.MetricsLog(msg)
 	}
 }
 
-func Flush() {
-	if log != nil {
-		for range time.NewTicker(defaultFlushInterval).C {
-			log.Flush()
+func startFlush() {
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("flush logs failed. err:%v", err)
+				Warningf("flush logs failed. err:%v", err)
+			}
+		}()
+		ticker := time.NewTicker(defaultFlushInterval)
+		defer ticker.Stop()
+		if loggerInstance != nil {
+			for range ticker.C {
+				loggerInstance.Flush()
+			}
 		}
+	}()
+}
+
+func SetAsync(value bool) {
+	if loggerInstance != nil {
+		loggerInstance.SetAsync(value)
 	}
 }
 
 func GetLevel() LogLevel {
-	return log.GetLevel()
+	if loggerInstance != nil {
+		return loggerInstance.GetLevel()
+	}
+	return defaultLogLevel
 }
 
 func SetLevel(level LogLevel) {
-	log.SetLevel(level)
+	if loggerInstance != nil {
+		loggerInstance.SetLevel(level)
+	}
 }
 
-func SetAccessLog(status bool) {
-	log.SetAccessLog(status)
+func GetAccessLogAvailable() bool {
+	if loggerInstance != nil {
+		return loggerInstance.GetAccessLogAvailable()
+	}
+	return false
 }
 
-func SetMetricsLog(status bool) {
-	log.SetMetricsLog(status)
+func SetAccessLogAvailable(status bool) {
+	if loggerInstance != nil {
+		loggerInstance.SetAccessLogAvailable(status)
+	}
+}
+
+func GetMetricsLogAvailable() bool {
+	if loggerInstance != nil {
+		return loggerInstance.GetMetricsLogAvailable()
+	}
+	return false
+}
+
+func SetMetricsLogAvailable(status bool) {
+	if loggerInstance != nil {
+		loggerInstance.SetMetricsLogAvailable(status)
+	}
 }
 
 func newDefaultLog(logDir string) Logger {
-	//Construct log's logger
-	hook := lumberjack.Logger{
-		LocalTime: true,
-		Filename:  filepath.Join(logDir, filepath.Base(os.Args[0])+defaultLogSuffix),
-	}
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:      "time",
 		LevelKey:     "level",
@@ -255,67 +300,59 @@ func newDefaultLog(logDir string) Logger {
 		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
 	level := zap.NewAtomicLevel()
-	core := zapcore.NewCore(
+	zapCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(&hook)),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(logDir, filepath.Base(os.Args[0])+defaultLogSuffix))),
 		level,
 	)
-	caller := zap.AddCaller()
-	skip := zap.AddCallerSkip(2)
-	logger := zap.New(core, caller, skip)
+	logger := zap.New(zapCore, zap.AddCaller(), zap.AddCallerSkip(2))
 
-	//Construct accessLog's logger
-	accessHook := lumberjack.Logger{
-		LocalTime: true,
-		Filename:  filepath.Join(logDir, defaultAccessLogName+defaultLogSuffix),
-	}
-	accessEncoderConfig := zapcore.EncoderConfig{
-		TimeKey:    "time",
-		MessageKey: "message",
-		EncodeTime: zapcore.ISO8601TimeEncoder,
-	}
-	accessLevel := zap.NewAtomicLevel()
-	accessCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(accessEncoderConfig),
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(&accessHook)),
-		accessLevel,
-	)
-	accessLogger := zap.New(accessCore)
-
-	//Construct metricsLog's logger
-	metricsHook := lumberjack.Logger{
-		LocalTime: true,
-		Filename:  filepath.Join(logDir, defaultMetricsLogName+defaultLogSuffix),
-	}
-	metricsEncoderConfig := zapcore.EncoderConfig{
-		TimeKey:    "time",
-		MessageKey: "message",
-		EncodeTime: zapcore.ISO8601TimeEncoder,
-	}
-	metricsLevel := zap.NewAtomicLevel()
-	metricsCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(metricsEncoderConfig),
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(&metricsHook)),
-		metricsLevel,
-	)
-	metricsLogger := zap.New(metricsCore)
-
+	accessLogger, accessLevel := newZapLogger(logDir, defaultAccessLogName+defaultLogSuffix)
+	metricsLogger, metricsLevel := newZapLogger(logDir, defaultMetricsLogName+defaultLogSuffix)
 	return &defaultLogger{
 		logger:        logger.Sugar(),
-		level:         level,
-		accessLogger:  accessLogger.Sugar(),
+		loggerLevel:   level,
+		accessLogger:  accessLogger,
 		accessLevel:   accessLevel,
 		metricsLogger: metricsLogger,
 		metricsLevel:  metricsLevel,
 	}
 }
 
+func newRotateHook(logDir, logName string) *lumberjack.Logger {
+	return &lumberjack.Logger{
+		LocalTime:  true,
+		MaxAge:     defaultLogMaxAge,
+		MaxSize:    defaultLogMaxSize,
+		MaxBackups: defaultLogMaxBackups,
+		Filename:   filepath.Join(logDir, logName),
+	}
+}
+
+func newZapLogger(logDir, logName string) (*zap.Logger, zap.AtomicLevel) {
+	zapEncoderConfig := zapcore.EncoderConfig{
+		TimeKey:    "time",
+		MessageKey: "message",
+		EncodeTime: zapcore.ISO8601TimeEncoder,
+	}
+	zapLevel := zap.NewAtomicLevel()
+	zapCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(zapEncoderConfig),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(logDir, logName))),
+		zapLevel,
+	)
+	zapLogger := zap.New(zapCore)
+	return zapLogger, zapLevel
+}
+
 type defaultLogger struct {
+	async         bool
+	outputChan    chan AccessLogEntity
 	logger        *zap.SugaredLogger
-	level         zap.AtomicLevel
-	accessLogger  *zap.SugaredLogger
-	accessLevel   zap.AtomicLevel
+	accessLogger  *zap.Logger
 	metricsLogger *zap.Logger
+	loggerLevel   zap.AtomicLevel
+	accessLevel   zap.AtomicLevel
 	metricsLevel  zap.AtomicLevel
 }
 
@@ -351,8 +388,28 @@ func (d *defaultLogger) Fatalf(format string, fields ...interface{}) {
 	d.logger.Fatalf(format, fields...)
 }
 
-func (d *defaultLogger) AccessLog(filterName string, keyValue ...interface{}) {
-	d.accessLogger.Infow(filterName, keyValue...)
+func (d *defaultLogger) AccessLog(logObject AccessLogEntity) {
+	if d.async {
+		d.outputChan <- logObject
+	} else {
+		d.doAccessLog(logObject)
+	}
+}
+
+func (d *defaultLogger) doAccessLog(logObject AccessLogEntity) {
+	d.accessLogger.Info(logObject.Msg,
+		zap.String("role", logObject.Role),
+		zap.Uint64("requestID", logObject.RequestID),
+		zap.String("service", logObject.Service),
+		zap.String("method", logObject.Method),
+		zap.String("remoteAddress", logObject.RemoteAddress),
+		zap.String("desc", logObject.Desc),
+		zap.Int("reqSize", logObject.ReqSize),
+		zap.Int("resSize", logObject.ResSize),
+		zap.Int64("bizTime", logObject.BizTime),
+		zap.Int64("totalTime", logObject.TotalTime),
+		zap.Bool("success", logObject.Success),
+		zap.String("exception", logObject.Exception))
 }
 
 func (d *defaultLogger) MetricsLog(msg string) {
@@ -362,17 +419,43 @@ func (d *defaultLogger) MetricsLog(msg string) {
 func (d *defaultLogger) Flush() {
 	_ = d.logger.Sync()
 	_ = d.accessLogger.Sync()
+	_ = d.metricsLogger.Sync()
+}
+
+func (d *defaultLogger) SetAsync(value bool) {
+	d.async = value
+	if value {
+		d.outputChan = make(chan AccessLogEntity, defaultAsyncLogLen)
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Printf("logs async output failed. err:%v", err)
+					Warningf("logs async output failed. err:%v", err)
+				}
+			}()
+			for {
+				select {
+				case l := <-d.outputChan:
+					d.doAccessLog(l)
+				}
+			}
+		}()
+	}
 }
 
 func (d *defaultLogger) GetLevel() LogLevel {
-	return LogLevel(d.level.Level())
+	return LogLevel(d.loggerLevel.Level())
 }
 
 func (d *defaultLogger) SetLevel(level LogLevel) {
-	d.level.SetLevel(zapcore.Level(level))
+	d.loggerLevel.SetLevel(zapcore.Level(level))
 }
 
-func (d *defaultLogger) SetAccessLog(status bool) {
+func (d *defaultLogger) GetAccessLogAvailable() bool {
+	return d.accessLevel.Level() <= zapcore.Level(defaultLogLevel)
+}
+
+func (d *defaultLogger) SetAccessLogAvailable(status bool) {
 	if status {
 		d.accessLevel.SetLevel(zapcore.Level(defaultLogLevel))
 	} else {
@@ -380,11 +463,14 @@ func (d *defaultLogger) SetAccessLog(status bool) {
 	}
 }
 
-func (d *defaultLogger) SetMetricsLog(status bool) {
+func (d *defaultLogger) GetMetricsLogAvailable() bool {
+	return d.metricsLevel.Level() <= zapcore.Level(defaultLogLevel)
+}
+
+func (d *defaultLogger) SetMetricsLogAvailable(status bool) {
 	if status {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel))
 	} else {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel + 1))
 	}
-
 }

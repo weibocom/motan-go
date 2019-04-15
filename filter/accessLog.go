@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"encoding/json"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -63,17 +64,23 @@ func (t *AccessLogFilter) GetType() int32 {
 }
 
 func doAccessLog(filterName string, role string, address string, start time.Time, request motan.Request, response motan.Response) {
-	vlog.AccessLog("["+filterName+"]",
-		"role", role,
-		"requestID", response.GetRequestID(),
-		"service", request.GetServiceName(),
-		"method", request.GetMethod(),
-		"remoteAddress", address,
-		"desc", request.GetMethodDesc(),
-		"reqSize", request.GetRPCContext(true).BodySize,
-		"resSize", response.GetRPCContext(true).BodySize,
-		"bizTime", response.GetProcessTime(),
-		"totalTime", time.Since(start).Nanoseconds()/1e6,
-		"success", response.GetException() == nil,
-		"exception", response.GetException())
+	exception := response.GetException()
+	var exceptionData []byte
+	if exception != nil {
+		exceptionData, _ = json.Marshal(exception)
+	}
+	vlog.AccessLog(vlog.AccessLogEntity{
+		Msg:           filterName,
+		Role:          role,
+		RequestID:     response.GetRequestID(),
+		Service:       request.GetServiceName(),
+		Method:        request.GetMethod(),
+		RemoteAddress: address,
+		Desc:          request.GetMethodDesc(),
+		ReqSize:       request.GetRPCContext(true).BodySize,
+		ResSize:       response.GetRPCContext(true).BodySize,
+		BizTime:       response.GetProcessTime(),             //ms
+		TotalTime:     time.Since(start).Nanoseconds() / 1e6, //ms
+		Success:       exception == nil,
+		Exception:     string(exceptionData)})
 }

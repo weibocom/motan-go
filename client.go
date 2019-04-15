@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/weibocom/motan-go/cluster"
@@ -111,7 +112,11 @@ func GetClientContext(confFile string) *MCContext {
 		if logdir == "" {
 			logdir = "."
 		}
-		initLog(logdir)
+		logAsync := ""
+		if section != nil && section["log_async"] != nil {
+			logAsync = strconv.FormatBool(section["log_async"].(bool))
+		}
+		initLog(logdir, logAsync)
 		registerSwitchers(mc.context)
 	}
 	return mc

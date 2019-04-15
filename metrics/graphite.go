@@ -53,10 +53,12 @@ func (g *graphite) Write(snapshots []Snapshot) error {
 
 	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
-		vlog.MetricsLog("\n" + message)
-		_, err = conn.Write([]byte(message))
-		if err != nil {
-			return err
+		if message != "" {
+			vlog.MetricsLog("\n" + message)
+			_, err = conn.Write([]byte(message))
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

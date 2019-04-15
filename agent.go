@@ -191,14 +191,18 @@ func (a *Agent) initParam() {
 	if err != nil {
 		fmt.Println("get config of \"motan-agent\" fail! err " + err.Error())
 	}
-	logdir := ""
+	logDir := ""
 	if section != nil && section["log_dir"] != nil {
-		logdir = section["log_dir"].(string)
+		logDir = section["log_dir"].(string)
 	}
-	if logdir == "" {
-		logdir = "."
+	if logDir == "" {
+		logDir = "."
 	}
-	initLog(logdir)
+	logAsync := ""
+	if section != nil && section["log_async"] != nil {
+		logAsync = strconv.FormatBool(section["log_async"].(bool))
+	}
+	initLog(logDir, logAsync)
 	registerSwitchers(a.Context)
 
 	port := *motan.Port
@@ -209,59 +213,59 @@ func (a *Agent) initParam() {
 		port = defaultPort
 	}
 
-	mport := *motan.Mport
-	if mport == 0 && section != nil && section["mport"] != nil {
-		mport = section["mport"].(int)
+	mPort := *motan.Mport
+	if mPort == 0 && section != nil && section["mport"] != nil {
+		mPort = section["mport"].(int)
 	}
-	if mport == 0 {
-		mport = defaultMport
-	}
-
-	eport := *motan.Eport
-	if eport == 0 && section != nil && section["eport"] != nil {
-		eport = section["eport"].(int)
-	}
-	if eport == 0 {
-		eport = defaultEport
+	if mPort == 0 {
+		mPort = defaultMport
 	}
 
-	hport := *motan.Hport
-	if hport == 0 && section != nil && section["hport"] != nil {
-		hport = section["hport"].(int)
+	ePort := *motan.Eport
+	if ePort == 0 && section != nil && section["eport"] != nil {
+		ePort = section["eport"].(int)
 	}
-	if hport == 0 {
-		hport = defaultHport
-	}
-
-	pidfile := *motan.Pidfile
-	if pidfile == "" && section != nil && section["pidfile"] != nil {
-		pidfile = section["pidfile"].(string)
-	}
-	if pidfile == "" {
-		pidfile = defaultPidFile
+	if ePort == 0 {
+		ePort = defaultEport
 	}
 
-	runtimedir := ""
+	hPort := *motan.Hport
+	if hPort == 0 && section != nil && section["hport"] != nil {
+		hPort = section["hport"].(int)
+	}
+	if hPort == 0 {
+		hPort = defaultHport
+	}
+
+	pidFile := *motan.Pidfile
+	if pidFile == "" && section != nil && section["pidfile"] != nil {
+		pidFile = section["pidfile"].(string)
+	}
+	if pidFile == "" {
+		pidFile = defaultPidFile
+	}
+
+	runtimeDir := ""
 	if section != nil && section["runtime_dir"] != nil {
-		runtimedir = section["runtime_dir"].(string)
+		runtimeDir = section["runtime_dir"].(string)
 	}
-	if runtimedir == "" {
-		runtimedir = defaultRuntimeDir
+	if runtimeDir == "" {
+		runtimeDir = defaultRuntimeDir
 	}
 
-	err = os.MkdirAll(runtimedir, 0775)
+	err = os.MkdirAll(runtimeDir, 0775)
 	if err != nil {
 		panic("Init runtime directory error: " + err.Error())
 	}
 
-	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s", port, mport, pidfile, logdir, runtimedir)
-	a.logdir = logdir
+	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s", port, mPort, pidFile, logDir, runtimeDir)
+	a.logdir = logDir
 	a.port = port
-	a.eport = eport
-	a.hport = hport
-	a.mport = mport
-	a.pidfile = pidfile
-	a.runtimedir = runtimedir
+	a.eport = ePort
+	a.hport = hPort
+	a.mport = mPort
+	a.pidfile = pidFile
+	a.runtimedir = runtimeDir
 }
 
 func (a *Agent) initHTTPClusters() {
@@ -626,13 +630,16 @@ func getClusterKey(group, version, protocol, path string) string {
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
-func initLog(logdir string) {
+func initLog(logDir string, logAsync string) {
 	// TODO: remove after a better handle
-	if logdir == "stdout" {
+	if logDir == "stdout" {
 		return
 	}
-	fmt.Printf("use log dir:%s\n", logdir)
-	flag.Set("log_dir", logdir)
+	fmt.Printf("use log dir:%s\n", logDir)
+	_ = flag.Set("log_dir", logDir)
+	if logAsync != "" {
+		_ = flag.Set("log_async", logAsync)
+	}
 	vlog.LogInit(nil)
 }
 

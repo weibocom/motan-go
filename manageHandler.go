@@ -20,7 +20,9 @@ import (
 
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/filter"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
 )
 
@@ -54,10 +56,78 @@ func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte("ok."))
 	case "/version":
 		rw.Write([]byte(Version))
+	case "/status":
+		rw.Write(s.getStatus())
 	default:
 		rw.WriteHeader(s.a.status)
 		rw.Write([]byte(http.StatusText(s.a.status)))
 	}
+}
+
+func (s *StatusHandler) getStatus() []byte {
+	type (
+		MethodStatus struct {
+			Name            string `json:"name"`
+			PeriodCallCount int64  `json:"period_call_count"`
+		}
+		ServiceStatus struct {
+			Group   string         `json:"group"`
+			Name    string         `json:"name"`
+			Methods []MethodStatus `json:"methods"`
+		}
+		Result struct {
+			Status                 int             `json:"status"`
+			ServicePeriodCallCount int64           `json:"service_period_call_count"`
+			Services               []ServiceStatus `json:"services"`
+		}
+	)
+	result := Result{
+		Status:   s.a.status,
+		Services: make([]ServiceStatus, 0, 16),
+	}
+	s.a.serviceExporters.Range(func(k, v interface{}) bool {
+		exporter := v.(motan.Exporter)
+		group := exporter.GetURL().Group
+		service := exporter.GetURL().Path
+		statItem := metrics.GetStatItem(metrics.Escape(group), metrics.Escape(service))
+		if statItem == nil {
+			return true
+		}
+		snapshot := statItem.Snapshot()
+		if snapshot == nil {
+			return true
+		}
+		serviceInfo := ServiceStatus{
+			Group:   group,
+			Name:    service,
+			Methods: make([]MethodStatus, 0, 16),
+		}
+		snapshot.RangeKey(func(k string) {
+			if !strings.HasSuffix(k, filter.MetricsTotalCountSuffix) {
+				return
+			}
+			method := k[:len(k)-filter.MetricsTotalCountSuffixLen]
+			if index := strings.LastIndex(k, ":"); index != -1 {
+				method = method[index+1:]
+			}
+			callCount := snapshot.Count(k)
+			result.ServicePeriodCallCount += callCount
+			serviceInfo.Methods = append(serviceInfo.Methods, MethodStatus{
+				Name:            method,
+				PeriodCallCount: callCount,
+			})
+		})
+		result.Services = append(result.Services, serviceInfo)
+		return true
+	})
+	resultBytes, _ := json.MarshalIndent(struct {
+		Code int    `json:"code"`
+		Body Result `json:"body"`
+	}{
+		Code: 200,
+		Body: result,
+	}, "", "    ")
+	return resultBytes
 }
 
 type InfoHandler struct {
@@ -295,47 +365,52 @@ func (s *SwitcherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type LogHandler struct{}
 
+type logResponse struct {
+	Code int    `json:"code"`
+	Body string `json:"body"`
+}
+
 func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	type response struct {
-		Code int    `json:"code"`
-		Body string `json:"body"`
-	}
-	enc := json.NewEncoder(w)
+	jsonEncoder := json.NewEncoder(w)
 	switch r.URL.Path {
-	case "/log/level":
-		_ = enc.Encode(response{Code: 200, Body: "Level:" + vlog.GetLevel().String()})
-	case "/log/set":
+	case "/logConfig/get":
+		_ = jsonEncoder.Encode(logResponse{
+			Code: 200,
+			Body: "{Level:" + vlog.GetLevel().String() +
+				", AccessLog:" + strconv.FormatBool(vlog.GetAccessLogAvailable()) +
+				", MetricsLog:" + strconv.FormatBool(vlog.GetMetricsLogAvailable()) + "}"})
+	case "/logConfig/set":
 		if lvlString := r.FormValue("level"); lvlString != "" {
 			var lvl vlog.LogLevel
 			if err := lvl.Set(lvlString); err == nil {
 				vlog.SetLevel(lvl)
-				_ = enc.Encode(response{Code: 200, Body: "set log level:" + lvlString})
+				_ = jsonEncoder.Encode(logResponse{Code: 200, Body: "set log level:" + lvlString})
 				vlog.Infoln("set log level:", lvlString)
 			} else {
-				_ = enc.Encode(response{Code: 500, Body: "set log level failed. err:" + err.Error()})
+				_ = jsonEncoder.Encode(logResponse{Code: 500, Body: "set log level failed. err:" + err.Error()})
 				vlog.Warningln("set log level failed. err:", err.Error())
 			}
+		} else if available := r.FormValue("access"); available != "" {
+			setLogStatus(jsonEncoder, "accessLog", available)
+		} else if available := r.FormValue("metrics"); available != "" {
+			setLogStatus(jsonEncoder, "metricsLog", available)
 		}
-		if access := r.FormValue("access"); access != "" {
-			if status, err := strconv.ParseBool(access); err == nil {
-				vlog.SetAccessLog(status)
-				_ = enc.Encode(response{Code: 200, Body: "set accessLog status:" + access})
-				vlog.Infoln("set accessLog status:", status)
-			} else {
-				_ = enc.Encode(response{Code: 500, Body: "set accessLog status failed. err:" + err.Error()})
-				vlog.Warningln("set accessLog status failed. err:", err.Error())
-			}
+	}
+}
+
+func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
+	if status, err := strconv.ParseBool(available); err == nil {
+		switch logType {
+		case "accessLog":
+			vlog.SetAccessLogAvailable(status)
+		case "metricsLog":
+			vlog.SetMetricsLogAvailable(status)
 		}
-		if metrics := r.FormValue("metrics"); metrics != "" {
-			if status, err := strconv.ParseBool(metrics); err == nil {
-				vlog.SetMetricsLog(status)
-				_ = enc.Encode(response{Code: 200, Body: "set metricsLog status:" + metrics})
-				vlog.Infoln("set metricsLog status:", status)
-			} else {
-				_ = enc.Encode(response{Code: 500, Body: "set metricsLog status failed. err:" + err.Error()})
-				vlog.Warningln("set metricsLog status failed. err:", err.Error())
-			}
-		}
+		_ = jsonEncoder.Encode(logResponse{Code: 200, Body: "set " + logType + " status:" + available})
+		vlog.Infoln("set "+logType+" status:", status)
+	} else {
+		_ = jsonEncoder.Encode(logResponse{Code: 500, Body: "set " + logType + " status failed. err:" + err.Error()})
+		vlog.Warningln("set "+logType+" status failed. err:", err.Error())
 	}
 }
 

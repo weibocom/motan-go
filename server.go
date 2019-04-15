@@ -64,7 +64,11 @@ func GetMotanServerContext(confFile string) *MSContext {
 		if logdir == "" {
 			logdir = "."
 		}
-		initLog(logdir)
+		logAsync := ""
+		if section != nil && section["log_async"] != nil {
+			logAsync = strconv.FormatBool(section["log_async"].(bool))
+		}
+		initLog(logdir, logAsync)
 		registerSwitchers(ms.context)
 	}
 	return ms
