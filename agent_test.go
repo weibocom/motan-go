@@ -16,6 +16,7 @@ import (
 	"github.com/weibocom/motan-go/cluster"
 	"github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
+	mpro "github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -140,4 +141,44 @@ func TestMain(m *testing.M) {
 		break
 	}
 	os.Exit(m.Run())
+}
+
+func TestAgent_InitCall(t *testing.T) {
+	//init
+	agent := NewAgent(nil)
+	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
+	urlTest := &core.URL{Parameters: make(map[string]string)}
+	urlTest.Group = "test1"
+	agent.initCluster(urlTest)
+	agentHandler := &agentMessageHandler{agent: agent}
+
+	//test init cluster with one path and one groups in clusterMap
+	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
+	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
+
+	//init cluster with one path and one group in clusterMapWithoutGroup
+	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
+	assert.NotNil(t, "init cluster with one path and one group in clusterMapWithoutGroup fail")
+
+	//test agentHandler call with group
+	request := &core.MotanRequest{Attachment: core.NewStringMap(10)}
+	request.SetAttachment(mpro.MGroup, "test1")
+	ret := agentHandler.Call(request)
+	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
+
+	//test agentHandler call without group
+	request.SetAttachment(mpro.MGroup, "")
+	ret = agentHandler.Call(request)
+	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
+
+	//init cluster with one path and two groups in clusterMapWithoutGroup
+	urlTest.Group = "test2"
+	agent.initCluster(urlTest)
+	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
+	assert.Nil(t, temp, "init cluster with one path and two groups in clusterMapWithoutGroup fail")
+
+	//test agentHandler call without group
+	request.SetAttachment(mpro.MGroup, "")
+	ret = agentHandler.Call(request)
+	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "empty group is not supported"))
 }

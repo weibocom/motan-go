@@ -1,0 +1,26 @@
+dynamic-param:
+  aaa:
+    app-idc1: aaa1
+    app-idc2: aaa2
+    app-idc3: aaa3
+    default: aaa_default # if dynamic parameter use pool configuration you MUST give default parameter
+  bbb:
+    app-idc1: bbb1
+    app-idc2: bbb2
+    app-idc3: bbb3
+    default: bbb_default
+  ccc:
+    app-idc1: ccc1
+    app-idc2: ccc2
+    app-idc3: ccc3
+    default: ccc_default
+
+test_placeholder:
+  aaa: "${aaa}"
+  sub:
+    bbb: "${bbb}"
+  ccc: "${ccc}"
+  ddd:
+    - "xxx"
+    - "ddd"
+    - "xx"

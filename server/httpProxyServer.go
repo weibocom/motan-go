@@ -209,7 +209,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	// exception is a motan internal exception
 	if exception := motanResponse.GetException(); exception != nil {
 		if exception.ErrCode == core.ENoEndpoints {
-			vlog.Warningf("Http rpc proxy no endpoints, try http proxy")
+			vlog.Warningf("Http rpc proxy to [%s, %s] has no endpoints, try http proxy", string(requestURI.Path()), service)
 			s.doHTTPProxy(ctx)
 			return
 		}

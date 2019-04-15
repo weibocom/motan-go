@@ -126,14 +126,14 @@ func TestAddWriter(t *testing.T) {
 	assert.True(t, w == nw, "add writer")
 
 	// test sink
-	rp.interval = 200 * time.Millisecond
+	rp.interval = 500 * time.Millisecond
 	StartReporter(&motan.Context{Config: config.NewConfig()})
 	AddCounter(group, service, "c1", 1)
 	AddCounter(group, service, "c2", 2)
 	AddHistograms(group, service, "h1", 100)
 	AddHistograms(group, service, "h2", 200)
 
-	time.Sleep(220 * time.Millisecond)
+	time.Sleep(520 * time.Millisecond)
 	assert.Equal(t, 1, len(w.GetSanpshot()), "writer snapshot size")
 	assert.Equal(t, group, w.GetSanpshot()[0].GetGroup(), "snapshot group")
 	assert.Equal(t, service, w.GetSanpshot()[0].GetService(), "snapshot group")
