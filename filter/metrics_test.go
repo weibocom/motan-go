@@ -52,7 +52,7 @@ func TestMetricsFilter(t *testing.T) {
 			mf.Filter(test.caller, test.request)
 			time.Sleep(10 * time.Millisecond)
 			// The metrics filter has do escape
-			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(metrics.Escape(test.key)+".total_count")), "metric count")
+			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(metrics.Escape(test.key)+MetricsTotalCountSuffix)), "metric count")
 		})
 	}
 }
@@ -72,11 +72,11 @@ func TestAddMetric(t *testing.T) {
 		response motan.Response
 		keys     []string
 	}{
-		{name: "no exception", response: response1, keys: []string{".total_count"}},
-		{name: "biz exception", response: response2, keys: []string{".total_count", ".biz_error_count"}},
-		{name: "other exception", response: response3, keys: []string{".total_count", ".other_error_count"}},
-		{name: "slow count", response: response4, keys: []string{".total_count", ".slow_count"}},
-		{name: "time", response: response1, keys: []string{".total_count", ".Less200ms"}},
+		{name: "no exception", response: response1, keys: []string{MetricsTotalCountSuffix}},
+		{name: "biz exception", response: response2, keys: []string{MetricsTotalCountSuffix, MetricsBizErrorCountSuffix}},
+		{name: "other exception", response: response3, keys: []string{MetricsTotalCountSuffix, MetricsOtherErrorCountSuffix}},
+		{name: "slow count", response: response4, keys: []string{MetricsTotalCountSuffix, MetricsSlowCountSuffix}},
+		{name: "time", response: response1, keys: []string{MetricsTotalCountSuffix, ".Less200ms"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

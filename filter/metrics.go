@@ -7,6 +7,15 @@ import (
 	"github.com/weibocom/motan-go/metrics"
 )
 
+const (
+	MetricsTotalCountSuffix    = ".total_count"
+	MetricsTotalCountSuffixLen = len(MetricsTotalCountSuffix)
+
+	MetricsBizErrorCountSuffix   = ".biz_error_count"
+	MetricsOtherErrorCountSuffix = ".other_error_count"
+	MetricsSlowCountSuffix       = ".slow_count"
+)
+
 type MetricsFilter struct {
 	next motan.EndPointFilter
 }
@@ -84,18 +93,18 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 }
 
 func addMetric(group string, service string, key string, cost int64, response motan.Response) {
-	metrics.AddCounter(group, service, key+".total_count", 1) //total_count
-	if response.GetException() != nil {                       //err_count
+	metrics.AddCounter(group, service, key+MetricsTotalCountSuffix, 1) //total_count
+	if response.GetException() != nil {                                //err_count
 		exception := response.GetException()
 		if exception.ErrType == motan.BizException {
-			metrics.AddCounter(group, service, key+".biz_error_count", 1)
+			metrics.AddCounter(group, service, key+MetricsBizErrorCountSuffix, 1)
 		} else {
-			metrics.AddCounter(group, service, key+".other_error_count", 1)
+			metrics.AddCounter(group, service, key+MetricsOtherErrorCountSuffix, 1)
 		}
 	}
 	metrics.AddCounter(group, service, key+metrics.ElapseTimeSuffix(cost), 1)
 	if cost > 200 {
-		metrics.AddCounter(group, service, key+".slow_count", 1)
+		metrics.AddCounter(group, service, key+MetricsSlowCountSuffix, 1)
 	}
 	metrics.AddHistograms(group, service, key, cost)
 }
