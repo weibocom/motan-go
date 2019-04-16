@@ -148,6 +148,14 @@ func TestAgent_InitCall(t *testing.T) {
 	agent := NewAgent(nil)
 	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
 	urlTest := &core.URL{Parameters: make(map[string]string)}
+	registryConf:="test_registry"
+	registryTest := &core.URL{Parameters: make(map[string]string)}
+	registryTest.Protocol = "direct"
+	registryURLs := make(map[string]*core.URL,1)
+	registryURLs[registryConf] = registryTest
+	agent.Context = &core.Context{RegistryURLs:registryURLs}
+
+	urlTest.Parameters[core.RegistryKey] = registryConf
 	urlTest.Group = "test1"
 	agent.initCluster(urlTest)
 	agentHandler := &agentMessageHandler{agent: agent}

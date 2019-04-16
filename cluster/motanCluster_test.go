@@ -65,9 +65,12 @@ func initCluster() *MotanCluster {
 	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Protocol = "test"
 	url.Parameters[motan.Hakey] = "failover"
-	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
+	url.Parameters[motan.RegistryKey] = "vintage,consul,direct,test_registry"
 	url.Parameters[motan.Lbkey] = "random"
-	return NewCluster(&motan.Context{}, getCustomExt(), url, false)
+
+	registryURLs := make(map[string]*motan.URL,1)
+	registryURLs["test_registry"] = RegistryURL
+	return NewCluster(&motan.Context{RegistryURLs:registryURLs}, getCustomExt(), url, false)
 }
 
 //-------------test struct--------------------
