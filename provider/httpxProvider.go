@@ -178,7 +178,7 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 
 	err = h.httpClient.Do(req, httpResp)
 	if err != nil {
-		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v",req, err)
+		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v", req, err)
 		fillException(resp, t, err)
 		return resp
 	}
