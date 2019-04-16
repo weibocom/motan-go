@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -21,27 +22,28 @@ type MotanCluster struct {
 	registries []motan.Registry
 	haStrategy motan.HaStrategy
 
-	filters       []motan.Filter
-	clusterFilter motan.ClusterFilter
-	extFactory    motan.ExtensionFactory
-	lock          sync.Mutex
-	available     bool
-	closed        bool
-	proxy         bool
+	filters          []motan.Filter
+	clusterFilter    motan.ClusterFilter
+	extFactory       motan.ExtensionFactory
+	lock             sync.Mutex
+	isCommandWorking atomic.Value
+	available        bool
+	closed           bool
+	proxy            bool
 
-	// one cluster can has some registries and groups
-	// we can has master group and backup groups
+	// one cluster can have some registries and groups
+	// we can have master group and backup groups
 	// the master group has only one, but backup groups can be many
 	// when use backup group we need subscribe all groups
 	groupEndpoints map[string]*registryEndpointSet
-	loadBalancer   *multiGroupLoadBalancer
+	loadBalance    *multiGroupLoadBalance
 	listeners      map[string]*clusterGroupNodeChangeListener
 }
 
 //  GroupStrategy means multiple group load balance information
-type groupConfig struct {
+type GroupConfig struct {
 	group  string
-	weigth int64
+	weight int64
 }
 
 type registryEndpointSet struct {
@@ -72,58 +74,54 @@ func (s *registryEndpointSet) getAllEndpoints() []motan.EndPoint {
 	return endpoints
 }
 
-type multiGroupLoadBalancer struct {
+type multiGroupLoadBalance struct {
 	cluster         *MotanCluster
-	groupConfigInfo groupConfigInfo
-	balancers       map[string]motan.LoadBalance
+	groupConfigInfo GroupConfigInfo
+	balances        map[string]motan.LoadBalance
 }
 
-func (lb *multiGroupLoadBalancer) OnRefresh(endpoints []motan.EndPoint) {
-	return
+func (lb *multiGroupLoadBalance) OnRefresh(endpoints []motan.EndPoint) {
 }
 
-func (lb *multiGroupLoadBalancer) Select(request motan.Request) motan.EndPoint {
-	masterGroup := lb.groupConfigInfo.groupCfgList[0].group
-	if len(lb.groupConfigInfo.groupCfgList) == 1 {
-		return lb.balancers[masterGroup].Select(request)
+func (lb *multiGroupLoadBalance) Select(request motan.Request) motan.EndPoint {
+	groupConfigs := lb.groupConfigInfo.GroupConfigs
+	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Load().(bool) {
+		return lb.balances[groupConfigs[0].group].Select(request)
 	}
-	backupGroups := lb.groupConfigInfo.groupCfgList[1:]
-	if lb.groupConfigInfo.hasSetBackupGroup {
-		for _, group := range backupGroups {
-			if endPoint := lb.balancers[group.group].Select(request); endPoint != nil {
+	if lb.groupConfigInfo.UseBackupGroup {
+		for _, group := range groupConfigs {
+			if endPoint := lb.balances[group.group].Select(request); endPoint != nil {
 				return endPoint
 			}
 		}
 	}
 	// TODO: more complex strategy for backup group
-	return lb.balancers[backupGroups[rand.Intn(len(backupGroups))].group].Select(request)
+	return lb.balances[groupConfigs[rand.Intn(len(groupConfigs))].group].Select(request)
 }
 
-func (lb *multiGroupLoadBalancer) SelectArray(request motan.Request) []motan.EndPoint {
-	masterGroup := lb.groupConfigInfo.groupCfgList[0].group
-	if len(lb.groupConfigInfo.groupCfgList) == 1 {
-		return lb.balancers[masterGroup].SelectArray(request)
+func (lb *multiGroupLoadBalance) SelectArray(request motan.Request) []motan.EndPoint {
+	groupConfigs := lb.groupConfigInfo.GroupConfigs
+	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Load().(bool) {
+		return lb.balances[groupConfigs[0].group].SelectArray(request)
 	}
-	backupGroups := lb.groupConfigInfo.groupCfgList[1:]
-	if lb.groupConfigInfo.hasSetBackupGroup {
-		for _, group := range backupGroups {
-			if endPoints := lb.balancers[group.group].SelectArray(request); len(endPoints) > 0 {
+	if lb.groupConfigInfo.UseBackupGroup {
+		for _, group := range groupConfigs {
+			if endPoints := lb.balances[group.group].SelectArray(request); len(endPoints) > 0 {
 				return endPoints
 			}
 		}
 	}
 	// TODO: more complex strategy for backup group
-	return lb.balancers[backupGroups[rand.Intn(len(backupGroups))].group].SelectArray(request)
+	return lb.balances[groupConfigs[rand.Intn(len(groupConfigs))].group].SelectArray(request)
 }
 
-func (lb *multiGroupLoadBalancer) SetWeight(weight string) {
+func (lb *multiGroupLoadBalance) SetWeight(weight string) {
 }
 
-func (lb *multiGroupLoadBalancer) refreshGroup(group string) {
-	// the group have the balancer certainly
+func (lb *multiGroupLoadBalance) refreshGroup(group string) {
 	endpoints := lb.cluster.getEndpointByGroup(group)
 	if len(endpoints) > 0 {
-		lb.balancers[group].OnRefresh(endpoints)
+		lb.balances[group].OnRefresh(endpoints)
 	}
 }
 
@@ -145,7 +143,7 @@ func (l *clusterGroupNodeChangeListener) processWeight(urls []*motan.URL) []*mot
 		weight = url.Parameters["weight"]
 		urls = urls[:len(urls)-1]
 	}
-	l.cluster.loadBalancer.balancers[l.group].SetWeight(weight)
+	l.cluster.loadBalance.balances[l.group].SetWeight(weight)
 	return urls
 }
 
@@ -157,8 +155,8 @@ func (l *clusterGroupNodeChangeListener) Notify(registryURL *motan.URL, urls []*
 		return
 	}
 
-	// only master group need processWeigth about command
-	if l.cluster.loadBalancer.groupConfigInfo.groupCfgList[0].group == l.group {
+	// only master group need processWeight about command
+	if l.cluster.loadBalance.groupConfigInfo.GroupConfigs[0].group == l.group {
 		urls = l.processWeight(urls)
 	}
 
@@ -222,7 +220,7 @@ func (l *clusterGroupNodeChangeListener) Notify(registryURL *motan.URL, urls []*
 		}
 	}
 	eps.setEndpoints(registryURL, endpoints)
-	l.cluster.loadBalancer.refreshGroup(l.group)
+	l.cluster.loadBalance.refreshGroup(l.group)
 	for _, ep := range endpointsToRemove {
 		ep.Destroy()
 	}
@@ -250,6 +248,7 @@ func NewCluster(context *motan.Context, extFactory motan.ExtensionFactory, url *
 		url:        url,
 		proxy:      proxy,
 	}
+	cluster.isCommandWorking.Store(false)
 	cluster.initCluster()
 	return cluster
 }
@@ -270,13 +269,13 @@ func (m *MotanCluster) initCluster() bool {
 	//ha
 	m.haStrategy = m.extFactory.GetHa(m.url)
 	//lb
-	m.loadBalancer = &multiGroupLoadBalancer{
+	m.loadBalance = &multiGroupLoadBalance{
 		cluster: m,
 		// initial values, will be override by parseRegistry
-		balancers: map[string]motan.LoadBalance{
+		balances: map[string]motan.LoadBalance{
 			m.url.Group: m.extFactory.GetLB(m.url),
 		},
-		groupConfigInfo: groupConfigInfo{groupCfgList: groupConfigList{{group: m.url.Group}}},
+		groupConfigInfo: GroupConfigInfo{GroupConfigs: []GroupConfig{{group: m.url.Group}}},
 	}
 	m.groupEndpoints = make(map[string]*registryEndpointSet)
 	m.listeners = make(map[string]*clusterGroupNodeChangeListener)
@@ -398,10 +397,10 @@ func (m *MotanCluster) parseRegistry() (err error) {
 	}
 	// groupStrategies := DetermineGroupConfig(m.url, registries)
 	groupStrategiesInfo := DetermineGroupConfig(m.url, registries)
-	groupStrategies := groupStrategiesInfo.groupCfgList
+	groupStrategies := groupStrategiesInfo.GroupConfigs
 
 	if len(groupStrategies) != 0 {
-		m.loadBalancer.groupConfigInfo = groupStrategiesInfo
+		m.loadBalance.groupConfigInfo = groupStrategiesInfo
 	}
 
 	m.url.SetGroup(groupStrategies[0].group)
@@ -416,9 +415,9 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		}
 		m.listeners[group] = listener
 		m.groupEndpoints[group] = newRegistryEndpointSet()
-		m.loadBalancer.balancers[group] = m.extFactory.GetLB(subscribeURL)
+		m.loadBalance.balances[group] = m.extFactory.GetLB(subscribeURL)
 		for _, registry := range registries {
-			// only the master group need to suscribe the commands
+			// only the master group need to subscribe the commands
 			if commandRegistry, ok := registry.(*CommandRegistryWrapper); ok {
 				if groupIndex > 0 {
 					registry = commandRegistry.registry
@@ -458,7 +457,7 @@ func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 		vlog.Errorf("cluster call panic. req:%s\n", motan.GetReqInfo(request))
 	})
 	if m.available {
-		return m.clusterFilter.Filter(m.haStrategy, m.loadBalancer, request)
+		return m.clusterFilter.Filter(m.haStrategy, m.loadBalance, request)
 	}
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster not available, maybe caused by degrade", ErrType: motan.ServiceException})
@@ -470,18 +469,19 @@ const (
 )
 
 // DetermineGroupConfig redeclare DetermineGroupConfig
-var DetermineGroupConfig = func(url *motan.URL, registryArr []motan.Registry) groupConfigInfo {
-	registry := registryArr[0]
-	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
-		return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: url.Group}}}
-	}
+var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) GroupConfigInfo {
+	registry := registries[0]
 
 	if groupList := strings.Split(url.Group, backupGroupDecollator); len(groupList) > 0 {
-		var groupConfigList groupConfigList
+		var groupConfigList []GroupConfig
 		for _, group := range groupList {
-			groupConfigList = append(groupConfigList, groupConfig{group: group})
+			groupConfigList = append(groupConfigList, GroupConfig{group: group})
 		}
-		return groupConfigInfo{groupCfgList: groupConfigList, hasSetBackupGroup: true}
+		return GroupConfigInfo{GroupConfigs: groupConfigList, UseBackupGroup: true}
+	}
+
+	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
 	}
 
 	// prepare groups for exact match
@@ -511,10 +511,10 @@ var DetermineGroupConfig = func(url *motan.URL, registryArr []motan.Registry) gr
 		for _, g := range preDetectGroups {
 			groupDetectURL.Group = g
 			if len(registry.Discover(groupDetectURL)) > 0 {
-				return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: g}}}
+				return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: g}}}
 			}
 		}
-		return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
 	}
 
 	// registry can discover groups, first try prepared groups, if no match, try regex match
@@ -523,7 +523,7 @@ var DetermineGroupConfig = func(url *motan.URL, registryArr []motan.Registry) gr
 		for _, group := range groups {
 			groupDetectURL.Group = g
 			if group == g && len(registry.Discover(groupDetectURL)) > 0 {
-				return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: g}}}
+				return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: g}}}
 			}
 		}
 	}
@@ -531,7 +531,7 @@ var DetermineGroupConfig = func(url *motan.URL, registryArr []motan.Registry) gr
 	regex, err := regexp.Compile("^" + strings.Replace(url.Group, clusterIdcPlaceHolder, "(.*)", 1) + "$")
 	if err != nil {
 		vlog.Errorf("Unexpected url config %v", url)
-		return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
 	}
 
 	groupNodes := make(map[string][]*motan.URL)
@@ -547,38 +547,42 @@ var DetermineGroupConfig = func(url *motan.URL, registryArr []motan.Registry) gr
 		}
 	}
 	if len(groupNodes) != 0 {
-		dynamicGroupStretage := DetermineDynamicGroupPolicy(url, groupNodes)
-		groupConfigList := dynamicGroupStretage.GetBestGroup()
-		sort.Sort(sort.Reverse(groupConfigList))
-		return groupConfigInfo{groupCfgList: groupConfigList}
+		dynamicGroupStrategy := DetermineDynamicGroupStrategy(url, groupNodes)
+		groupConfigList := dynamicGroupStrategy.GetGroupConfigs()
+
+		config := GroupConfigInfo{GroupConfigs: groupConfigList}
+		sort.Sort(sort.Reverse(&config))
+		return config
 	}
 	if len(matchedGroups) == 0 {
 		vlog.Errorf("No group found for %s", url.Group)
-		return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
 	}
 	group := matchedGroups[len(matchedGroups)-1]
 	vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
-	return groupConfigInfo{groupCfgList: groupConfigList{groupConfig{group: group}}}
+	return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: group}}}
 }
 
-type groupConfigInfo struct {
-	groupCfgList      groupConfigList
-	hasSetBackupGroup bool
+type GroupConfigInfo struct {
+	GroupConfigs   []GroupConfig
+	UseBackupGroup bool
 }
 
-type groupConfigList []groupConfig
+func (g *GroupConfigInfo) Len() int { return len(g.GroupConfigs) }
+func (g *GroupConfigInfo) Less(i, j int) bool {
+	return g.GroupConfigs[i].weight < g.GroupConfigs[j].weight
+}
+func (g *GroupConfigInfo) Swap(i, j int) {
+	g.GroupConfigs[i], g.GroupConfigs[j] = g.GroupConfigs[j], g.GroupConfigs[i]
+}
 
-func (g groupConfigList) Len() int           { return len(g) }
-func (g groupConfigList) Less(i, j int) bool { return g[i].weigth < g[j].weigth }
-func (g groupConfigList) Swap(i, j int)      { g[i], g[j] = g[j], g[i] }
-
-var DetermineDynamicGroupPolicy = func(url *motan.URL, groupNodes map[string][]*motan.URL) DynamicGroup {
+var DetermineDynamicGroupStrategy = func(url *motan.URL, groupNodes map[string][]*motan.URL) DynamicGroup {
 	// TODO: multi dynamic group policy support
 	return &PingDynamicGroup{groupNodes: groupNodes}
 }
 
 type DynamicGroup interface {
-	GetBestGroup() groupConfigList
+	GetGroupConfigs() []GroupConfig
 }
 
 type PingDynamicGroup struct {
@@ -586,8 +590,8 @@ type PingDynamicGroup struct {
 	groupNodes map[string][]*motan.URL
 }
 
-func (p *PingDynamicGroup) GetBestGroup() groupConfigList {
-	groupConfigList := make([]groupConfig, len(p.groupNodes))
+func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
+	groupConfigList := make([]GroupConfig, len(p.groupNodes))
 	// TODO: if we do not have root privilege on linux, we need another policy to get network latency
 	// For linux we need root privilege to do ping, but darwin no need
 	pingPrivileged := true
@@ -618,7 +622,7 @@ func (p *PingDynamicGroup) GetBestGroup() groupConfigList {
 			}
 			total += rtt
 		}
-		groupConfigList = append(groupConfigList, groupConfig{group: group, weigth: 100 - int64(total-min-max)/int64(len(pinger.Rtts)-2)})
+		groupConfigList = append(groupConfigList, GroupConfig{group: group, weight: 100 - int64(total-min-max)/int64(len(pinger.Rtts)-2)})
 	}
 	return groupConfigList
 }

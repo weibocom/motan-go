@@ -473,6 +473,12 @@ func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandTy
 	if needNotify {
 		c.getResultWithCommand(needNotify)
 	}
+
+	if c.tcCommand != nil {
+		c.cluster.isCommandWorking.Store(true)
+	} else {
+		c.cluster.isCommandWorking.Store(false)
+	}
 }
 
 func (c *CommandRegistryWrapper) Notify(registryURL *motan.URL, urls []*motan.URL) {
