@@ -155,9 +155,15 @@ func (l *clusterGroupNodeChangeListener) Notify(registryURL *motan.URL, urls []*
 		return
 	}
 
+	masterGroup := l.cluster.loadBalance.groupConfigInfo.GroupConfigs[0].group
 	// only master group need processWeight about command
-	if l.cluster.loadBalance.groupConfigInfo.GroupConfigs[0].group == l.group {
+	if masterGroup == l.group {
 		urls = l.processWeight(urls)
+	}
+	// when use backup group, we should make backup groups's endpoint using lazy init
+	lazyInit := "false"
+	if masterGroup != l.group && l.cluster.loadBalance.groupConfigInfo.UseBackupGroup {
+		lazyInit = "true"
 	}
 
 	endpoints := make([]motan.EndPoint, 0, len(urls))
@@ -194,6 +200,7 @@ func (l *clusterGroupNodeChangeListener) Notify(registryURL *motan.URL, urls []*
 
 		endpointURL := u.Copy()
 		endpointURL.MergeParams(l.subscribeURL.Parameters)
+		endpointURL.PutParam(motan.LazyInitEndpointKey, lazyInit)
 		endpoint = l.cluster.extFactory.GetEndPoint(endpointURL)
 		if endpoint == nil {
 			continue

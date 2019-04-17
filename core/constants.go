@@ -48,6 +48,7 @@ const (
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
+    LazyInitEndpointKey     = "lazyInitEndpoint"
 )
 
 // nodeType
