@@ -70,7 +70,7 @@ func doAccessLog(filterName string, role string, address string, start time.Time
 		exceptionData, _ = json.Marshal(exception)
 	}
 	vlog.AccessLog(vlog.AccessLogEntity{
-		Msg:           filterName,
+		FilterName:    filterName,
 		Role:          role,
 		RequestID:     response.GetRequestID(),
 		Service:       request.GetServiceName(),

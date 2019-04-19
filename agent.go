@@ -202,7 +202,11 @@ func (a *Agent) initParam() {
 	if section != nil && section["log_async"] != nil {
 		logAsync = strconv.FormatBool(section["log_async"].(bool))
 	}
-	initLog(logDir, logAsync)
+	logStructured := ""
+	if section != nil && section["log_structured"] != nil {
+		logStructured = strconv.FormatBool(section["log_structured"].(bool))
+	}
+	initLog(logDir, logAsync, logStructured)
 	registerSwitchers(a.Context)
 
 	port := *motan.Port
@@ -630,7 +634,7 @@ func getClusterKey(group, version, protocol, path string) string {
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
-func initLog(logDir string, logAsync string) {
+func initLog(logDir, logAsync, logStructured string) {
 	// TODO: remove after a better handle
 	if logDir == "stdout" {
 		return
@@ -639,6 +643,9 @@ func initLog(logDir string, logAsync string) {
 	_ = flag.Set("log_dir", logDir)
 	if logAsync != "" {
 		_ = flag.Set("log_async", logAsync)
+	}
+	if logStructured != "" {
+		_ = flag.Set("log_structured", logStructured)
 	}
 	vlog.LogInit(nil)
 }

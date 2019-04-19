@@ -35,4 +35,4 @@ clientlogs
 agentlogs
 main/magent*
 log/log.test*
-
+go.sum

@@ -372,13 +372,20 @@ type logResponse struct {
 
 func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	jsonEncoder := json.NewEncoder(w)
+	type resBody struct {
+		Level      string `json:"level"`
+		AccessLog  bool   `json:"accessLog"`
+		MetricsLog bool   `json:"metricsLog"`
+	}
 	switch r.URL.Path {
 	case "/logConfig/get":
+		body, _ := json.Marshal(resBody{
+			Level:      vlog.GetLevel().String(),
+			AccessLog:  vlog.GetAccessLogAvailable(),
+			MetricsLog: vlog.GetMetricsLogAvailable()})
 		_ = jsonEncoder.Encode(logResponse{
 			Code: 200,
-			Body: "{Level:" + vlog.GetLevel().String() +
-				", AccessLog:" + strconv.FormatBool(vlog.GetAccessLogAvailable()) +
-				", MetricsLog:" + strconv.FormatBool(vlog.GetMetricsLogAvailable()) + "}"})
+			Body: string(body)})
 	case "/logConfig/set":
 		if lvlString := r.FormValue("level"); lvlString != "" {
 			var lvl vlog.LogLevel

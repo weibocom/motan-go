@@ -21,19 +21,20 @@ var (
 	once           sync.Once
 	logDir         = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
 	logAsync       = flag.Bool("log_async", true, "If false, write log sync, default is true")
+	logStructured  = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
 )
 
 const (
-	defaultLogMaxSize    = 500 //megabytes
-	defaultLogMaxAge     = 30  //days
-	defaultLogMaxBackups = 20
-	defaultAsyncLogLen   = 1000
+	defaultLogMaxSize  = 1024 //megabytes
+	defaultAsyncLogLen = 5000
 
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
+	defaultLogSeparator   = "-"
 	defaultLogLevel       = InfoLevel
 	defaultFlushInterval  = time.Second
+	defaultRotateInterval = time.Hour
 )
 
 const (
@@ -102,13 +103,13 @@ func (l *LogLevel) Set(level string) error {
 }
 
 type AccessLogEntity struct {
-	Msg           string `json:"msg"`
+	FilterName    string `json:"filterName"`
 	Role          string `json:"role"`
 	RequestID     uint64 `json:"requestID"`
 	Service       string `json:"service"`
 	Method        string `json:"method"`
-	RemoteAddress string `json:"remoteAddress"`
 	Desc          string `json:"desc"`
+	RemoteAddress string `json:"remoteAddress"`
 	ReqSize       int    `json:"reqSize"`
 	ResSize       int    `json:"resSize"`
 	BizTime       int64  `json:"bizTime"`
@@ -129,9 +130,11 @@ type Logger interface {
 	AccessLog(AccessLogEntity)
 	MetricsLog(string)
 	Flush()
+	Rotate()
 	SetAsync(bool)
 	GetLevel() LogLevel
 	SetLevel(LogLevel)
+	SetAccessStructured(bool)
 	GetAccessLogAvailable() bool
 	SetAccessLogAvailable(bool)
 	GetMetricsLogAvailable() bool
@@ -146,7 +149,9 @@ func LogInit(logger Logger) {
 			loggerInstance = logger
 		}
 		SetAsync(*logAsync)
+		setAccessStructured(*logStructured)
 		startFlush()
+		startRotate()
 	})
 }
 
@@ -244,9 +249,37 @@ func startFlush() {
 	}()
 }
 
+func startRotate() {
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Printf("rotate logs failed. err:%v", err)
+				Warningf("rotate logs failed. err:%v", err)
+			}
+		}()
+		for loggerInstance != nil {
+			now := time.Now()
+			duration := time.Date(now.Year(), now.Month(), now.Day(), now.Hour()+1, 0, 0, 0, time.Local).Sub(now)
+			for duration == 0 {
+				duration = defaultRotateInterval
+			}
+			timer := time.NewTicker(duration)
+			<-timer.C
+			loggerInstance.Rotate()
+			timer.Stop()
+		}
+	}()
+}
+
 func SetAsync(value bool) {
 	if loggerInstance != nil {
 		loggerInstance.SetAsync(value)
+	}
+}
+
+func setAccessStructured(value bool) {
+	if loggerInstance != nil {
+		loggerInstance.SetAccessStructured(value)
 	}
 }
 
@@ -300,60 +333,68 @@ func newDefaultLog(logDir string) Logger {
 		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
 	level := zap.NewAtomicLevel()
+	pName := filepath.Base(os.Args[0])
+	rotate := newRotateHook(logDir, pName+defaultLogSuffix)
 	zapCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(logDir, filepath.Base(os.Args[0])+defaultLogSuffix))),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(rotate)),
 		level,
 	)
 	logger := zap.New(zapCore, zap.AddCaller(), zap.AddCallerSkip(2))
 
-	accessLogger, accessLevel := newZapLogger(logDir, defaultAccessLogName+defaultLogSuffix)
-	metricsLogger, metricsLevel := newZapLogger(logDir, defaultMetricsLogName+defaultLogSuffix)
+	accessLogger, accessLevel, accessRotate := newZapLogger(logDir, pName+defaultLogSeparator+defaultAccessLogName+defaultLogSuffix)
+	metricsLogger, metricsLevel, metricsRotate := newZapLogger(logDir, pName+defaultLogSeparator+defaultMetricsLogName+defaultLogSuffix)
 	return &defaultLogger{
+		rotate:        rotate,
+		accessRotate:  accessRotate,
+		metricsRotate: metricsRotate,
 		logger:        logger.Sugar(),
-		loggerLevel:   level,
 		accessLogger:  accessLogger,
-		accessLevel:   accessLevel,
 		metricsLogger: metricsLogger,
+		loggerLevel:   level,
+		accessLevel:   accessLevel,
 		metricsLevel:  metricsLevel,
 	}
 }
 
 func newRotateHook(logDir, logName string) *lumberjack.Logger {
 	return &lumberjack.Logger{
-		LocalTime:  true,
-		MaxAge:     defaultLogMaxAge,
-		MaxSize:    defaultLogMaxSize,
-		MaxBackups: defaultLogMaxBackups,
-		Filename:   filepath.Join(logDir, logName),
+		LocalTime: true,
+		MaxSize:   defaultLogMaxSize,
+		Filename:  filepath.Join(logDir, logName),
 	}
 }
 
-func newZapLogger(logDir, logName string) (*zap.Logger, zap.AtomicLevel) {
+func newZapLogger(logDir, logName string) (*zap.Logger, zap.AtomicLevel, *lumberjack.Logger) {
 	zapEncoderConfig := zapcore.EncoderConfig{
 		TimeKey:    "time",
 		MessageKey: "message",
 		EncodeTime: zapcore.ISO8601TimeEncoder,
 	}
 	zapLevel := zap.NewAtomicLevel()
+	rotateFile := newRotateHook(logDir, logName)
 	zapCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(zapEncoderConfig),
-		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(logDir, logName))),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(rotateFile)),
 		zapLevel,
 	)
 	zapLogger := zap.New(zapCore)
-	return zapLogger, zapLevel
+	return zapLogger, zapLevel, rotateFile
 }
 
 type defaultLogger struct {
-	async         bool
-	outputChan    chan AccessLogEntity
-	logger        *zap.SugaredLogger
-	accessLogger  *zap.Logger
-	metricsLogger *zap.Logger
-	loggerLevel   zap.AtomicLevel
-	accessLevel   zap.AtomicLevel
-	metricsLevel  zap.AtomicLevel
+	async            bool
+	accessStructured bool
+	outputChan       chan AccessLogEntity
+	rotate           *lumberjack.Logger
+	accessRotate     *lumberjack.Logger
+	metricsRotate    *lumberjack.Logger
+	logger           *zap.SugaredLogger
+	accessLogger     *zap.Logger
+	metricsLogger    *zap.Logger
+	loggerLevel      zap.AtomicLevel
+	accessLevel      zap.AtomicLevel
+	metricsLevel     zap.AtomicLevel
 }
 
 func (d *defaultLogger) Infoln(fields ...interface{}) {
@@ -397,19 +438,38 @@ func (d *defaultLogger) AccessLog(logObject AccessLogEntity) {
 }
 
 func (d *defaultLogger) doAccessLog(logObject AccessLogEntity) {
-	d.accessLogger.Info(logObject.Msg,
-		zap.String("role", logObject.Role),
-		zap.Uint64("requestID", logObject.RequestID),
-		zap.String("service", logObject.Service),
-		zap.String("method", logObject.Method),
-		zap.String("remoteAddress", logObject.RemoteAddress),
-		zap.String("desc", logObject.Desc),
-		zap.Int("reqSize", logObject.ReqSize),
-		zap.Int("resSize", logObject.ResSize),
-		zap.Int64("bizTime", logObject.BizTime),
-		zap.Int64("totalTime", logObject.TotalTime),
-		zap.Bool("success", logObject.Success),
-		zap.String("exception", logObject.Exception))
+	if d.accessStructured {
+		d.accessLogger.Info("",
+			zap.String("filterName", logObject.FilterName),
+			zap.String("role", logObject.Role),
+			zap.Uint64("requestID", logObject.RequestID),
+			zap.String("service", logObject.Service),
+			zap.String("method", logObject.Method),
+			zap.String("desc", logObject.Desc),
+			zap.String("remoteAddress", logObject.RemoteAddress),
+			zap.Int("reqSize", logObject.ReqSize),
+			zap.Int("resSize", logObject.ResSize),
+			zap.Int64("bizTime", logObject.BizTime),
+			zap.Int64("totalTime", logObject.TotalTime),
+			zap.Bool("success", logObject.Success),
+			zap.String("exception", logObject.Exception))
+	} else {
+		d.accessLogger.Info(
+			fmt.Sprintf("%s|%s|%d|%s|%s|%s|%s|%d|%d|%d|%d|%t|%s",
+				logObject.FilterName,
+				logObject.Role,
+				logObject.RequestID,
+				logObject.Service,
+				logObject.Method,
+				logObject.Desc,
+				logObject.RemoteAddress,
+				logObject.ReqSize,
+				logObject.ResSize,
+				logObject.BizTime,
+				logObject.TotalTime,
+				logObject.Success,
+				logObject.Exception))
+	}
 }
 
 func (d *defaultLogger) MetricsLog(msg string) {
@@ -420,6 +480,12 @@ func (d *defaultLogger) Flush() {
 	_ = d.logger.Sync()
 	_ = d.accessLogger.Sync()
 	_ = d.metricsLogger.Sync()
+}
+
+func (d *defaultLogger) Rotate() {
+	_ = d.rotate.Rotate()
+	_ = d.accessRotate.Rotate()
+	_ = d.metricsRotate.Rotate()
 }
 
 func (d *defaultLogger) SetAsync(value bool) {
@@ -441,6 +507,10 @@ func (d *defaultLogger) SetAsync(value bool) {
 			}
 		}()
 	}
+}
+
+func (d *defaultLogger) SetAccessStructured(value bool) {
+	d.accessStructured = value
 }
 
 func (d *defaultLogger) GetLevel() LogLevel {

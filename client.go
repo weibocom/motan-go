@@ -116,7 +116,11 @@ func GetClientContext(confFile string) *MCContext {
 		if section != nil && section["log_async"] != nil {
 			logAsync = strconv.FormatBool(section["log_async"].(bool))
 		}
-		initLog(logdir, logAsync)
+		logStructured := ""
+		if section != nil && section["log_structured"] != nil {
+			logStructured = strconv.FormatBool(section["log_structured"].(bool))
+		}
+		initLog(logdir, logAsync, logStructured)
 		registerSwitchers(mc.context)
 	}
 	return mc
