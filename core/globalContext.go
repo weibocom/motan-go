@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -13,17 +14,19 @@ import (
 
 const (
 	// all default sections
-	registrysSection     = "motan-registry"
-	basicRefersSection   = "motan-basicRefer"
-	refersSection        = "motan-refer"
-	basicServicesSection = "motan-basicService"
-	servicesSection      = "motan-service"
-	agentSection         = "motan-agent"
-	clientSection        = "motan-client"
-	serverSection        = "motan-server"
-	importSection        = "import-refer"
-	dynamicSection       = "dynamic-param"
-	SwitcherSection      = "switcher"
+	registrysSection          = "motan-registry"
+	basicRefersSection        = "motan-basicRefer"
+	refersSection             = "motan-refer"
+	basicServicesSection      = "motan-basicService"
+	servicesSection           = "motan-service"
+	agentSection              = "motan-agent"
+	clientSection             = "motan-client"
+	httpClientSection         = "http-client"
+	serverSection             = "motan-server"
+	importSection             = "import-refer"
+	importHTTPLocationSection = "import-http-location"
+	dynamicSection            = "dynamic-param"
+	SwitcherSection           = "switcher"
 
 	// URLConfKey is config id
 	// config Keys
@@ -36,6 +39,9 @@ const (
 	servicePath       = "services/"
 	applicationPath   = "applications/"
 	poolPath          = "pools/"
+	httpServicePath   = "http/service/"
+	httpLocationPath  = "http/location/"
+	httpPoolPath      = "http/pools/"
 	poolNameSeparator = "-"
 )
 
@@ -45,12 +51,16 @@ type Context struct {
 	Config           *cfg.Config
 	RegistryURLs     map[string]*URL
 	RefersURLs       map[string]*URL
+	HTTPClientURLs   map[string]*URL
 	BasicReferURLs   map[string]*URL
 	ServiceURLs      map[string]*URL
 	BasicServiceURLs map[string]*URL
 	AgentURL         *URL
 	ClientURL        *URL
 	ServerURL        *URL
+
+	application string
+	pool        string
 }
 
 var (
@@ -64,17 +74,17 @@ var (
 
 // all env flag in motan-go
 var (
-	Port         = flag.Int("port", 0, "agent listen port")
-	Eport        = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
-	Mport        = flag.Int("mport", 0, "agent manage port")
-	Pidfile      = flag.String("pidfile", "", "agent manage port")
-	CfgFile      = flag.String("c", "", "motan run conf")
-	LocalIP      = flag.String("localIP", "", "local ip for motan register")
-	IDC          = flag.String("idc", "", "the idc info for agent or client.")
-	DynamicConfs = flag.String("dynamicConf", "", "dynamic config file for config placeholder")
-	Pool         = flag.String("pool", "", "application pool config. like 'application-idc-level'")
-	Application  = flag.String("application", "", "assist for application pool config.")
-	Recover      = flag.Bool("recover", false, "recover from accidental exit")
+	Port        = flag.Int("port", 0, "agent listen port")
+	Eport       = flag.Int("eport", 0, "agent export service port when as a reverse proxy server")
+	Hport       = flag.Int("hport", 0, "http forward proxy server port")
+	Mport       = flag.Int("mport", 0, "agent manage port")
+	Pidfile     = flag.String("pidfile", "", "agent manage port")
+	CfgFile     = flag.String("c", "", "motan run conf")
+	LocalIP     = flag.String("localIP", "", "local ip for motan register")
+	IDC         = flag.String("idc", "", "the idc info for agent or client.")
+	Pool        = flag.String("pool", "", "application pool config. like 'application-idc-level'")
+	Application = flag.String("application", "", "assist for application pool config.")
+	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
 
 func (c *Context) confToURLs(section string) map[string]*URL {
@@ -120,113 +130,155 @@ func confToURL(urlInfo map[interface{}]interface{}) *URL {
 	return url
 }
 
+// importCfgIgnoreError import the config with specified section
+func importCfgIgnoreError(finalConfig *cfg.Config, parsingConfig *cfg.Config, section string, root string, includeDir string, parsedHTTPLocation map[string]bool) {
+	is, err := parsingConfig.DIY(section)
+	if err != nil || is == nil {
+		return
+	}
+	isHTTPLocation := section == importHTTPLocationSection
+	if li, ok := is.([]interface{}); ok {
+		for _, r := range li {
+			if isHTTPLocation {
+				if parsedHTTPLocation[r.(string)] {
+					continue
+				} else {
+					parsedHTTPLocation[r.(string)] = true
+				}
+			}
+			tempCfg, err := cfg.NewConfigFromFile(root + includeDir + r.(string) + defaultFileSuffix)
+			if err != nil || tempCfg == nil {
+				continue
+			}
+			importCfgIgnoreError(finalConfig, tempCfg, importHTTPLocationSection, root, httpLocationPath, parsedHTTPLocation)
+			finalConfig.Merge(tempCfg)
+		}
+	}
+}
+
+func NewContext(configFile string, application string, pool string) *Context {
+	context := Context{
+		ConfigFile:  configFile,
+		application: application,
+		pool:        pool,
+	}
+	context.Initialize()
+	return &context
+}
+
 func (c *Context) Initialize() {
+	if c.pool == "" {
+		c.pool = *Pool
+	}
+	if c.application == "" {
+		c.application = *Application
+	}
+	if c.ConfigFile == "" {
+		c.ConfigFile = *CfgFile
+	}
+
 	c.RegistryURLs = make(map[string]*URL)
 	c.RefersURLs = make(map[string]*URL)
 	c.BasicReferURLs = make(map[string]*URL)
 	c.ServiceURLs = make(map[string]*URL)
 	c.BasicServiceURLs = make(map[string]*URL)
-	if c.ConfigFile == "" { // use flag as default config file name
-		c.ConfigFile = *CfgFile
-	}
-	var cfgRs *cfg.Config
-	var err error
-	if *Pool != "" { // parse application pool configs
-		if c.ConfigFile == "" {
+	var config *cfg.Config
+	if c.ConfigFile == "" {
+		if c.pool != "" {
 			c.ConfigFile = defaultConfigPath
+		} else {
+			c.ConfigFile = defaultConfigFile
+		}
+	}
+
+	configFileInfo, err := os.Stat(c.ConfigFile)
+	if err != nil {
+		vlog.Errorf("get configuration [%s] information failed. err:%s\n", c.ConfigFile, err.Error())
+		return
+	}
+	if configFileInfo.IsDir() {
+		// if configuration file is a directory we treat is as pool
+		if c.application == "" && c.pool == "" {
+			vlog.Errorf("when configuration [%s] is a directory you should specify the application or pool", c.ConfigFile)
+			return
 		}
 		if !strings.HasSuffix(c.ConfigFile, "/") {
 			c.ConfigFile = c.ConfigFile + "/"
 		}
-		if cfgRs, err = parsePool(c.ConfigFile, *Pool); err != nil {
-			fmt.Printf("parse configs fail. err:%s\n", err.Error())
-			return
-		}
-	} else { // parse single config file and dynamic file
-		if c.ConfigFile == "" {
-			c.ConfigFile = defaultConfigFile
-		}
-		if cfgRs, err = cfg.NewConfigFromFile(c.ConfigFile); err != nil {
-			fmt.Printf("parse config fail. err:%s\n", err.Error())
-			return
-		}
-		var dynamicFile string
-		if *DynamicConfs != "" {
-			dynamicFile = *DynamicConfs
-		}
-		if dynamicFile == "" && *IDC != "" {
-			suffix := *IDC + ".yaml"
-			idx := strings.LastIndex(c.ConfigFile, "/")
-			if idx > -1 {
-				dynamicFile = c.ConfigFile[0:idx+1] + suffix
-			} else {
-				dynamicFile = suffix
-			}
-		}
-		if dynamicFile != "" {
-			if dc, err := cfg.NewConfigFromFile(dynamicFile); err != nil {
-				vlog.Warningf("load dynamic config file failed: %s", err.Error())
-			} else {
-				dconfs := make(map[string]interface{})
-				for k, v := range dc.GetOriginMap() {
-					if _, ok := v.(map[interface{}]interface{}); ok { // v must be a single value
-						continue
-					}
-					if ks, ok := k.(string); ok {
-						dconfs[ks] = v
-					}
-				}
-				cfgRs.ReplacePlaceHolder(dconfs)
-			}
-		}
+		config, err = c.parsePoolConfiguration()
+	} else {
+		config, err = c.parseSingleConfiguration()
 	}
 
-	c.Config = cfgRs
+	if err != nil {
+		vlog.Errorf("parse configs fail. err:%s", err.Error())
+		return
+	}
+
+	c.Config = config
 	c.parseRegistrys()
 	c.parseBasicRefers()
 	c.parseRefers()
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHostURL()
+	c.parseHTTPClients()
 }
 
-// pool config priority ： pool > application > service > basic
-func parsePool(path string, pool string) (*cfg.Config, error) {
-	c := cfg.NewConfig()
-	var tempcfg *cfg.Config
-	var err error
+func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {
+	var config *cfg.Config
+	config, err := cfg.NewConfigFromFile(c.ConfigFile)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("parse configuration [%s] failed. err:%s", c.ConfigFile, err.Error()))
+	}
+	dp, err := config.GetSection(dynamicSection)
+	if err == nil && len(dp) > 0 {
+		config.ReplacePlaceHolder(c.getDynamicParameters(dp))
+	}
+	return config, nil
+}
 
-	// basic config
-	tempcfg, err = cfg.NewConfigFromFile(path + basicConfig)
-	if err == nil && tempcfg != nil {
-		c.Merge(tempcfg)
+// pool config priority ： pool > application > service > http > basic
+func (c *Context) parsePoolConfiguration() (*cfg.Config, error) {
+	config := cfg.NewConfig()
+	path := c.ConfigFile
+	pool := c.pool
+	// basic
+	basicCfg, err := cfg.NewConfigFromFile(c.ConfigFile + basicConfig)
+	if err == nil && basicCfg != nil {
+		config.Merge(basicCfg)
+	}
+
+	parsedHTTPLocation := make(map[string]bool)
+
+	poolPart := strings.Split(pool, poolNameSeparator)
+	applicationName := c.application
+	if applicationName == "" && len(poolPart) > 0 { // the first part be the application name
+		applicationName = poolPart[0]
+	}
+	// http service
+	httpService := path + httpServicePath + applicationName + defaultFileSuffix
+	httpServiceCfg, err := cfg.NewConfigFromFile(httpService)
+	if err == nil && httpServiceCfg != nil {
+		importCfgIgnoreError(config, httpServiceCfg, importHTTPLocationSection, path, httpLocationPath, parsedHTTPLocation)
+		config.Merge(httpServiceCfg)
+	}
+
+	// http pool
+	httpPool := path + httpPoolPath + pool + defaultFileSuffix
+	httpPoolCfg, err := cfg.NewConfigFromFile(httpPool)
+	if err == nil && httpPoolCfg != nil {
+		importCfgIgnoreError(config, httpPoolCfg, importHTTPLocationSection, path, httpLocationPath, parsedHTTPLocation)
+		config.Merge(httpPoolCfg)
 	}
 
 	// application
-	poolPart := strings.Split(pool, poolNameSeparator)
-	var appconfig *cfg.Config
-	application := *Application
-	if application == "" && len(poolPart) > 0 { // the first part be the application name
-		application = poolPart[0]
-	}
-	application = path + applicationPath + application + defaultFileSuffix
+	application := path + applicationPath + applicationName + defaultFileSuffix
 	if application != "" {
-		appconfig, err = cfg.NewConfigFromFile(application)
-		if err == nil && appconfig != nil {
-			// import-refer
-			is, err := appconfig.DIY(importSection)
-			if err == nil && is != nil {
-				if li, ok := is.([]interface{}); ok {
-					for _, r := range li {
-						tempcfg, err = cfg.NewConfigFromFile(path + servicePath + r.(string) + defaultFileSuffix)
-						if err == nil && tempcfg != nil {
-							c.Merge(tempcfg)
-						}
-					}
-
-				}
-			}
-			c.Merge(appconfig) // application config > service default config
+		appConfig, err := cfg.NewConfigFromFile(application)
+		if err == nil && appConfig != nil {
+			importCfgIgnoreError(config, appConfig, importSection, path, servicePath, parsedHTTPLocation)
+			config.Merge(appConfig) // application config > service default config
 		}
 	}
 
@@ -235,31 +287,43 @@ func parsePool(path string, pool string) (*cfg.Config, error) {
 		base := ""
 		for _, v := range poolPart {
 			base = base + v
-			tempcfg, err = cfg.NewConfigFromFile(path + poolPath + base + defaultFileSuffix)
-			if err == nil && tempcfg != nil {
-				c.Merge(tempcfg)
+			poolCfg, err := cfg.NewConfigFromFile(path + poolPath + base + defaultFileSuffix)
+			if err == nil && poolCfg != nil {
+				config.Merge(poolCfg)
 			}
 			base = base + poolNameSeparator
 		}
 	}
 
 	// replace dynamic param
-	dp, err := c.GetSection(dynamicSection)
+	dp, err := config.GetSection(dynamicSection)
 	if err == nil && len(dp) > 0 {
-		ph := make(map[string]interface{}, len(dp))
-		for k, v := range dp {
-			if sk, ok := k.(string); ok {
+		config.ReplacePlaceHolder(c.getDynamicParameters(dp))
+	}
+
+	if len(config.GetOriginMap()) == 0 {
+		return nil, errors.New("parse " + pool + " pool fail.")
+	}
+	return config, nil
+}
+
+func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[string]interface{} {
+	ph := make(map[string]interface{}, len(dp))
+	for k, v := range dp {
+		if sk, ok := k.(string); ok {
+			switch v.(type) {
+			case map[interface{}]interface{}:
+				mv := v.(map[interface{}]interface{})
+				ph[sk] = mv[c.pool]
+				if ph[sk] == nil {
+					ph[sk] = mv["default"]
+				}
+			default:
 				ph[sk] = v
 			}
 		}
-		c.ReplacePlaceHolder(ph)
 	}
-
-	if len(c.GetOriginMap()) == 0 {
-		return nil, errors.New("parse " + pool + " pool fail.")
-	}
-	return c, nil
-
+	return ph
 }
 
 // parse host url including agenturl, clienturl, serverurl
@@ -284,7 +348,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 	if section == servicesSection {
 		basicURLs = c.BasicServiceURLs
 		basicKey = basicServiceKey
-	} else if section == refersSection {
+	} else if section == refersSection || section == httpClientSection {
 		basicURLs = c.BasicReferURLs
 		basicKey = basicReferKey
 	}
@@ -309,10 +373,10 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 					newURL.Path = url.Path
 				}
 				newURL.MergeParams(url.Parameters)
-				fmt.Printf("load %s configuration success. url: %s\n", basicConfName, newURL.GetIdentity())
+				vlog.Infof("load %s configuration success. url: %s\n", basicConfName, newURL.GetIdentity())
 			} else {
 				newURL = url
-				fmt.Printf("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
+				vlog.Infof("can not found %s: %s. url: %s\n", basicKey, basicConfName, url.GetIdentity())
 			}
 		} else {
 			newURL = url
@@ -336,4 +400,8 @@ func (c *Context) parseServices() {
 
 func (c *Context) parserBasicServices() {
 	c.BasicServiceURLs = c.confToURLs(basicServicesSection)
+}
+
+func (c *Context) parseHTTPClients() {
+	c.HTTPClientURLs = c.basicConfToURLs(httpClientSection)
 }

@@ -1,21 +1,20 @@
-##only support 3 level config info
-#config fo agent
+# only support 3 level config info
+# config fo agent
 motan-agent:
   port: 9981 # agent serve port.
   eport: 9982 # service export port when as a reverse proxy
   mport: 8002 # agent manage port
-  log_dir: "./agentlogs"
-  registry: "direct-registry" # registry id for registering agent info
-  application: "agent-test" # agent identify. for agent command notify and so on
+  log_dir: stdout
+  registry: direct-registry # registry id for registering agent info
+  application: agent-test # agent identify. for agent command notify and so on
 
-#config of registries
+# config of registries
 motan-registry:
   direct-registry: # registry id 
     protocol: direct   # registry type. will get instance from extFactory.
     host: localhost # direct server ip in single ip. if has host, address will disable.
     port: 9982 #direct server port
-    # address: "10.210.21.1:8002,10.210.21.2:8002" # direct server in multi ip
-
+#    address: 10.210.21.1:8002,10.210.21.2:8002 # direct server in multi ip
   zk-registry:
     protocol: zookeeper
     host: localhost
@@ -23,8 +22,52 @@ motan-registry:
     registrySessionTimeout: 10000
     requestTimeout: 5000
 
+motan-service:
+  test.domain:
+    registry: direct-registry
+    group: test.domain
+    domain: test.domain
+    path: test
+    export: "motan2:9982"
+    provider: http
+    serialization: simple
+    proxyAddress: localhost:9090
+    filter: "accessLog,metrics"
+    requestTimeout: 2000
 
-#conf of extensions. any custom config
+http-locations:
+  test.domain:
+    - match: /test
+      type: start
+      upstream: test
+
+    - match: /test2
+      type: start
+      upstream: test2
+
+    - match: ^/test3/.*
+      type: regexp
+      upstream: test3
+
+    - match: ^/(tst|2).*
+      type: regexp #regexp (regexp)|iregexp (case insensitive regexp)|start (prefix match) |exact (whole world match)
+      upstream: test
+      rewriteRules:
+        # condition_type(! means not, value mean same as match type) condition regexp replacement
+        - "!regexp ^/2/.*  ^/(.*) /2/$1"
+
+http-client:
+  test.domain:
+    registry: direct-registry
+    domain: test.domain
+    group: test.domain
+    preload: test
+    serialization: simple
+    filter: "accessLog,metrics"
+    requestTimeout: 2000
+    protocol: motan2 # this is the default endpoint type,the client use motan2 transport data to remote server, but it provider a http server when as the agent
+
+# conf of extensions. any custom config
 testextconf:
   foo: xxx
   bar:

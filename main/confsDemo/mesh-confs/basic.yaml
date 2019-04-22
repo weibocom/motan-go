@@ -1,0 +1,24 @@
+# all configs in this file will enable by default. so these configids can be used in all service yamls.  
+# do not modify!
+
+#config fo agent
+motan-agent:
+  port: 9981
+  hport: 9983
+  mport: 8002
+  log_dir: "/data1/motan/logs"
+  snapshot_dir: "/data1/motan/snapshot"
+  registry: "direct-registry"
+
+#config of registries
+motan-registry:
+  zk-test:
+    protocol: zookeeper
+    host: 10.77.9.41
+    port: 2181
+    registrySessionTimeout: 10000
+    requestTimeout: 5000
+  direct-registry: # registry id
+    protocol: direct   # registry type. will get instance from extFactory.
+    host: 127.0.0.1 # direct server ip in single ip. if has host, address will disable.
+    port: 19982 #direct server port

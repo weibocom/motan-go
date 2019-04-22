@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExtFactory(t *testing.T) {
@@ -64,6 +66,72 @@ func TestMotanRequest_Clone(t *testing.T) {
 	}
 }
 
+func TestGetAllGroups(t *testing.T) {
+	registry := newMockRegistry()
+	discoverErrorRegistry := newDiscoverErrorRegistry()
+	assert.Equal(t, GetAllGroups(registry)[0], "testGroup")
+	assert.True(t, len(GetAllGroups(discoverErrorRegistry)) == 0)
+}
+
+func TestGetAllGroupsParallel(t *testing.T) {
+	registry := newMockRegistry()
+	goNum := 5
+	wg := &sync.WaitGroup{}
+	wg.Add(goNum)
+	for i := 0; i < goNum; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				assert.Equal(t, GetAllGroups(registry)[0], "testGroup")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestServiceInGroup(t *testing.T) {
+	registry := newMockRegistry()
+	assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
+	assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+	discoverErrorRegistry := newDiscoverErrorRegistry()
+	assert.False(t, ServiceInGroup(discoverErrorRegistry, "testGroup", "testService"))
+}
+
+func TestServiceInGroupParallel(t *testing.T) {
+	registry := newMockRegistry()
+	goNum := 5
+	wg := &sync.WaitGroup{}
+	wg.Add(goNum)
+	for i := 0; i < 5; i++ {
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 10000; i++ {
+				assert.True(t, ServiceInGroup(registry, "testGroup", "testService"))
+				assert.False(t, ServiceInGroup(registry, "testGroup", "testNoneExistService"))
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func BenchmarkServiceInGroup(b *testing.B) {
+	registry := newMockRegistry()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			ServiceInGroup(registry, "testGroup", "testService")
+		}
+	})
+}
+
+func BenchmarkGetAllGroups(b *testing.B) {
+	registry := newMockRegistry()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			GetAllGroups(registry)
+		}
+	})
+}
+
 func newHa(url *URL) HaStrategy {
 	return nil
 }
@@ -98,4 +166,20 @@ func newMsHandler() MessageHandler {
 
 func newSerial() Serialization {
 	return nil
+}
+
+func newMockRegistry() *TestRegistry {
+	registry := &TestRegistry{}
+	registry.URL = &URL{Protocol: "mock", Host: "testHost", Port: 0}
+	registry.URL.GetIdentity()
+	registry.GroupService = map[string][]string{"testGroup": {"testService"}}
+	return registry
+}
+
+func newDiscoverErrorRegistry() *TestRegistry {
+	registry := newMockRegistry()
+	registry.URL = &URL{Protocol: "mockDiscoverError", Host: "testHost", Port: 0}
+	registry.URL.GetIdentity()
+	registry.DiscoverError = true
+	return registry
 }

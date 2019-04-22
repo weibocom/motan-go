@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // StringMap goroutine safe string map, this will just be used in few goroutines
@@ -86,24 +87,32 @@ func (m *StringMap) Len() int {
 
 type CopyOnWriteMap struct {
 	mu       sync.Mutex
-	innerMap map[interface{}]interface{}
+	innerMap atomic.Value
 }
 
 func NewCopyOnWriteMap() *CopyOnWriteMap {
 	return &CopyOnWriteMap{}
 }
 
+func (m *CopyOnWriteMap) data() map[interface{}]interface{} {
+	v := m.innerMap.Load()
+	if v == nil {
+		return nil
+	}
+	return v.(map[interface{}]interface{})
+}
+
 func (m *CopyOnWriteMap) Load(key interface{}) (interface{}, bool) {
-	value, ok := m.innerMap[key]
+	value, ok := m.data()[key]
 	return value, ok
 }
 
 func (m *CopyOnWriteMap) LoadOrNil(key interface{}) interface{} {
-	return m.innerMap[key]
+	return m.data()[key]
 }
 
 func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
-	for k, v := range m.innerMap {
+	for k, v := range m.data() {
 		if !f(k, v) {
 			return
 		}
@@ -113,28 +122,30 @@ func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
 func (m *CopyOnWriteMap) Store(key, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	copiedMap := make(map[interface{}]interface{}, len(m.innerMap)+1)
-	for k, v := range m.innerMap {
+	lastMap := m.data()
+	copiedMap := make(map[interface{}]interface{}, len(lastMap)+1)
+	for k, v := range lastMap {
 		copiedMap[k] = v
 	}
 	copiedMap[key] = value
-	m.innerMap = copiedMap
+	m.innerMap.Store(copiedMap)
 }
 
 func (m *CopyOnWriteMap) Delete(key interface{}) (pv interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.innerMap[key]; !ok {
+	lastMap := m.data()
+	if _, ok := lastMap[key]; !ok {
 		return pv
 	}
-	copiedMap := make(map[interface{}]interface{}, len(m.innerMap))
-	for k, v := range m.innerMap {
+	copiedMap := make(map[interface{}]interface{}, len(lastMap))
+	for k, v := range lastMap {
 		if k == key {
 			pv = v
 			continue
 		}
 		copiedMap[k] = v
 	}
-	m.innerMap = copiedMap
+	m.innerMap.Store(copiedMap)
 	return pv
 }

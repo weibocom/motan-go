@@ -20,6 +20,8 @@ import (
 
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/filter"
+	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
 )
 
@@ -42,27 +44,89 @@ func (s *StatusHandler) SetAgent(agent *Agent) {
 func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
 	case "/200":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Available()
-			return true
-		})
+		s.a.availableAllServices()
 		s.a.status = http.StatusOK
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/503":
-		s.a.serviceExporters.Range(func(k, exporter interface{}) bool {
-			exporter.(motan.Exporter).Unavailable()
-			return true
-		})
+		s.a.unavailableAllServices()
 		s.a.status = http.StatusServiceUnavailable
 		s.a.saveStatus()
 		rw.Write([]byte("ok."))
 	case "/version":
 		rw.Write([]byte(Version))
+	case "/status":
+		rw.Write(s.getStatus())
 	default:
 		rw.WriteHeader(s.a.status)
 		rw.Write([]byte(http.StatusText(s.a.status)))
 	}
+}
+
+func (s *StatusHandler) getStatus() []byte {
+	type (
+		MethodStatus struct {
+			Name            string `json:"name"`
+			PeriodCallCount int64  `json:"period_call_count"`
+		}
+		ServiceStatus struct {
+			Group   string         `json:"group"`
+			Name    string         `json:"name"`
+			Methods []MethodStatus `json:"methods"`
+		}
+		Result struct {
+			Status                 int             `json:"status"`
+			ServicePeriodCallCount int64           `json:"service_period_call_count"`
+			Services               []ServiceStatus `json:"services"`
+		}
+	)
+	result := Result{
+		Status:   s.a.status,
+		Services: make([]ServiceStatus, 0, 16),
+	}
+	s.a.serviceExporters.Range(func(k, v interface{}) bool {
+		exporter := v.(motan.Exporter)
+		group := exporter.GetURL().Group
+		service := exporter.GetURL().Path
+		statItem := metrics.GetStatItem(metrics.Escape(group), metrics.Escape(service))
+		if statItem == nil {
+			return true
+		}
+		snapshot := statItem.Snapshot()
+		if snapshot == nil {
+			return true
+		}
+		serviceInfo := ServiceStatus{
+			Group:   group,
+			Name:    service,
+			Methods: make([]MethodStatus, 0, 16),
+		}
+		snapshot.RangeKey(func(k string) {
+			if !strings.HasSuffix(k, filter.MetricsTotalCountSuffix) {
+				return
+			}
+			method := k[:len(k)-filter.MetricsTotalCountSuffixLen]
+			if index := strings.LastIndex(k, ":"); index != -1 {
+				method = method[index+1:]
+			}
+			callCount := snapshot.Count(k)
+			result.ServicePeriodCallCount += callCount
+			serviceInfo.Methods = append(serviceInfo.Methods, MethodStatus{
+				Name:            method,
+				PeriodCallCount: callCount,
+			})
+		})
+		result.Services = append(result.Services, serviceInfo)
+		return true
+	})
+	resultBytes, _ := json.MarshalIndent(struct {
+		Code int    `json:"code"`
+		Body Result `json:"body"`
+	}{
+		Code: 200,
+		Body: result,
+	}, "", "    ")
+	return resultBytes
 }
 
 type InfoHandler struct {
@@ -84,11 +148,10 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 func (i *InfoHandler) getReferService() []byte {
 	mbody := body{Service: []rpcService{}}
-	i.a.clustermap.Range(func(_, v interface{}) bool {
+	i.a.clusterMap.Range(func(k, v interface{}) bool {
 		cls := v.(*cluster.MotanCluster)
-		rpc := cls.GetURL().Path
 		available := cls.IsAvailable()
-		mbody.Service = append(mbody.Service, rpcService{Name: rpc, Status: available})
+		mbody.Service = append(mbody.Service, rpcService{Name: k.(string), Status: available})
 		return true
 	})
 	retData := jsonRetData{Code: 200, Body: mbody}

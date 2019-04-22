@@ -1,0 +1,4 @@
+motan-agent:
+  log_dir: "/data1/weibo/logs"
+  snapshot_dir: "/data1/snapshot"
+  application: "server_demo"

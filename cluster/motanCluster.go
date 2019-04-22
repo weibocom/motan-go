@@ -247,6 +247,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		errInfo := fmt.Sprintf("registry not found! url %+v", m.url)
 		err = errors.New(errInfo)
 		vlog.Errorln(errInfo)
+		return
 	}
 	arr := motan.TrimSplit(regs, ",")
 	registries := make([]motan.Registry, 0, len(arr))
@@ -294,58 +295,8 @@ func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
 }
 
 const (
-	clusterIdcPlaceHolder         = "${idc}"
-	registryGroupInfoMaxCacheTime = time.Hour
+	clusterIdcPlaceHolder = "${idc}"
 )
-
-var globalRegistryGroupCache = &registryGroupCache{cachedGroups: make(map[string]*registryGroupCacheInfo)}
-
-type groupDiscoverableRegistry interface {
-	motan.Registry
-	motan.GroupDiscoverService
-}
-
-type registryGroupCacheInfo struct {
-	gr          groupDiscoverableRegistry
-	lastUpdTime time.Time
-	groups      []string
-	lock        sync.Mutex
-}
-
-type registryGroupCache struct {
-	cachedGroups map[string]*registryGroupCacheInfo
-	lock         sync.Mutex
-}
-
-func (c *registryGroupCacheInfo) getGroups() []string {
-	if time.Now().Sub(c.lastUpdTime) > registryGroupInfoMaxCacheTime {
-		c.lock.Lock()
-		defer c.lock.Unlock()
-		groups, err := c.gr.DiscoverAllGroups()
-		if err != nil {
-			return c.groups
-		}
-		c.lastUpdTime = time.Now()
-		c.groups = groups
-	}
-	return c.groups
-}
-
-func (rc *registryGroupCache) getGroups(gr groupDiscoverableRegistry) []string {
-	key := gr.GetURL().GetIdentity()
-	rc.lock.Lock()
-	cacheInfo := rc.cachedGroups[key]
-	if cacheInfo == nil {
-		cacheInfo = &registryGroupCacheInfo{gr: gr}
-		rc.cachedGroups[key] = cacheInfo
-	}
-	rc.lock.Unlock()
-	return cacheInfo.getGroups()
-}
-
-func getAllGroups(gr groupDiscoverableRegistry) []string {
-	return globalRegistryGroupCache.getGroups(gr)
-}
 
 func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
@@ -373,7 +324,7 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	}
 
 	groupDetectURL := url.Copy()
-	gr, canDiscoverGroup := registry.(groupDiscoverableRegistry)
+	gr, canDiscoverGroup := registry.(motan.GroupDiscoverableRegistry)
 	if !canDiscoverGroup {
 		// registry can not discover groups, we just try prepared groups
 		for _, g := range preDetectGroups {
@@ -386,7 +337,7 @@ func getSubscribeGroup(url *motan.URL, registry motan.Registry) string {
 	}
 
 	// registry can discover groups, first try prepared groups, if no match, try regex match
-	groups := getAllGroups(gr)
+	groups := motan.GetAllGroups(gr)
 	for _, g := range preDetectGroups {
 		for _, group := range groups {
 			groupDetectURL.Group = g

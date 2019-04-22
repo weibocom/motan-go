@@ -22,28 +22,32 @@ const (
 
 // common url parameter key
 const (
-	NodeTypeKey       = "nodeType"
-	Hakey             = "haStrategy"
-	Lbkey             = "loadbalance"
-	TimeOutKey        = "requestTimeout"
-	SessionTimeOutKey = "registrySessionTimeout"
-	ApplicationKey    = "application"
-	VersionKey        = "version"
-	FilterKey         = "filter"
-	RegistryKey       = "registry"
-	WeightKey         = "weight"
-	SerializationKey  = "serialization"
-	RefKey            = "ref"
-	ExportKey         = "export"
-	ModuleKey         = "module"
-	GroupKey          = "group"
-	ProviderKey       = "provider"
-	ProxyKey          = "proxy"
-	AddressKey        = "address"
-	GzipSizeKey       = "mingzSize"
-	HostKey           = "host"
-	RemoteIPKey       = "remoteIP"
-	ProxyRegistryKey  = "proxyRegistry"
+	NodeTypeKey             = "nodeType"
+	Hakey                   = "haStrategy"
+	Lbkey                   = "loadbalance"
+	TimeOutKey              = "requestTimeout"
+	SessionTimeOutKey       = "registrySessionTimeout"
+	ApplicationKey          = "application"
+	VersionKey              = "version"
+	FilterKey               = "filter"
+	RegistryKey             = "registry"
+	WeightKey               = "weight"
+	SerializationKey        = "serialization"
+	RefKey                  = "ref"
+	ExportKey               = "export"
+	ModuleKey               = "module"
+	GroupKey                = "group"
+	ProviderKey             = "provider"
+	ProxyKey                = "proxy"
+	AddressKey              = "address"
+	GzipSizeKey             = "mingzSize"
+	HostKey                 = "host"
+	RemoteIPKey             = "remoteIP"
+	ProxyRegistryKey        = "proxyRegistry"
+	ConnectTimeoutKey       = "connectTimeout"
+	ConnectRetryIntervalKey = "connectRetryInterval"
+	ErrorCountThresholdKey  = "errorCountThreshold"
+	KeepaliveIntervalKey    = "keepaliveInterval"
 )
 
 // nodeType
@@ -67,4 +71,9 @@ const (
 
 const (
 	DefaultWriteTimeout = 5 * time.Second
+)
+
+// errorCodes
+const (
+	ENoEndpoints = 1001
 )

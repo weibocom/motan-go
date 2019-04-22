@@ -1,0 +1,30 @@
+motan-registry:
+  test-registry:
+    protocol: test
+    host: localhost
+    port: 9982
+
+http-locations:
+  test.domain:
+  - match: /test2
+    type: start
+    upstream: test2
+
+  - match: ^/test3/.*
+    type: regexp
+    upstream: test3
+
+  - match: ^/(tst|2).*
+    type: regexp
+    upstream: test
+    rewriteRules:
+    - "!regexp ^/2/.*  ^/(.*) /2/$1"
+
+http-client:
+  test.domain:
+    registry: test-registry
+    domain: test.domain
+    group: test.domain
+    preload: test
+    requestTimeout: 2000
+    protocol: test

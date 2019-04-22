@@ -3,7 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -18,24 +20,34 @@ type Config struct {
 	rex          *regexp.Regexp
 }
 
+// NewConfigFromReader parse config from a reader
+func NewConfigFromReader(r io.Reader) (*Config, error) {
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errors.New("read config data failed: " + err.Error())
+	}
+	m := make(map[interface{}]interface{})
+	err = yaml.Unmarshal([]byte(data), &m)
+	if err != nil {
+		fmt.Printf("config unmarshal failed. " + err.Error())
+		return nil, errors.New("config unmarshal failed: " + err.Error())
+	}
+	return &Config{conf: m}, nil
+}
+
 // NewConfigFromFile parse config from file.
 func NewConfigFromFile(path string) (*Config, error) {
 	filename, err := filepath.Abs(path)
 	if err != nil {
 		return nil, errors.New("can not find the file :" + filename)
 	}
-	data, err := ioutil.ReadFile(filename)
+	f, err := os.Open(filename)
 	if err != nil {
 		return nil, errors.New("read config file fail. " + err.Error())
 	}
+	defer f.Close()
 	fmt.Printf("start parse config path:%s \n", path)
-	m := make(map[interface{}]interface{})
-	err = yaml.Unmarshal([]byte(data), &m)
-	if err != nil {
-		fmt.Printf("config unmarshal failed. " + err.Error())
-		return nil, errors.New("config unmarshal failed. " + err.Error())
-	}
-	return &Config{conf: m}, nil
+	return NewConfigFromReader(f)
 }
 
 // ParseBool accepts 1, 1.0, t, T, TRUE, true, True, YES, yes, Yes,Y, y, ON, on, On,
@@ -208,40 +220,31 @@ func (c *Config) Merge(config *Config) {
 	}
 }
 
-// t & o should not nil
-func mergeMap(t map[interface{}]interface{}, o map[interface{}]interface{}) {
-	for k, v := range o {
-		if v != nil {
-			if tv, ok := t[k]; !ok || tv == nil {
-				t[k] = v
+// target & origin should not nil
+func mergeMap(target map[interface{}]interface{}, origin map[interface{}]interface{}) {
+	for originKey, originValue := range origin {
+		if originValue != nil {
+			if targetValue, ok := target[originKey]; !ok || targetValue == nil {
+				target[originKey] = originValue
 			} else {
-				tp := reflect.TypeOf(tv)
-				vtp := reflect.TypeOf(v)
-				if tp.Kind() == reflect.Map && vtp.Kind() == reflect.Map {
-					tvm, ok1 := tv.(map[interface{}]interface{})
-					vm, ok2 := v.(map[interface{}]interface{})
+				targetValueType := reflect.TypeOf(targetValue)
+				originValueType := reflect.TypeOf(originValue)
+				if targetValueType.Kind() == reflect.Map && originValueType.Kind() == reflect.Map {
+					targetValueMap, ok1 := targetValue.(map[interface{}]interface{})
+					originValueMap, ok2 := originValue.(map[interface{}]interface{})
 					if ok1 && ok2 {
-						mergeMap(tvm, vm)
+						mergeMap(targetValueMap, originValueMap)
 					}
-				} else if tp.Kind() == reflect.Slice && vtp.Kind() == reflect.Slice {
-					tvs, ok1 := tv.([]interface{})
-					vs, ok2 := v.([]interface{})
+				} else if targetValueType.Kind() == reflect.Slice && originValueType.Kind() == reflect.Slice {
+					targetValueSlice, ok1 := targetValue.([]interface{})
+					originValueSlice, ok2 := originValue.([]interface{})
 					if ok1 && ok2 {
-						mergeArray(&tvs, vs)
+						target[originKey] = append(targetValueSlice, originValueSlice...)
 					}
 				} else {
-					t[k] = v
+					target[originKey] = originValue
 				}
 			}
-		}
-	}
-}
-
-// only append in slice type
-func mergeArray(t *[]interface{}, o []interface{}) {
-	for _, v := range o {
-		if v != nil {
-			*t = append(*t, v)
 		}
 	}
 }

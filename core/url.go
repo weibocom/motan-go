@@ -60,14 +60,14 @@ func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
 	return defaultValue
 }
 
-func (u *URL) GetInt(key string) (i int64, b bool) {
+func (u *URL) GetInt(key string) (int64, bool) {
 	if v, ok := u.Parameters[key]; ok {
-		intvalue, err := strconv.ParseInt(v, 10, 64)
+		intValue, err := strconv.ParseInt(v, 10, 64)
 		if err == nil {
-			return intvalue, true
+			return intValue, true
 		}
 	}
-	return 0, b
+	return 0, false
 }
 
 func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {

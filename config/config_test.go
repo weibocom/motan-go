@@ -106,4 +106,9 @@ func Test_Merge(t *testing.T) {
 		t.Errorf("value merge fail! result:%v\n", rm)
 	}
 
+	tph := c.conf["testplaceholder"].(map[interface{}]interface{})
+	dddSlice := tph["ddd"].([]interface{})
+	if len(dddSlice) != 5 {
+		t.Errorf("value merge fail! result:%v\n", dddSlice)
+	}
 }

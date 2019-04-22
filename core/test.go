@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -22,7 +23,7 @@ func (t *TestFilter) NewFilter(url *URL) Filter {
 }
 
 func (t *TestFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalance, request Request) Response {
-	fmt.Println("do mock in testfilter with cluster mode")
+	fmt.Println("do mock in testFilter with cluster mode")
 
 	return t.GetNext().Filter(haStrategy, loadBalance, request)
 
@@ -123,6 +124,10 @@ type TestHaStrategy struct {
 	URL *URL
 }
 
+func (t *TestHaStrategy) GetName() string {
+	return "TestHaStrategy"
+}
+
 func (t *TestHaStrategy) GetURL() *URL {
 	return t.URL
 }
@@ -130,7 +135,7 @@ func (t *TestHaStrategy) SetURL(url *URL) {
 	t.URL = url
 }
 func (t *TestHaStrategy) Call(request Request, loadBalance LoadBalance) Response {
-	fmt.Println("in testHastrategy call")
+	fmt.Println("in testHaStrategy call")
 	refer := loadBalance.Select(request)
 	return refer.Call(request)
 }
@@ -143,7 +148,7 @@ func (t *TestLoadBalance) OnRefresh(endpoints []EndPoint) {
 	t.Endpoints = endpoints
 }
 func (t *TestLoadBalance) Select(request Request) EndPoint {
-	fmt.Println("in testLoadbalance select")
+	fmt.Println("in testLoadBalance select")
 	endpoint := &TestEndPoint{}
 	filterEndPoint := &FilterEndPoint{}
 	efilter1 := &TestEndPointFilter{}
@@ -162,7 +167,9 @@ func (t *TestLoadBalance) SetWeight(weight string) {
 }
 
 type TestRegistry struct {
-	URL *URL
+	URL           *URL
+	GroupService  map[string][]string
+	DiscoverError bool
 }
 
 func (t *TestRegistry) GetName() string {
@@ -205,4 +212,22 @@ func (t *TestRegistry) InitRegistry() {
 
 }
 func (t *TestRegistry) StartSnapshot(conf *SnapshotConf) {
+}
+
+func (t *TestRegistry) DiscoverAllServices(group string) ([]string, error) {
+	if t.DiscoverError {
+		return nil, errors.New("service discover error")
+	}
+	return t.GroupService[group], nil
+}
+
+func (t *TestRegistry) DiscoverAllGroups() ([]string, error) {
+	if t.DiscoverError {
+		return nil, errors.New("group discover error")
+	}
+	groups := make([]string, 0, len(t.GroupService))
+	for k := range t.GroupService {
+		groups = append(groups, k)
+	}
+	return groups, nil
 }

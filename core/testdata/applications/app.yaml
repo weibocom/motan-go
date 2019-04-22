@@ -1,0 +1,45 @@
+motan-agent:
+  port: 9981
+  mport: 8002
+  log_dir: logs
+  registry: consul
+  application: test
+
+motan-registry:
+  consul:
+    protocol: consul
+    host: 127.0.0.1
+    port: 8090
+  direct:
+    protocol: direct
+    host: 127.0.0.1
+    port: 8013
+
+import-refer:
+  - motan.TestService
+
+motan-basicService:
+  test-basic-service:
+    group: motan-demo-rpc
+    protocol: motan2
+    registry: consul
+    filter: accessLog
+
+motan-service:
+  test-motan-service:
+    path: motan.TestService
+    proxy: "motan2:8100"
+    export: "motan2:9982"
+    provider: motan2
+    requestTimeout: 2000
+    basicService: test-basic-service
+
+test_placeholder:
+  aaa: "${aaa}"
+  sub:
+    bbb: "${bbb}"
+  ccc: "${ccc}"
+  ddd:
+  - "xxx"
+  - "ddd"
+  - "xx"

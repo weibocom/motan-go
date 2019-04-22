@@ -75,7 +75,10 @@ func flushSnapshot() {
 			}
 			for key, node := range newNodes {
 				nodeRsSnapshot := JSONString(node)
-				ioutil.WriteFile(filepath.Join(snapshotConf.SnapshotDir, key), StringToSliceByte(nodeRsSnapshot), 0777)
+				writeErr := ioutil.WriteFile(filepath.Join(snapshotConf.SnapshotDir, key), StringToSliceByte(nodeRsSnapshot), 0777)
+				if writeErr != nil {
+					vlog.Errorf("Write snapshot file err, Err: %+v\n", writeErr)
+				}
 			}
 			nodeRsSnapshotLock.RUnlock()
 		}
