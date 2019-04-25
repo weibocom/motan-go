@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultServerPort = "9982"
-	defaultProtocal   = "motan2"
+	defaultProtocol   = "motan2"
 )
 
 var (
@@ -25,7 +25,7 @@ var (
 
 func ParseExportInfo(export string) (string, int, error) {
 	port := defaultServerPort
-	protocol := defaultProtocal
+	protocol := defaultProtocol
 	s := TrimSplit(export, ":")
 	if len(s) == 1 && s[0] != "" {
 		port = s[0]
@@ -155,4 +155,42 @@ func TrimSplit(s string, sep string) []string {
 	}
 	a[i] = s
 	return a[:i+1]
+}
+
+func IPPrefixBits(ipStr1 string, ipStr2 string) int {
+	ip1IsV4 := strings.IndexByte(ipStr1, ':') < 0
+	ip2IsV4 := strings.IndexByte(ipStr2, ':') < 0
+	ip1 := net.ParseIP(ipStr1)
+	ip2 := net.ParseIP(ipStr2)
+	if ip1 == nil || ip2 == nil {
+		return 0
+	}
+	if ip1IsV4 != ip2IsV4 {
+		// one is v4 another one is v6
+		return 0
+	}
+
+	ip1Bytes := ip1.To4()
+	ip2Bytes := ip2.To4()
+
+	compareLength := net.IPv4len
+	if !ip1IsV4 {
+		compareLength = net.IPv6len
+	}
+	prefixBits := 0
+	for i := 0; i < compareLength; i++ {
+		b := ip1Bytes[i] ^ ip2Bytes[i]
+		if b == 0 {
+			prefixBits += 8
+			continue
+		}
+		for j := uint(1); j <= 8; j++ {
+			if b>>j == 0 {
+				prefixBits += int(8 - j)
+				break
+			}
+		}
+		break
+	}
+	return prefixBits
 }

@@ -9,7 +9,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -26,7 +25,7 @@ type MotanCluster struct {
 	clusterFilter    motan.ClusterFilter
 	extFactory       motan.ExtensionFactory
 	lock             sync.Mutex
-	isCommandWorking atomic.Value
+	isCommandWorking *motan.AtomicBool
 	available        bool
 	closed           bool
 	proxy            bool
@@ -85,7 +84,7 @@ func (lb *multiGroupLoadBalance) OnRefresh(endpoints []motan.EndPoint) {
 
 func (lb *multiGroupLoadBalance) Select(request motan.Request) motan.EndPoint {
 	groupConfigs := lb.groupConfigInfo.GroupConfigs
-	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Load().(bool) {
+	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Get() {
 		return lb.balances[groupConfigs[0].group].Select(request)
 	}
 	if lb.groupConfigInfo.UseBackupGroup {
@@ -101,7 +100,7 @@ func (lb *multiGroupLoadBalance) Select(request motan.Request) motan.EndPoint {
 
 func (lb *multiGroupLoadBalance) SelectArray(request motan.Request) []motan.EndPoint {
 	groupConfigs := lb.groupConfigInfo.GroupConfigs
-	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Load().(bool) {
+	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Get() {
 		return lb.balances[groupConfigs[0].group].SelectArray(request)
 	}
 	if lb.groupConfigInfo.UseBackupGroup {
@@ -255,7 +254,7 @@ func NewCluster(context *motan.Context, extFactory motan.ExtensionFactory, url *
 		url:        url,
 		proxy:      proxy,
 	}
-	cluster.isCommandWorking.Store(false)
+	cluster.isCommandWorking = motan.NewAtomicBool(false)
 	cluster.initCluster()
 	return cluster
 }

@@ -316,9 +316,9 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	defer c.mux.Unlock()
 	defer func() {
 		if c.tcCommand != nil {
-			c.cluster.isCommandWorking.Store(true)
+			c.cluster.isCommandWorking.Set(true)
 		} else {
-			c.cluster.isCommandWorking.Store(false)
+			c.cluster.isCommandWorking.Set(false)
 		}
 	}()
 	needNotify := false
