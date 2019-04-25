@@ -277,12 +277,8 @@ func (m *MotanCluster) initCluster() bool {
 	m.haStrategy = m.extFactory.GetHa(m.url)
 	//lb
 	m.loadBalance = &multiGroupLoadBalance{
-		cluster: m,
-		// initial values, will be override by parseRegistry
-		balances: map[string]motan.LoadBalance{
-			m.url.Group: m.extFactory.GetLB(m.url),
-		},
-		groupConfigInfo: GroupConfigInfo{GroupConfigs: []GroupConfig{{group: m.url.Group}}},
+		cluster:  m,
+		balances: make(map[string]motan.LoadBalance),
 	}
 	m.groupEndpoints = make(map[string]*registryEndpointSet)
 	m.listeners = make(map[string]*clusterGroupNodeChangeListener)
@@ -404,16 +400,19 @@ func (m *MotanCluster) parseRegistry() (err error) {
 	if len(registries) == 0 {
 		panic("no available registry, error: " + err.Error())
 	}
-	// groupStrategies := DetermineGroupConfig(m.url, registries)
-	groupStrategiesInfo := DetermineGroupConfig(m.url, originRegistries)
-	groupStrategies := groupStrategiesInfo.GroupConfigs
+	groupConfigInfo := DetermineGroupConfig(m.url, originRegistries)
+	groupConfigs := groupConfigInfo.GroupConfigs
 
-	if len(groupStrategies) != 0 {
-		m.loadBalance.groupConfigInfo = groupStrategiesInfo
+	if len(groupConfigs) != 0 {
+		m.loadBalance.groupConfigInfo = groupConfigInfo
+	} else {
+		groupConfigs = []GroupConfig{{group: m.url.Group}}
+		m.loadBalance.groupConfigInfo = GroupConfigInfo{GroupConfigs: groupConfigs}
+		vlog.Warningf("determineGroup find 0 available group, cluster: %v", m.url)
 	}
 
-	m.url.SetGroup(groupStrategies[0].group)
-	for groupIndex, groupStrategy := range groupStrategies {
+	m.url.SetGroup(groupConfigs[0].group)
+	for groupIndex, groupStrategy := range groupConfigs {
 		group := groupStrategy.group
 		subscribeURL := m.url.Copy()
 		subscribeURL.Group = group
@@ -602,7 +601,8 @@ type PingDynamicGroup struct {
 }
 
 func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
-	groupConfigList := make([]GroupConfig, len(p.groupNodes))
+	groupConfigList := make([]GroupConfig, 0, len(p.groupNodes))
+	groupRtt := make(map[string]int64, len(p.groupNodes))
 	// TODO: if we do not have root privilege on linux, we need another policy to get network latency
 	// For linux we need root privilege to do ping, but darwin no need
 	pingPrivileged := true
@@ -610,6 +610,7 @@ func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
 		pingPrivileged = false
 	}
 
+	var totalRtt int64 = 0
 	for group, nodes := range p.groupNodes {
 		pinger, err := motan.NewPinger(nodes[rand.Intn(len(nodes))].Host, 5, 1*time.Second, 1024, pingPrivileged)
 		if err != nil {
@@ -618,6 +619,7 @@ func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
 		pinger.Ping()
 		if len(pinger.Rtts) < 3 {
 			// node loss packets
+			groupRtt[group] = 0
 			continue
 		}
 
@@ -633,7 +635,18 @@ func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
 			}
 			total += rtt
 		}
-		groupConfigList = append(groupConfigList, GroupConfig{group: group, weight: 100 - int64(total-min-max)/int64(len(pinger.Rtts)-2)})
+		avgRtt := int64(total-min-max) / int64(len(pinger.Rtts)-2)
+		totalRtt += avgRtt
+		groupRtt[group] = avgRtt
 	}
+
+	for group, rtt := range groupRtt {
+		weight := totalRtt - rtt
+		if rtt == 0 {
+			weight = 0
+		}
+		groupConfigList = append(groupConfigList, GroupConfig{group: group, weight: weight})
+	}
+
 	return groupConfigList
 }
