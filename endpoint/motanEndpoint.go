@@ -34,18 +34,19 @@ var (
 )
 
 type MotanEndpoint struct {
-	url                  *motan.URL
-	channels             *ChannelPool
-	destroyCh            chan struct{}
-	available            bool
-	errorCount           uint32
-	proxy                bool
-	errorCountThreshold  int64
-	keepaliveInterval    time.Duration
-	initialized          atomic.Value
-	lock                 sync.Mutex
-	channelPoolCheckCh   chan struct{}
-	lastChannelUsingTime atomic.Value
+	url                       *motan.URL
+	channels                  *ChannelPool
+	destroyCh                 chan struct{}
+	available                 bool
+	errorCount                uint32
+	proxy                     bool
+	errorCountThreshold       int64
+	keepaliveInterval         time.Duration
+	requestTimeoutMillisecond int64
+	initialized               atomic.Value
+	lock                      sync.Mutex
+	channelPoolCheckCh        chan struct{}
+	lastChannelUsingTime      atomic.Value
 
 	// for heartbeat requestID
 	keepaliveID   uint64
@@ -108,6 +109,7 @@ func (m *MotanEndpoint) doInitialize() {
 	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
 	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
+	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
 
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
@@ -153,6 +155,11 @@ func (m *MotanEndpoint) Destroy() {
 	}
 }
 
+func (m *MotanEndpoint) GetRequestTimeout(request motan.Request) time.Duration {
+	// TODO: may be we need a more generic way to deal with requestTimeout, retries and etc
+	return time.Duration(m.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.TimeOutKey, m.requestTimeoutMillisecond)) * time.Millisecond
+}
+
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	if m.initialized.Load().(bool) {
 		m.doInitialize()
@@ -178,9 +185,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "can not get a channel")
 	}
-	// get request timeout
-	deadline := m.url.GetTimeDuration("requestTimeout", time.Millisecond, defaultRequestTimeout)
-
+	deadline := m.GetRequestTimeout(request)
 	// do call
 	group := GetRequestGroup(request)
 	if group != m.url.Group && m.url.Group != "" {

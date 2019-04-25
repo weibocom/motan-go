@@ -430,7 +430,72 @@ func (a *agentMessageHandler) clusterCall(request motan.Request, ck string, mota
 	return res
 }
 
-func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
+func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpCluster *cluster.HTTPCluster) (res motan.Response) {
+	start := time.Now()
+	originalService := request.GetServiceName()
+	useHTTP := false
+	defer func() {
+		if useHTTP {
+			// TODO: here we just record the request use http, rpc request has its own access log,
+			//       maybe we should record it at one space
+			vlog.Infof("http-rpc %s,%s,%d,%d,%t,%v",
+				originalService, request.GetMethod(), request.GetRequestID(), time.Since(start)/1000000,
+				res.GetException() == nil, res.GetException())
+		}
+	}()
+	if service, ok := httpCluster.CanServe(request.GetMethod()); ok {
+		// if the client can use rpc, do it
+		if request.GetAttachment(mpro.MSource) == "" {
+			application := httpCluster.GetURL().GetParam(motan.ApplicationKey, "")
+			if application == "" {
+				application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
+			}
+			request.SetAttachment(mpro.MSource, application)
+		}
+		request.SetAttachment(mpro.MPath, service)
+		if motanRequest, ok := request.(*motan.MotanRequest); ok {
+			motanRequest.ServiceName = service
+		}
+		res = httpCluster.Call(request)
+		if res == nil {
+			vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
+			return getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
+		}
+	}
+	// has response and response not a no endpoint exception
+	// here nil res represent http cluster can not serve this method
+	if res != nil && (res.GetException() == nil || res.GetException().ErrCode != motan.ENoEndpoints) {
+		return res
+	}
+	// no rpc service or rpc with no endpoints
+	useHTTP = true
+	err := request.ProcessDeserializable(nil)
+	if err != nil {
+		return getDefaultResponse(request.GetRequestID(), "bad request: "+err.Error())
+	}
+	httpRequest := fasthttp.AcquireRequest()
+	httpResponse := fasthttp.AcquireResponse()
+	defer fasthttp.ReleaseRequest(httpRequest)
+	defer fasthttp.ReleaseResponse(httpResponse)
+	httpRequest.Header.DisableNormalizing()
+	httpResponse.Header.DisableNormalizing()
+	httpRequest.Header.Del("Host")
+	httpRequest.SetHost(originalService)
+	httpRequest.URI().SetPath(request.GetMethod())
+	err = mhttp.MotanRequestToFasthttpRequest(request, httpRequest, "GET")
+	if err != nil {
+		return getDefaultResponse(request.GetRequestID(), "bad motan-http request: "+err.Error())
+	}
+	err = a.agent.httpProxyServer.GetHTTPClient().Do(httpRequest, httpResponse)
+	if err != nil {
+		return getDefaultResponse(request.GetRequestID(), "do http request failed : "+err.Error())
+	}
+	res = &motan.MotanResponse{RequestID: request.GetRequestID()}
+	mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
+	return res
+}
+
+func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
 	version := "0.1"
 	if request.GetAttachment(mpro.MVersion) != "" {
 		version = request.GetAttachment(mpro.MVersion)
@@ -448,55 +513,8 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 	// if normal cluster not found we try http cluster, here service of request represent domain
 	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
-		httpCluster := httpCluster.(*cluster.HTTPCluster)
-		if service, ok := httpCluster.CanServe(request.GetMethod()); ok {
-			if request.GetAttachment(mpro.MSource) == "" {
-				application := httpCluster.GetURL().GetParam(motan.ApplicationKey, "")
-				if application == "" {
-					application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
-				}
-				request.SetAttachment(mpro.MSource, application)
-			}
-			originalService := request.GetServiceName()
-			request.SetAttachment(mpro.MPath, service)
-			if motanRequest, ok := request.(*motan.MotanRequest); ok {
-				motanRequest.ServiceName = service
-			}
-			res = httpCluster.Call(request)
-			if res == nil {
-				vlog.Warningf("httpCluster Call return nil. cluster:%s\n", ck)
-				return getDefaultResponse(request.GetRequestID(), "httpCluster Call return nil. cluster:"+ck)
-			}
-			if res.GetException() != nil && res.GetException().ErrCode == motan.ENoEndpoints {
-				err := request.ProcessDeserializable(nil)
-				if err != nil {
-					return getDefaultResponse(request.GetRequestID(), "bad request: "+err.Error())
-				}
-				httpRequest := fasthttp.AcquireRequest()
-				httpResponse := fasthttp.AcquireResponse()
-				defer fasthttp.ReleaseRequest(httpRequest)
-				defer fasthttp.ReleaseResponse(httpResponse)
-				httpRequest.Header.DisableNormalizing()
-				httpResponse.Header.DisableNormalizing()
-				err = mhttp.MotanRequestToFasthttpRequest(request, httpRequest, "GET")
-				if err != nil {
-					return getDefaultResponse(request.GetRequestID(), "bad motan-http request: "+err.Error())
-				}
-				httpRequest.Header.Del("Host")
-				httpRequest.SetRequestURI(request.GetMethod())
-				httpRequest.SetHost(originalService)
-				err = a.agent.httpProxyServer.GetHTTPClient().Do(httpRequest, httpResponse)
-				if err != nil {
-					return getDefaultResponse(request.GetRequestID(), "do http request failed : "+err.Error())
-				}
-				res = &motan.MotanResponse{RequestID: request.GetRequestID()}
-				mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
-				return res
-			}
-			return res
-		}
+		return a.httpCall(request, ck, httpCluster.(*cluster.HTTPCluster))
 	}
-
 	vlog.Warningf("cluster not found. cluster: %s, request id:%d\n", ck, request.GetRequestID())
 	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
 }
