@@ -472,19 +472,21 @@ func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 
 const (
 	clusterIdcPlaceHolder = "${idc}"
-	backupGroupDecollator = ","
+	backupGroupDelimiter  = ","
 )
 
 // DetermineGroupConfig redeclare DetermineGroupConfig
 var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) GroupConfigInfo {
 	registry := registries[0]
 
-	if groupList := strings.Split(url.Group, backupGroupDecollator); len(groupList) > 0 {
-		var groupConfigList []GroupConfig
-		for _, group := range groupList {
-			groupConfigList = append(groupConfigList, GroupConfig{group: group})
+	if strings.Contains(url.Group, backupGroupDelimiter) {
+		if groupList := strings.Split(url.Group, backupGroupDelimiter); len(groupList) > 0 {
+			var groupConfigList []GroupConfig
+			for _, group := range groupList {
+				groupConfigList = append(groupConfigList, GroupConfig{group: group})
+			}
+			return GroupConfigInfo{GroupConfigs: groupConfigList, UseBackupGroup: true}
 		}
-		return GroupConfigInfo{GroupConfigs: groupConfigList, UseBackupGroup: true}
 	}
 
 	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
