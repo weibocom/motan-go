@@ -206,7 +206,11 @@ func (a *Agent) initParam() {
 	if section != nil && section["log_structured"] != nil {
 		logStructured = strconv.FormatBool(section["log_structured"].(bool))
 	}
-	initLog(logDir, logAsync, logStructured)
+	rotatePerHour := ""
+	if section != nil && section["rotate_per_hour"] != nil {
+		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+	}
+	initLog(logDir, logAsync, logStructured, rotatePerHour)
 	registerSwitchers(a.Context)
 
 	port := *motan.Port
@@ -634,7 +638,7 @@ func getClusterKey(group, version, protocol, path string) string {
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
-func initLog(logDir, logAsync, logStructured string) {
+func initLog(logDir, logAsync, logStructured, rotatePerHour string) {
 	// TODO: remove after a better handle
 	if logDir == "stdout" {
 		return
@@ -646,6 +650,9 @@ func initLog(logDir, logAsync, logStructured string) {
 	}
 	if logStructured != "" {
 		_ = flag.Set("log_structured", logStructured)
+	}
+	if rotatePerHour != "" {
+		_ = flag.Set("rotate_per_hour", rotatePerHour)
 	}
 	vlog.LogInit(nil)
 }

@@ -120,7 +120,11 @@ func GetClientContext(confFile string) *MCContext {
 		if section != nil && section["log_structured"] != nil {
 			logStructured = strconv.FormatBool(section["log_structured"].(bool))
 		}
-		initLog(logdir, logAsync, logStructured)
+		rotatePerHour := ""
+		if section != nil && section["rotate_per_hour"] != nil {
+			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+		}
+		initLog(logdir, logAsync, logStructured, rotatePerHour)
 		registerSwitchers(mc.context)
 	}
 	return mc
