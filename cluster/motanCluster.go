@@ -383,12 +383,14 @@ func (m *MotanCluster) parseRegistry() (err error) {
 	}
 	registryIDSet := motan.TrimSplit(registryIDs, ",")
 	registries := make([]motan.Registry, 0, len(registryIDSet))
+	originRegistries := make([]motan.Registry, 0, len(registryIDSet))
 	for _, registryID := range registryIDSet {
 		if registryURL, ok := m.context.RegistryURLs[registryID]; ok {
 			registry := m.extFactory.GetRegistry(registryURL)
 			if registry == nil {
 				continue
 			}
+			originRegistries = append(originRegistries, registry)
 			if _, ok := registry.(motan.DiscoverCommand); ok {
 				registry = GetCommandRegistryWrapper(m, registry)
 			}
@@ -403,7 +405,7 @@ func (m *MotanCluster) parseRegistry() (err error) {
 		panic("no available registry, error: " + err.Error())
 	}
 	// groupStrategies := DetermineGroupConfig(m.url, registries)
-	groupStrategiesInfo := DetermineGroupConfig(m.url, registries)
+	groupStrategiesInfo := DetermineGroupConfig(m.url, originRegistries)
 	groupStrategies := groupStrategiesInfo.GroupConfigs
 
 	if len(groupStrategies) != 0 {
@@ -490,7 +492,7 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 	}
 
 	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
-		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: url.Group}}}
 	}
 
 	// prepare groups for exact match
@@ -520,10 +522,10 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 		for _, g := range preDetectGroups {
 			groupDetectURL.Group = g
 			if len(registry.Discover(groupDetectURL)) > 0 {
-				return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: g}}}
+				return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: g}}}
 			}
 		}
-		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: url.Group}}}
 	}
 
 	// registry can discover groups, first try prepared groups, if no match, try regex match
@@ -532,7 +534,7 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 		for _, group := range groups {
 			groupDetectURL.Group = g
 			if group == g && len(registry.Discover(groupDetectURL)) > 0 {
-				return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: g}}}
+				return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: g}}}
 			}
 		}
 	}
@@ -540,7 +542,7 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 	regex, err := regexp.Compile("^" + strings.Replace(url.Group, clusterIdcPlaceHolder, "(.*)", 1) + "$")
 	if err != nil {
 		vlog.Errorf("Unexpected url config %v", url)
-		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: url.Group}}}
 	}
 
 	groupNodes := make(map[string][]*motan.URL)
@@ -565,11 +567,11 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 	}
 	if len(matchedGroups) == 0 {
 		vlog.Errorf("No group found for %s", url.Group)
-		return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: url.Group}}}
+		return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: url.Group}}}
 	}
 	group := matchedGroups[len(matchedGroups)-1]
 	vlog.Warningf("Get all group nodes for %s failed, use a fallback group: %s", url.Group, group)
-	return GroupConfigInfo{GroupConfigs: []GroupConfig{GroupConfig{group: group}}}
+	return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: group}}}
 }
 
 type GroupConfigInfo struct {
