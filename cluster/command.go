@@ -314,6 +314,13 @@ func buildRuleURL(weight string) *motan.URL {
 func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo string) bool {
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	defer func() {
+		if c.tcCommand != nil {
+			c.cluster.isCommandWorking.Store(true)
+		} else {
+			c.cluster.isCommandWorking.Store(false)
+		}
+	}()
 	needNotify := false
 	switch commandType {
 	case AgentCmd:
@@ -472,12 +479,6 @@ func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandTy
 	needNotify := c.processCommand(commandType, commandInfo)
 	if needNotify {
 		c.getResultWithCommand(needNotify)
-	}
-
-	if c.tcCommand != nil {
-		c.cluster.isCommandWorking.Store(true)
-	} else {
-		c.cluster.isCommandWorking.Store(false)
 	}
 }
 
