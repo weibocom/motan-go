@@ -12,6 +12,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec
+	github.com/shirou/gopsutil v2.18.12+incompatible
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/valyala/fasthttp v1.2.0

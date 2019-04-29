@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httputil"
 
@@ -30,13 +29,6 @@ func runAgentDemo() {
 		})
 		http.ListenAndServe(addr, handler)
 	}()
-	motan.PermissionCheck = func(r *http.Request) bool {
-		host, _, _ := net.SplitHostPort(r.RemoteAddr)
-		if host == "127.0.0.1" || host == "::1" {
-			return true
-		}
-		return false
-	}
 
 	agent := motan.NewAgent(nil)
 	agent.ConfigFile = "./agentdemo.yaml"
