@@ -214,40 +214,36 @@ func (d *DebugHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			StatSystem(rw)
 		case "/debug/stat/process":
 			StatProcess(rw)
+		case "/debug/stat/openFiles":
+			StatOpenFiles(rw)
+		case "/debug/stat/connections":
+			StatConnections(rw)
 		default:
 			Index(rw, req)
 		}
 	}
 }
 
-type StatCpuInfo struct {
-	ModelName string  `json:"modelName"`
-	Cores     int32   `json:"cores"`
-	Mhz       float64 `json:"mhz"`
-	CacheSize int32   `json:"cacheSize"`
-}
-
-type StatDiskInfo struct {
-	Total   uint64  `json:"total"`
-	Used    uint64  `json:"used"`
-	Percent float64 `json:"percent"`
-}
-
 type StatMemInfo struct {
-	MemTotal    uint64  `json:"memTotal"`
-	MemUsed     uint64  `json:"memUsed"`
+	MemTotal    uint64  `json:"memTotal(MB)"`
+	MemUsed     uint64  `json:"memUsed(MB)"`
 	MemPercent  float64 `json:"memPercent"`
-	SwapTotal   uint64  `json:"swapTotal"`
-	SwapUsed    uint64  `json:"swapUsed"`
+	SwapTotal   uint64  `json:"swapTotal(MB)"`
+	SwapUsed    uint64  `json:"swapUsed(MB)"`
 	SwapPercent float64 `json:"swapPercent"`
 }
 
 type StatNetInfo struct {
-	Name        string `json:"name"`
-	BytesSent   uint64 `json:"bytesSent"`
-	BytesRecv   uint64 `json:"bytesRecv"`
-	PacketsSent uint64 `json:"packetsSent"`
-	PacketsRecv uint64 `json:"packetsRecv"`
+	Name     string   `json:"name"`
+	SentRate uint64   `json:"sentRate(B/s)"`
+	RecvRate uint64   `json:"recvRate(B/s)"`
+	IP       []string `json:"ip"`
+}
+
+type StatConn struct {
+	Listen      uint32 `json:"LISTEN"`
+	Established uint32 `json:"ESTABLISHED"`
+	TimeWait    uint32 `json:"TIME_WAIT"`
 }
 
 type StatConnInfo struct {
@@ -258,14 +254,10 @@ type StatConnInfo struct {
 }
 
 type StatIOInfo struct {
-	ReadCountTotal  uint64 `json:"readCountTotal"`
-	ReadCountRate   uint64 `json:"readCountRate"`
-	WriteCountTotal uint64 `json:"writeCountTotal"`
-	WriteCountRate  uint64 `json:"writeCountRate"`
-	ReadBytesTotal  uint64 `json:"readBytesTotal"`
-	ReadBytesRate   uint64 `json:"readBytesRate"`
-	WriteBytesTotal uint64 `json:"writeBytesTotal"`
-	WriteBytesRate  uint64 `json:"writeBytesRate"`
+	ReadTotal  uint64 `json:"readTotal(B)"`
+	ReadRate   uint64 `json:"readRate(B/s)"`
+	WriteTotal uint64 `json:"writsTotal(B)"`
+	WriteRate  uint64 `json:"writsRate(B/s)"`
 }
 
 type StatSystemEntity struct {
@@ -285,14 +277,14 @@ type StatSystemEntity struct {
 }
 
 type StatProcessEntity struct {
-	NumThreads    int32                   `json:"numThreads"`
-	NumFDs        int32                   `json:"numFds"`
-	CpuPercent    float64                 `json:"cpuPercent"`
-	MemoryPercent float32                 `json:"memoryPercent"`
-	CreateTime    string                  `json:"createTime"`
-	IO            *StatIOInfo             `json:"io"`
-	OpenFiles     []process.OpenFilesStat `json:"openFiles"`
-	Connections   []StatConnInfo          `json:"connections"`
+	NumThreads     int32       `json:"numThreads"`
+	NumFDs         int32       `json:"numFds"`
+	CpuPercent     float64     `json:"cpuPercent"`
+	MemoryPercent  float32     `json:"memoryPercent"`
+	CreateTime     string      `json:"createTime"`
+	OpenFilesCount int32       `json:"openFilesCount"`
+	IO             *StatIOInfo `json:"io"`
+	Connections    *StatConn   `json:"connections"`
 }
 
 func StatSystem(w http.ResponseWriter) {
@@ -311,25 +303,39 @@ func StatSystem(w http.ResponseWriter) {
 		SwapUsed:    swap.Used >> 20,
 		SwapPercent: oneDecimal(swap.UsedPercent),
 	}
-	netIo, _ := net.IOCounters(true)
+	netInfoPre := make(map[string]net.IOCountersStat)
+	netIOPre, _ := net.IOCounters(true)
+	for _, n := range netIOPre {
+		netInfoPre[n.Name] = n
+	}
+	if netIoAllPre, err := net.IOCounters(false); err == nil {
+		netInfoPre[netIoAllPre[0].Name] = netIoAllPre[0]
+	}
+	time.Sleep(time.Second)
+	interfaceList, _ := net.Interfaces()
+	interfaceMap := make(map[string][]string)
+	for _, inter := range interfaceList {
+		var addrList []string
+		for _, addr := range inter.Addrs {
+			addrList = append(addrList, addr.Addr)
+		}
+		interfaceMap[inter.Name] = addrList
+	}
+	netIOEnd, _ := net.IOCounters(true)
 	var netInfo []StatNetInfo
-	for _, n := range netIo {
+	for _, n := range netIOEnd {
 		netInfo = append(netInfo, StatNetInfo{
-			Name:        n.Name,
-			BytesSent:   n.BytesSent,
-			BytesRecv:   n.BytesRecv,
-			PacketsSent: n.PacketsSent,
-			PacketsRecv: n.PacketsRecv,
+			Name:     n.Name,
+			IP:       interfaceMap[n.Name],
+			SentRate: n.BytesSent - netInfoPre[n.Name].BytesSent,
+			RecvRate: n.BytesRecv - netInfoPre[n.Name].BytesRecv,
 		})
 	}
-	netIoAll, _ := net.IOCounters(false)
-	for _, n := range netIoAll {
+	if netIoAllPre, err := net.IOCounters(false); err == nil {
 		netInfo = append(netInfo, StatNetInfo{
-			Name:        n.Name,
-			BytesSent:   n.BytesSent,
-			BytesRecv:   n.BytesRecv,
-			PacketsSent: n.PacketsSent,
-			PacketsRecv: n.PacketsRecv,
+			Name:     netIoAllPre[0].Name,
+			SentRate: netIoAllPre[0].BytesSent - netInfoPre[netIoAllPre[0].Name].BytesSent,
+			RecvRate: netIoAllPre[0].BytesRecv - netInfoPre[netIoAllPre[0].Name].BytesRecv,
 		})
 	}
 	cpuPercent, _ := cpu.Percent(time.Second, false)
@@ -366,6 +372,61 @@ func StatProcess(w http.ResponseWriter) {
 	numFDs, _ := p.NumFDs()
 	cpuPercent, _ := p.CPUPercent()
 	connections, _ := p.Connections()
+	connInfo := StatConn{}
+	for _, value := range connections {
+		switch value.Status {
+		case "LISTEN":
+			connInfo.Listen++
+		case "ESTABLISHED":
+			connInfo.Established++
+		case "TIME_WAIT":
+			connInfo.TimeWait++
+		}
+	}
+	createTime, _ := p.CreateTime()
+	memoryPercent, _ := p.MemoryPercent()
+	openFiles, _ := p.OpenFiles()
+	var ioCounters *StatIOInfo
+	if ioCountersStart, err := p.IOCounters(); err == nil {
+		time.Sleep(time.Second)
+		ioCountersEnd, _ := p.IOCounters()
+		ioCounters = &StatIOInfo{
+			ReadTotal:  ioCountersEnd.ReadBytes,
+			ReadRate:   ioCountersEnd.ReadBytes - ioCountersStart.ReadBytes,
+			WriteTotal: ioCountersEnd.WriteBytes,
+			WriteRate:  ioCountersEnd.WriteBytes - ioCountersStart.WriteBytes,
+		}
+	}
+	statProcess := StatProcessEntity{
+		NumThreads:     numThreads,
+		NumFDs:         numFDs,
+		CpuPercent:     oneDecimal(cpuPercent),
+		CreateTime:     time.Unix(createTime/1000, 0).String(),
+		MemoryPercent:  float32(oneDecimal(float64(memoryPercent))),
+		IO:             ioCounters,
+		OpenFilesCount: int32(len(openFiles)),
+		Connections:    &connInfo,
+	}
+	data, _ := json.Marshal(statProcess)
+	_, _ = w.Write(data)
+}
+
+func oneDecimal(value float64) float64 {
+	return math.Trunc(value*10+5) / 10
+}
+
+func StatOpenFiles(w http.ResponseWriter) {
+	checkPid := os.Getpid()
+	p, _ := process.NewProcess(int32(checkPid))
+	openFiles, _ := p.OpenFiles()
+	data, _ := json.Marshal(openFiles)
+	_, _ = w.Write(data)
+}
+
+func StatConnections(w http.ResponseWriter) {
+	checkPid := os.Getpid()
+	p, _ := process.NewProcess(int32(checkPid))
+	connections, _ := p.Connections()
 	var conns []StatConnInfo
 	for _, value := range connections {
 		conns = append(conns, StatConnInfo{
@@ -375,41 +436,8 @@ func StatProcess(w http.ResponseWriter) {
 			RemoteAddr: value.Raddr.IP + ":" + strconv.FormatUint(uint64(value.Raddr.Port), 10),
 		})
 	}
-	createTime, _ := p.CreateTime()
-	memoryPercent, _ := p.MemoryPercent()
-	openFiles, _ := p.OpenFiles()
-	var ioCounters *StatIOInfo
-	ioCountersStart, _ := p.IOCounters()
-	if ioCountersStart != nil {
-		time.Sleep(time.Second)
-		ioCountersEnd, _ := p.IOCounters()
-		ioCounters = &StatIOInfo{
-			ReadCountTotal:  ioCountersEnd.ReadCount,
-			ReadCountRate:   ioCountersEnd.ReadCount - ioCountersStart.ReadCount,
-			WriteCountTotal: ioCountersEnd.WriteCount,
-			WriteCountRate:  ioCountersEnd.WriteCount - ioCountersStart.WriteCount,
-			ReadBytesTotal:  ioCountersEnd.ReadBytes,
-			ReadBytesRate:   ioCountersEnd.ReadBytes - ioCountersStart.ReadBytes,
-			WriteBytesTotal: ioCountersEnd.WriteBytes,
-			WriteBytesRate:  ioCountersEnd.WriteBytes - ioCountersStart.WriteBytes,
-		}
-	}
-	statProcess := StatProcessEntity{
-		NumThreads:    numThreads,
-		NumFDs:        numFDs,
-		CpuPercent:    oneDecimal(cpuPercent),
-		CreateTime:    time.Unix(createTime/1000, 0).String(),
-		MemoryPercent: float32(oneDecimal(float64(memoryPercent))),
-		IO:            ioCounters,
-		OpenFiles:     openFiles,
-		Connections:   conns,
-	}
-	data, _ := json.Marshal(statProcess)
+	data, _ := json.Marshal(conns)
 	_, _ = w.Write(data)
-}
-
-func oneDecimal(value float64) float64 {
-	return math.Trunc(value*10+5) / 10
 }
 
 func MeshTrace(w http.ResponseWriter, r *http.Request) {

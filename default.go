@@ -56,6 +56,8 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/debug/pprof/sw"] = debug
 		defaultManageHandlers["/debug/stat/system"] = debug
 		defaultManageHandlers["/debug/stat/process"] = debug
+		defaultManageHandlers["/debug/stat/openFiles"] = debug
+		defaultManageHandlers["/debug/stat/connections"] = debug
 
 		switcher := &SwitcherHandler{}
 		defaultManageHandlers["/switcher/set"] = switcher
