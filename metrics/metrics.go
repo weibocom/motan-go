@@ -30,7 +30,12 @@ const (
 	defaultEventProcessor = 1
 	maxEventProcessor     = 50
 	defaultSinkDuration   = 5 * time.Second
-	defaultStatGroup      = "motanStat"
+
+	KeyDelimiter           = ":"
+	DefaultStatGroup       = "motan-stat"
+	DefaultStatService     = "status"
+	DefaultStatRole        = "motan-agent"
+	DefaultStatApplication = "unknown"
 )
 
 var (
@@ -421,9 +426,11 @@ func StartReporter(ctx *motan.Context) {
 		go rp.sink()
 
 		// panic stat when agent model
-		if ctx.AgentURL != nil && ctx.AgentURL.Parameters[motan.ApplicationKey] != "" {
+		if ctx.AgentURL != nil {
+			application := ctx.AgentURL.GetParam(motan.ApplicationKey, DefaultStatApplication)
 			motan.PanicStatFunc = func() {
-				AddCounter(defaultStatGroup, ctx.AgentURL.Parameters[motan.ApplicationKey], "Panic", 1)
+				key := DefaultStatRole + KeyDelimiter + application + KeyDelimiter + "panic.total_count"
+				AddCounter(DefaultStatGroup, DefaultStatService, key, 1)
 			}
 		}
 	})
