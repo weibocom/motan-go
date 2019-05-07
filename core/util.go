@@ -37,7 +37,7 @@ func ParseExportInfo(export string) (string, int, error) {
 	}
 	porti, err := strconv.Atoi(port)
 	if err != nil {
-		vlog.Errorf("export port not int. port:%s\n", port)
+		vlog.Errorf("export port not int. port:%s", port)
 		return protocol, porti, err
 	}
 	return protocol, porti, err
@@ -123,7 +123,7 @@ func GetReqInfo(request Request) string {
 
 func HandlePanic(f func()) {
 	if err := recover(); err != nil {
-		vlog.Errorf("recover panic. error:%v, stack: %s\n", err, debug.Stack())
+		vlog.Errorf("recover panic. error:%v, stack: %s", err, debug.Stack())
 		if f != nil {
 			f()
 		}

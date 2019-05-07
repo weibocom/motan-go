@@ -64,7 +64,19 @@ func GetMotanServerContext(confFile string) *MSContext {
 		if logdir == "" {
 			logdir = "."
 		}
-		initLog(logdir)
+		logAsync := ""
+		if section != nil && section["log_async"] != nil {
+			logAsync = strconv.FormatBool(section["log_async"].(bool))
+		}
+		logStructured := ""
+		if section != nil && section["log_structured"] != nil {
+			logStructured = strconv.FormatBool(section["log_structured"].(bool))
+		}
+		rotatePerHour := ""
+		if section != nil && section["rotate_per_hour"] != nil {
+			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+		}
+		initLog(logdir, logAsync, logStructured, rotatePerHour)
 		registerSwitchers(ms.context)
 	}
 	return ms
@@ -105,7 +117,7 @@ func (m *MSContext) export(url *motan.URL) {
 		url.Protocol = protocol
 		porti, err := strconv.Atoi(port)
 		if err != nil {
-			vlog.Errorf("export port not int. port:%s, url:%+v\n", port, url)
+			vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
 			return
 		}
 		url.Port = porti
@@ -133,14 +145,14 @@ func (m *MSContext) export(url *motan.URL) {
 		} else if canShareChannel(*url, *server.GetURL()) {
 			server.GetMessageHandler().AddProvider(provider)
 		} else {
-			vlog.Errorf("service export fail! can not share channel.url:%v, port url:%v\n", url, server.GetURL())
+			vlog.Errorf("service export fail! can not share channel.url:%v, port url:%v", url, server.GetURL())
 			return
 		}
 		err = exporter.Export(server, m.extFactory, m.context)
 		if err != nil {
-			vlog.Errorf("service export fail! url:%v, err:%v\n", url, err)
+			vlog.Errorf("service export fail! url:%v, err:%v", url, err)
 		} else {
-			vlog.Infof("service export success. url:%v\n", url)
+			vlog.Infof("service export success. url:%v", url)
 			for _, r := range exporter.Registries {
 				rid := r.GetURL().GetIdentity()
 				if _, ok := m.registries[rid]; !ok {
@@ -175,7 +187,7 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 	}
 	v := reflect.ValueOf(s)
 	if v.Kind() != reflect.Ptr {
-		vlog.Errorf("register service must be a pointer of struct. service:%+v\n", s)
+		vlog.Errorf("register service must be a pointer of struct. service:%+v", s)
 		return errors.New("register service must be a pointer of struct")
 	}
 	t := v.Elem().Type()
@@ -192,7 +204,7 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 		}
 	}
 	if !hasConfig {
-		vlog.Errorf("can not find export config for register service. service:%+v\n", s)
+		vlog.Errorf("can not find export config for register service. service:%+v", s)
 		return errors.New("can not find export config for register service")
 	}
 	m.serviceImpls[ref] = s

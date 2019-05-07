@@ -28,6 +28,7 @@ import (
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/filter"
+	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
 )
@@ -590,6 +591,64 @@ func (s *SwitcherHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		result := switcher.GetAllSwitchers()
 		b, _ := json.Marshal(result)
 		w.Write(b)
+	}
+}
+
+type LogHandler struct{}
+
+type logResponse struct {
+	Code int    `json:"code"`
+	Body string `json:"body"`
+}
+
+func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	jsonEncoder := json.NewEncoder(w)
+	type resBody struct {
+		Level      string `json:"level"`
+		AccessLog  bool   `json:"accessLog"`
+		MetricsLog bool   `json:"metricsLog"`
+	}
+	switch r.URL.Path {
+	case "/logConfig/get":
+		body, _ := json.Marshal(resBody{
+			Level:      vlog.GetLevel().String(),
+			AccessLog:  vlog.GetAccessLogAvailable(),
+			MetricsLog: vlog.GetMetricsLogAvailable()})
+		_ = jsonEncoder.Encode(logResponse{
+			Code: 200,
+			Body: string(body)})
+	case "/logConfig/set":
+		if lvlString := r.FormValue("level"); lvlString != "" {
+			var lvl vlog.LogLevel
+			if err := lvl.Set(lvlString); err == nil {
+				vlog.SetLevel(lvl)
+				_ = jsonEncoder.Encode(logResponse{Code: 200, Body: "set log level:" + lvlString})
+				vlog.Infoln("set log level:", lvlString)
+			} else {
+				_ = jsonEncoder.Encode(logResponse{Code: 500, Body: "set log level failed. err:" + err.Error()})
+				vlog.Warningln("set log level failed. err:", err.Error())
+			}
+		} else if available := r.FormValue("access"); available != "" {
+			setLogStatus(jsonEncoder, "accessLog", available)
+		} else if available := r.FormValue("metrics"); available != "" {
+			setLogStatus(jsonEncoder, "metricsLog", available)
+		}
+	}
+}
+
+func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
+	if status, err := strconv.ParseBool(available); err == nil {
+		switch logType {
+		case "accessLog":
+			vlog.SetAccessLogAvailable(status)
+		case "metricsLog":
+			vlog.SetMetricsLogAvailable(status)
+		}
+		_ = jsonEncoder.Encode(logResponse{Code: 200, Body: "set " + logType + " status:" + available})
+		vlog.Infoln("set "+logType+" status:", status)
+	} else {
+		_ = jsonEncoder.Encode(logResponse{Code: 500, Body: "set " + logType + " status failed. err:" + err.Error()})
+		vlog.Warningln("set "+logType+" status failed. err:", err.Error())
 	}
 }
 

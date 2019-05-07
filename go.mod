@@ -16,6 +16,9 @@ require (
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/valyala/fasthttp v1.2.0
+	go.uber.org/atomic v1.3.2 // indirect
+	go.uber.org/multierr v1.1.0 // indirect
+	go.uber.org/zap v0.0.0-00010101000000-000000000000
 	golang.org/x/net v0.0.0-20181005035420-146acd28ed58
 	golang.org/x/sys v0.0.0-20180903190138-2b024373dcd9 // indirect
 	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
@@ -26,6 +29,8 @@ require (
 
 replace (
 	cloud.google.com/go => github.com/GoogleCloudPlatform/google-cloud-go v0.30.0
+	go.uber.org/atomic => github.com/uber-go/atomic v1.4.0
+	go.uber.org/multierr => github.com/uber-go/multierr v1.1.1-0.20180122172545-ddea229ff1df
 	go.uber.org/zap => github.com/uber-go/zap v1.9.1
 	golang.org/x/crypto => github.com/golang/crypto v0.0.0-20181203042331-505ab145d0a9
 	golang.org/x/lint => github.com/golang/lint v0.0.0-20181011164241-5906bd5c48cd

@@ -110,7 +110,7 @@ func (m *mockEndPointFilter) HasNext() bool {
 }
 
 func (m *mockEndPointFilter) SetNext(nextFilter core.EndPointFilter) {
-	vlog.Errorf("should not set next in mockEndPointFilter! filer:%s\n", nextFilter.GetName())
+	vlog.Errorf("should not set next in mockEndPointFilter! filer:%s", nextFilter.GetName())
 }
 func (m *mockEndPointFilter) GetNext() core.EndPointFilter {
 	return nil

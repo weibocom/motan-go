@@ -402,7 +402,7 @@ func StartReporter(ctx *motan.Context) {
 		var m metric
 		err := ctx.Config.GetStruct("metrics", &m)
 		if err != nil {
-			vlog.Warningf("get metrics config fail:%s, use default config:{Period:%s, Processor:%d, Graphite:[]}\n", err.Error(), defaultSinkDuration, defaultEventProcessor)
+			vlog.Warningf("get metrics config fail:%s, use default config:{Period:%s, Processor:%d, Graphite:[]}", err.Error(), defaultSinkDuration, defaultEventProcessor)
 		} else {
 			if m.Period > 0 {
 				rp.interval = time.Duration(m.Period) * time.Second
@@ -453,7 +453,7 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 		r.writersLock.Lock()
 		defer r.writersLock.Unlock()
 		r.writers[key] = sw
-		vlog.Infof("add metrics StatWriter %s\n", key)
+		vlog.Infof("add metrics StatWriter %s", key)
 	}
 }
 
@@ -479,7 +479,7 @@ func (r *reporter) sink() {
 				defer r.writersLock.RUnlock()
 				for name, writer := range r.writers {
 					if err := writer.Write(snap); err != nil {
-						vlog.Errorf("write metrics error. name:%s, err:%v\n", name, err)
+						vlog.Errorf("write metrics error. name:%s, err:%v", name, err)
 					}
 				}
 			}
