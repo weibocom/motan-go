@@ -46,7 +46,7 @@ func (m *Mockserver) Start() (err error) {
 	//async
 	m.lis, err = net.Listen("tcp", ":"+strconv.Itoa(m.Port))
 	if err != nil {
-		vlog.Errorf("listen port:%d fail. err: %v\n", m.Port, err)
+		vlog.Errorf("listen port:%d fail. err: %v", m.Port, err)
 		return err
 	}
 	go handle(m.lis)

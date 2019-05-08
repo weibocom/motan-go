@@ -246,7 +246,7 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 			return true
 		}
 		if strings.Contains(k, "\n") || strings.Contains(v, "\n") {
-			vlog.Errorf("metadata not correct.k:%s, v:%s\n", k, v)
+			vlog.Errorf("metadata not correct.k:%s, v:%s", k, v)
 			return true
 		}
 		metabuf.Write([]byte(k))
@@ -311,7 +311,7 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 	}
 	mn := binary.BigEndian.Uint16(temp[:2])
 	if mn != MotanMagic {
-		vlog.Errorf("worng magic num:%d, err:%v\n", mn, err)
+		vlog.Errorf("worng magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
 
@@ -348,7 +348,7 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 			}
 		}
 		if k != "" {
-			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s\n", header, metadata)
+			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", header, metadata)
 			return nil, start, ErrMetadata
 		}
 	}
@@ -375,7 +375,7 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 func DecodeGzipBody(body []byte) []byte {
 	ret, err := DecodeGzip(body)
 	if err != nil {
-		vlog.Warningf("decode gzip body fail!%s\n", err.Error())
+		vlog.Warningf("decode gzip body fail!%s", err.Error())
 		return body
 	}
 	return ret
@@ -428,7 +428,7 @@ func EncodeMessageGzip(msg *Message, gzipSize int) {
 	if gzipSize > 0 && len(msg.Body) > gzipSize && !msg.Header.IsGzip() {
 		data, err := EncodeGzip(msg.Body)
 		if err != nil {
-			vlog.Warningf("encode gzip fail! request id:%d, err:%s\n", msg.Header.RequestID, err.Error())
+			vlog.Warningf("encode gzip fail! request id:%d, err:%s", msg.Header.RequestID, err.Error())
 		} else {
 			msg.Header.SetGzip(true)
 			msg.Body = data
@@ -540,11 +540,11 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 				if b, ok := request.GetArguments()[0].([]byte); ok {
 					req.Body = b
 				} else {
-					vlog.Warningf("convert request value fail! serialized value not []byte. request:%+v\n", request)
+					vlog.Warningf("convert request value fail! serialized value not []byte. request:%+v", request)
 					return nil, ErrSerializedData
 				}
 			} else {
-				vlog.Warningf("convert request value fail! serialized value size > 1. request:%+v\n", request)
+				vlog.Warningf("convert request value fail! serialized value size > 1. request:%+v", request)
 				return nil, ErrSerializedData
 			}
 		} else {
@@ -610,7 +610,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 			if b, ok := response.GetValue().([]byte); ok {
 				res.Body = b
 			} else {
-				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v\n", response)
+				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
 				return nil, ErrSerializedData
 			}
 		} else {

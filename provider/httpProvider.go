@@ -39,6 +39,7 @@ type HTTPProvider struct {
 	maxConnections    int
 	domain            string
 	defaultHTTPMethod string
+	enableRewrite     bool
 }
 
 const (
@@ -82,9 +83,16 @@ func (h *HTTPProvider) Initialize() {
 	}
 	h.domain = h.url.GetParam(mhttp.DomainKey, "")
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(h.domain, h.gctx)
-	h.proxyAddr = h.url.GetParam("proxyAddress", "")
-	h.proxySchema = h.url.GetParam("proxySchema", "http")
-	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 512))
+	h.proxyAddr = h.url.GetParam(mhttp.ProxyAddressKey, "")
+	h.proxySchema = h.url.GetParam(mhttp.ProxySchemaKey, "http")
+	h.maxConnections = int(h.url.GetPositiveIntValue(mhttp.MaxConnectionsKey, 512))
+	h.enableRewrite = true
+	enableRewriteStr := h.url.GetParam(mhttp.EnableRewriteKey, "true")
+	if enableRewrite, err := strconv.ParseBool(enableRewriteStr); err != nil {
+		vlog.Errorf("%s should be a bool value, but got: %s", mhttp.EnableRewriteKey, enableRewriteStr)
+	} else {
+		h.enableRewrite = enableRewrite
+	}
 	h.fastClient = &fasthttp.HostClient{
 		Name: "motan",
 		Addr: h.proxyAddr,
@@ -164,7 +172,8 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
 
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
-		buffer.WriteString("requestIdFromClient=")
+		buffer.WriteString(mhttp.ProxyRequestIDKey)
+		buffer.WriteString("=")
 		buffer.WriteString(fmt.Sprintf("%d", request.GetRequestID()))
 		switch t {
 		case "map[string]string":
@@ -224,11 +233,15 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}
 	// Ok here we do transparent http proxy and return
 	if doTransparentProxy {
-		// Do not check upstream for compatibility
-		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok {
-			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
-			return resp
+		rewritePath := request.GetMethod()
+		if h.enableRewrite {
+			// Do not check upstream for compatibility
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+			if !ok {
+				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				return resp
+			}
+			rewritePath = path
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
@@ -263,10 +276,14 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 
 	if h.proxyAddr != "" {
 		// rpc client call to this server
-		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok {
-			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
-			return resp
+		rewritePath := request.GetMethod()
+		if h.enableRewrite {
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+			if !ok {
+				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				return resp
+			}
+			rewritePath = path
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
@@ -356,7 +373,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
-		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode, request.GetRequestID(), httpReqURL)
+		vlog.Warningf("server_agent result is empty :%d,%d,%s", statusCode, request.GetRequestID(), httpReqURL)
 	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {

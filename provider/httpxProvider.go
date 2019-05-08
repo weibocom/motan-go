@@ -178,7 +178,7 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 
 	err = h.httpClient.Do(req, httpResp)
 	if err != nil {
-		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v",req, err)
+		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v", req, err)
 		fillException(resp, t, err)
 		return resp
 	}
@@ -187,7 +187,7 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 	body := httpResp.Body()
 	l := len(body)
 	if l == 0 {
-		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode, request.GetRequestID(), httpReqURL)
+		vlog.Warningf("server_agent result is empty :%d,%d,%s", statusCode, request.GetRequestID(), httpReqURL)
 	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {

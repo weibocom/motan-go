@@ -622,7 +622,7 @@ func (d *DefaultExtensionFactory) GetHa(url *URL) HaStrategy {
 	if newHa, ok := d.haFactories[haName]; ok {
 		return newHa(url)
 	}
-	vlog.Errorf("HaStrategy name %s is not found in DefaultExtensionFactory!\n", haName)
+	vlog.Errorf("HaStrategy name %s is not found in DefaultExtensionFactory!", haName)
 	return nil
 }
 
@@ -631,7 +631,7 @@ func (d *DefaultExtensionFactory) GetLB(url *URL) LoadBalance {
 	if newLb, ok := d.lbFactories[lbName]; ok {
 		return newLb(url)
 	}
-	vlog.Errorf("LoadBalance name %s is not found in DefaultExtensionFactory!\n", lbName)
+	vlog.Errorf("LoadBalance name %s is not found in DefaultExtensionFactory!", lbName)
 	return nil
 }
 
@@ -639,7 +639,7 @@ func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
 	if newDefualt, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
 		return newDefualt()
 	}
-	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!\n", name)
+	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!", name)
 	return nil
 }
 
@@ -658,7 +658,7 @@ func (d *DefaultExtensionFactory) GetRegistry(url *URL) Registry {
 		d.registries[key] = registry
 		return registry
 	}
-	vlog.Errorf("Registry name %s is not found in DefaultExtensionFactory!\n", url.Protocol)
+	vlog.Errorf("Registry name %s is not found in DefaultExtensionFactory!", url.Protocol)
 	return nil
 }
 
@@ -667,7 +667,7 @@ func (d *DefaultExtensionFactory) GetEndPoint(url *URL) EndPoint {
 		endpoint := newEp(url)
 		return endpoint
 	}
-	vlog.Errorf("EndPoint(protocol) name %s is not found in DefaultExtensionFactory!\n", url.Protocol)
+	vlog.Errorf("EndPoint(protocol) name %s is not found in DefaultExtensionFactory!", url.Protocol)
 	return nil
 }
 
@@ -683,7 +683,7 @@ func (d *DefaultExtensionFactory) GetProvider(url *URL) Provider {
 	if newProviderFunc, ok := d.providerFactories[pName]; ok {
 		return newProviderFunc(url)
 	}
-	vlog.Errorf("provider name %s is not found in DefaultExtensionFactory!\n", pName)
+	vlog.Errorf("provider name %s is not found in DefaultExtensionFactory!", pName)
 	return nil
 }
 
@@ -698,7 +698,7 @@ func (d *DefaultExtensionFactory) GetServer(url *URL) Server {
 		Initialize(s)
 		return s
 	}
-	vlog.Errorf("server name %s is not found in DefaultExtensionFactory!\n", sname)
+	vlog.Errorf("server name %s is not found in DefaultExtensionFactory!", sname)
 	return nil
 }
 
@@ -708,7 +708,7 @@ func (d *DefaultExtensionFactory) GetMessageHandler(name string) MessageHandler 
 		Initialize(handler)
 		return handler
 	}
-	vlog.Errorf("messageHandler name %s is not found in DefaultExtensionFactory!\n", name)
+	vlog.Errorf("messageHandler name %s is not found in DefaultExtensionFactory!", name)
 	return nil
 }
 
@@ -817,7 +817,7 @@ func (l *lastEndPointFilter) HasNext() bool {
 }
 
 func (l *lastEndPointFilter) SetNext(nextFilter EndPointFilter) {
-	vlog.Errorf("should not set next in lastEndPointFilter! filer:%s\n", nextFilter.GetName())
+	vlog.Errorf("should not set next in lastEndPointFilter! filer:%s", nextFilter.GetName())
 }
 func (l *lastEndPointFilter) GetNext() EndPointFilter {
 	return nil
@@ -855,7 +855,7 @@ func (l *lastClusterFilter) HasNext() bool {
 	return false
 }
 func (l *lastClusterFilter) SetNext(nextFilter ClusterFilter) {
-	vlog.Errorf("should not set next in lastClusterFilter! filer:%s\n", nextFilter.GetName())
+	vlog.Errorf("should not set next in lastClusterFilter! filer:%s", nextFilter.GetName())
 }
 func (l *lastClusterFilter) GetNext() ClusterFilter {
 	return nil

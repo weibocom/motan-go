@@ -77,13 +77,13 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			br.updateCallRecord(counterRoundCount)
 		}
 		if i > 0 && !br.tryAcquirePermit(int(backupRequestMaxRetryRatio)) {
-			vlog.Warningf("The permit is used up, request id: %d\n", request.GetRequestID())
+			vlog.Warningf("The permit is used up, request id: %d", request.GetRequestID())
 			break
 		}
 		// log & clone backup request
 		pr := request
 		if i > 0 {
-			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s\n", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
+			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
 			pr = request.Clone().(motan.Request)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
@@ -125,7 +125,7 @@ func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint
 	if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
 		return response
 	}
-	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", endpoint.GetURL().GetIdentity(), response.GetException())
+	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v", endpoint.GetURL().GetIdentity(), response.GetException())
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
 		"call backup request fail.Exception:%s", response.GetException().ErrMsg), ErrType: motan.ServiceException})
 }

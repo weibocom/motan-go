@@ -1,7 +1,7 @@
 package filter
 
 import (
-	"fmt"
+	"encoding/json"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -43,7 +43,7 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	doAccessLog(role, ip+":"+caller.GetURL().GetPortStr(), t.GetName(), start, request, response)
+	doAccessLog(t.GetName(), role, ip+":"+caller.GetURL().GetPortStr(), start, request, response)
 	return response
 }
 
@@ -63,35 +63,24 @@ func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func doAccessLog(role string, address string, filterName string, start time.Time, request motan.Request, response motan.Response) {
-	writeLog("[%s] %s,%s,pt:%d,size:%d/%d,req:%s,%s,%s,%d,res:%d,%t,%+v\n",
-		filterName, role, address, response.GetProcessTime(),
-		request.GetRPCContext(true).BodySize, response.GetRPCContext(true).BodySize,
-		request.GetServiceName(), request.GetMethod(), request.GetMethodDesc(), response.GetRequestID(),
-		time.Since(start)/1000000, response.GetException() == nil, response.GetException())
-}
-
-// Temporarily solved the vlog asynchronous output.
-const DefaultOutPutChanSize = 1000
-
-var outputChan chan string
-
-func init() {
-	outputChan = make(chan string, DefaultOutPutChanSize)
-	outputLoop()
-}
-
-func outputLoop() {
-	go func() {
-		for {
-			select {
-			case logStr := <-outputChan:
-				vlog.Infof(logStr)
-			}
-		}
-	}()
-}
-
-func writeLog(format string, args ...interface{}) {
-	outputChan <- fmt.Sprintf(format, args...)
+func doAccessLog(filterName string, role string, address string, start time.Time, request motan.Request, response motan.Response) {
+	exception := response.GetException()
+	var exceptionData []byte
+	if exception != nil {
+		exceptionData, _ = json.Marshal(exception)
+	}
+	vlog.AccessLog(vlog.AccessLogEntity{
+		FilterName:    filterName,
+		Role:          role,
+		RequestID:     response.GetRequestID(),
+		Service:       request.GetServiceName(),
+		Method:        request.GetMethod(),
+		RemoteAddress: address,
+		Desc:          request.GetMethodDesc(),
+		ReqSize:       request.GetRPCContext(true).BodySize,
+		ResSize:       response.GetRPCContext(true).BodySize,
+		BizTime:       response.GetProcessTime(),             //ms
+		TotalTime:     time.Since(start).Nanoseconds() / 1e6, //ms
+		Success:       exception == nil,
+		Exception:     string(exceptionData)})
 }

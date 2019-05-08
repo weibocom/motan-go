@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/weibocom/motan-go/cluster"
@@ -111,7 +112,19 @@ func GetClientContext(confFile string) *MCContext {
 		if logdir == "" {
 			logdir = "."
 		}
-		initLog(logdir)
+		logAsync := ""
+		if section != nil && section["log_async"] != nil {
+			logAsync = strconv.FormatBool(section["log_async"].(bool))
+		}
+		logStructured := ""
+		if section != nil && section["log_structured"] != nil {
+			logStructured = strconv.FormatBool(section["log_structured"].(bool))
+		}
+		rotatePerHour := ""
+		if section != nil && section["rotate_per_hour"] != nil {
+			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+		}
+		initLog(logdir, logAsync, logStructured, rotatePerHour)
 		registerSwitchers(mc.context)
 	}
 	return mc
