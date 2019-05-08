@@ -16,6 +16,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
@@ -129,6 +130,8 @@ func (a *Agent) StartMotanAgent() {
 	a.initParam()
 	a.SetSanpshotConf()
 	a.initAgentURL()
+	// start metrics reporter early, here agent context has already initialized
+	metrics.StartReporter(a.Context)
 	a.initStatus()
 	a.initClusters()
 	a.startServerAgent()
@@ -155,6 +158,10 @@ func (a *Agent) StartMotanAgent() {
 func (a *Agent) initStatus() {
 	if a.recover {
 		a.recoverStatus()
+		// here we add the metrics for recover
+		application := a.agentURL.GetParam(motan.ApplicationKey, metrics.DefaultStatApplication)
+		key := metrics.DefaultStatRole + metrics.KeyDelimiter + application + metrics.KeyDelimiter + "abnormal_exit.total_count"
+		metrics.AddCounter(metrics.DefaultStatGroup, metrics.DefaultStatService, key, 1)
 	} else {
 		a.status = http.StatusServiceUnavailable
 	}

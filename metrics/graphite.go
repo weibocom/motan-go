@@ -73,7 +73,7 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 		if snap.IsReport() {
 			snap.RangeKey(func(k string) {
 				var segment string
-				pni := strings.SplitN(k, ":", minKeyLength)
+				pni := strings.SplitN(k, KeyDelimiter, minKeyLength)
 				if len(pni) < minKeyLength {
 					return
 				}
