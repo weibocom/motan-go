@@ -547,9 +547,10 @@ func (c *Channel) closeOnErr(err error) {
 	if c.shutdownErr == nil {
 		c.shutdownErr = err
 	}
-	if c.shutdown != true { // not normal close
-		vlog.Warningf("motan channel will close. ep:%s, err: %s", c.address, err.Error())
-		c.shutdownLock.Unlock()
+	shutdown := c.shutdown
+	c.shutdownLock.Unlock()
+	if !shutdown { // not normal close
+		vlog.Warningf("motan channel will close. ep:%s, err: %s\n", c.address, err.Error())
 		c.Close()
 	}
 }

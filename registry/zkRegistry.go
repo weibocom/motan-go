@@ -57,7 +57,12 @@ func (z *ZkRegistry) Initialize() {
 	z.switcherMap = make(map[string]chan bool)
 	z.registeredServiceMap = make(map[string]*motan.URL)
 	z.availableServiceMap = make(map[string]*motan.URL)
-	addrs := motan.TrimSplit(z.url.GetAddressStr(), ",")
+	var addrs []string
+	if len(z.url.Host) > 0 && z.url.Port > 0 {
+		addrs = append(addrs, z.url.GetAddressStr())
+	} else if addrString, exist := z.url.Parameters[motan.AddressKey]; exist {
+		addrs = motan.TrimSplit(addrString, ",")
+	}
 	c, ch, err := zk.Connect(addrs, z.sessionTimeout)
 	if err != nil {
 		vlog.Errorf("[ZkRegistry] connect server error. err:%v", err)
