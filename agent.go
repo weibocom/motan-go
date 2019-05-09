@@ -496,8 +496,6 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	httpResponse := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseRequest(httpRequest)
 	defer fasthttp.ReleaseResponse(httpResponse)
-	httpRequest.Header.DisableNormalizing()
-	httpResponse.Header.DisableNormalizing()
 	httpRequest.Header.Del("Host")
 	httpRequest.SetHost(originalService)
 	httpRequest.URI().SetPath(request.GetMethod())
