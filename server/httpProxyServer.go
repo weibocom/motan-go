@@ -74,6 +74,9 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
 		defer core.HandlePanic(func() {
 			vlog.Errorf("Http proxy handler for [%s] panic", string(ctx.Request.URI().String()))
+			ctx.Response.Header.SetServer(HTTPProxyServerName)
+			ctx.Response.SetStatusCode(fasthttp.StatusBadGateway)
+			ctx.Response.SetBodyString("err_msg: http proxy panic")
 		})
 		httpReq := &ctx.Request
 		if ctx.IsConnect() {
@@ -214,7 +217,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 		}
 		vlog.Errorf("Http rpc proxy call failed: %s", exception.ErrMsg)
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
-		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetStatusCode(fasthttp.StatusBadGateway)
 		ctx.Response.SetBodyString("err_msg: " + exception.ErrMsg)
 		return
 	}
@@ -224,7 +227,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	if err != nil {
 		vlog.Errorf("Deserialize rpc response failed: %s", err.Error())
 		ctx.Response.Header.SetServer(HTTPProxyServerName)
-		ctx.Response.Header.SetStatusCode(fasthttp.StatusBadGateway)
+		ctx.Response.SetStatusCode(fasthttp.StatusBadGateway)
 		ctx.Response.SetBodyString("err_msg: " + err.Error())
 		return
 	}

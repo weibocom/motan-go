@@ -251,6 +251,12 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
+		request.GetAttachments().Range(func(k, v string) bool {
+			if strings.HasPrefix(k, "M_") {
+				httpReq.Header.Add(strings.Replace(k, "M_", "MOTAN-", -1), v)
+			}
+			return true
+		})
 		httpReq.Header.Del("Connection")
 		httpReq.Header.Set("X-Forwarded-For", ip)
 		if len(bodyBytes) != 0 {
