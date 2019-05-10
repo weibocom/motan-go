@@ -261,11 +261,13 @@ func newDefaultLog() Logger {
 }
 
 func newRotateHook(logName string) *RotateWriter {
-	return &RotateWriter{
+	rotator := &RotateWriter{
 		LocalTime:     true,
 		RotatePerHour: *rotatePerHour,
 		Filename:      filepath.Join(*logDir, logName),
 	}
+	_, _ = rotator.Write(nil)
+	return rotator
 }
 
 func newZapLogger(logName string) (*zap.Logger, zap.AtomicLevel) {

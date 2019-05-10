@@ -413,7 +413,7 @@ func StatProcess(w http.ResponseWriter) {
 }
 
 func oneDecimal(value float64) float64 {
-	return math.Trunc(value*10+5) / 10
+	return math.Trunc(value*10+0.5) / 10
 }
 
 func StatOpenFiles(w http.ResponseWriter) {
