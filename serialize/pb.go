@@ -19,7 +19,7 @@ var (
 type GrpcPbSerialization struct{}
 
 func (g *GrpcPbSerialization) GetSerialNum() int {
-	return 1
+	return GrpcPbNumber
 }
 
 func (g *GrpcPbSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
@@ -84,7 +84,7 @@ func (g *GrpcPbSerialization) DeSerialize(b []byte, v interface{}) (interface{},
 type PbSerialization struct{}
 
 func (p *PbSerialization) GetSerialNum() int {
-	return 5
+	return PbNumber
 }
 
 func (p *PbSerialization) Serialize(v interface{}) ([]byte, error) {

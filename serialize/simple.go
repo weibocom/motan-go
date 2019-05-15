@@ -40,7 +40,7 @@ type SimpleSerialization struct {
 }
 
 func (s *SimpleSerialization) GetSerialNum() int {
-	return 6
+	return SimpleNumber
 }
 
 func (s *SimpleSerialization) Serialize(v interface{}) ([]byte, error) {
