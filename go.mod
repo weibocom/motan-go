@@ -1,9 +1,11 @@
 module github.com/weibocom/motan-go
 
 require (
+	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
 	github.com/beberlei/fastcgi-serve v0.0.0-20151230120321-4676005f65b7
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/golang/protobuf v1.2.0
 	github.com/juju/ratelimit v1.0.1
 	github.com/kr/pretty v0.1.0 // indirect
@@ -13,9 +15,11 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec
 	github.com/shirou/gopsutil v2.18.12+incompatible
+	github.com/shirou/w32 v0.0.0-20160930032740-bb4de0191aa4 // indirect
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/valyala/fasthttp v1.2.0
+	github.com/weibreeze/breeze-go v0.0.1
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v0.0.0-00010101000000-000000000000
