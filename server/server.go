@@ -86,7 +86,7 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extension
 	// TODO heartbeat or 200 switcher
 	d.exported = true
 	d.available = true
-	vlog.Infof("export url %s success.\n", d.url.GetIdentity())
+	vlog.Infof("export url %s success.", d.url.GetIdentity())
 	return nil
 }
 
@@ -164,7 +164,7 @@ func (d *DefaultMessageHandler) GetProvider(serviceName string) motan.Provider {
 func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
-		vlog.Errorf("provider call panic. req:%s\n", motan.GetReqInfo(request))
+		vlog.Errorf("provider call panic. req:%s", motan.GetReqInfo(request))
 	})
 	p := d.providers[request.GetServiceName()]
 	if p != nil {
@@ -172,7 +172,7 @@ func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s\n", motan.GetReqInfo(request))
+	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
 }
 

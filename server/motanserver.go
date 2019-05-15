@@ -31,14 +31,14 @@ func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler,
 	}
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		vlog.Errorf("listen port:%d fail. err: %v\n", m.URL.Port, err)
+		vlog.Errorf("listen port:%d fail. err: %v", m.URL.Port, err)
 		return err
 	}
 	m.listener = lis
 	m.handler = handler
 	m.extFactory = extFactory
 	m.proxy = proxy
-	vlog.Infof("motan server is started. port:%d\n", m.URL.Port)
+	vlog.Infof("motan server is started. port:%d", m.URL.Port)
 	if block {
 		m.run()
 	} else {
@@ -71,9 +71,9 @@ func (m *MotanServer) Destroy() {
 	err := m.listener.Close()
 	if err == nil {
 		m.isDestroyed <- true
-		vlog.Infof("motan server destroy success.url %v\n", m.URL)
+		vlog.Infof("motan server destroy success.url %v", m.URL)
 	} else {
-		vlog.Errorf("motan server destroy fail.url %v, err :%s\n", m.URL, err.Error())
+		vlog.Errorf("motan server destroy fail.url %v, err :%s", m.URL, err.Error())
 	}
 }
 
@@ -86,7 +86,7 @@ func (m *MotanServer) run() {
 				vlog.Infof("Motan agent server been Destroyed and stoped.")
 				return
 			default:
-				vlog.Errorf("motan server accept from port %v fail. err:%s\n", m.listener.Addr(), err.Error())
+				vlog.Errorf("motan server accept from port %v fail. err:%s", m.listener.Addr(), err.Error())
 			}
 		} else {
 			_ = conn.(*net.TCPConn).SetNoDelay(true)
@@ -111,7 +111,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 		request, t, err := mpro.DecodeWithTime(buf)
 		if err != nil {
 			if err.Error() != "EOF" {
-				vlog.Warningf("decode motan message fail! con:%s, err:%s\n.", conn.RemoteAddr().String(), err.Error())
+				vlog.Warningf("decode motan message fail! con:%s, err:%s.", conn.RemoteAddr().String(), err.Error())
 			}
 			break
 		}
@@ -182,7 +182,7 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
 	_, err := conn.Write(resBuf.Bytes())
 	if err != nil {
-		vlog.Errorf("connection will close. conn: %s, err:%s\n", conn.RemoteAddr().String(), err.Error())
+		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
 	}
 	if tc != nil {

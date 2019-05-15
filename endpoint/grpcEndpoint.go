@@ -24,7 +24,7 @@ const (
 func (g *GrpcEndPoint) Initialize() {
 	grpcconn, err := grpc.Dial((g.url.Host + ":" + strconv.Itoa((int)(g.url.Port))), grpc.WithInsecure(), grpc.WithCodec(&agentCodec{}))
 	if err != nil {
-		vlog.Errorf("connect to grpc fail! url:%s, err:%s\n", g.url.GetIdentity(), err.Error())
+		vlog.Errorf("connect to grpc fail! url:%s, err:%s", g.url.GetIdentity(), err.Error())
 	}
 	g.grpcConn = grpcconn
 }
@@ -50,7 +50,7 @@ func (g *GrpcEndPoint) Call(request motan.Request) motan.Response {
 	} else if ba, ok := request.GetArguments()[0].([]byte); ok {
 		in = ba
 	} else {
-		vlog.Errorf("can not process argument in grpc endpoint. argument:%v\n", request.GetArguments()[0])
+		vlog.Errorf("can not process argument in grpc endpoint. argument:%v", request.GetArguments()[0])
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "grpc argument must be []byte", ErrType: motan.ServiceException})
 	}
 	out := new(OutMsg)

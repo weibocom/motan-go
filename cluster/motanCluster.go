@@ -60,7 +60,7 @@ func (m *MotanCluster) SetURL(url *motan.URL) {
 func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster call panic", ErrType: motan.ServiceException})
-		vlog.Errorf("cluster call panic. req:%s\n", motan.GetReqInfo(request))
+		vlog.Errorf("cluster call panic. req:%s", motan.GetReqInfo(request))
 	})
 	if m.available {
 		return m.clusterFilter.Filter(m.HaStrategy, m.LoadBalance, request)
@@ -90,7 +90,7 @@ func (m *MotanCluster) initCluster() bool {
 	// parse registry and subscribe
 	m.parseRegistry()
 
-	vlog.Infof("init MotanCluster %s\n", m.GetIdentity())
+	vlog.Infof("init MotanCluster %s", m.GetIdentity())
 
 	return true
 }
@@ -117,7 +117,7 @@ func (m *MotanCluster) AddRegistry(registry motan.Registry) {
 	m.Registries = append(m.Registries, registry)
 }
 func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
-	vlog.Infof("cluster %s receive notify size %d. \n", m.GetIdentity(), len(urls))
+	vlog.Infof("cluster %s receive notify size %d. ", m.GetIdentity(), len(urls))
 	m.notifyLock.Lock()
 	defer m.notifyLock.Unlock()
 	// process weight if has
@@ -135,9 +135,9 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			vlog.Errorln("cluster receive nil url!")
 			continue
 		}
-		vlog.Infof("cluster %s received notify url:%s:%d\n", m.GetIdentity(), u.Host, u.Port)
+		vlog.Infof("cluster %s received notify url:%s:%d", m.GetIdentity(), u.Host, u.Port)
 		if !u.CanServe(m.url) {
-			vlog.Infof("cluster notify:can not use server:%+v\n", u)
+			vlog.Infof("cluster notify:can not use server:%+v", u)
 			continue
 		}
 		var ep motan.EndPoint
@@ -154,7 +154,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 				ep.SetProxy(m.proxy)
 				serialization := motan.GetSerialization(newURL, m.extFactory)
 				if serialization == nil {
-					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v\n", m.url)
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v", m.url)
 				} else {
 					ep.SetSerialization(serialization)
 				}
@@ -172,7 +172,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			delete(m.registryRefers, registryURL.GetIdentity())
 		} else {
 			// notify will ignored if endpoints size is 0 in single regisry mode
-			vlog.Infof("cluster %s notify endpoint is 0. notify ignored.\n", m.GetIdentity())
+			vlog.Infof("cluster %s notify endpoint is 0. notify ignored.", m.GetIdentity())
 			return
 		}
 	} else {
@@ -224,13 +224,13 @@ func (m *MotanCluster) Destroy() {
 	if !m.closed {
 		m.notifyLock.Lock()
 		defer m.notifyLock.Unlock()
-		vlog.Infof("cluster %s will destroy.\n", m.url.GetIdentity())
+		vlog.Infof("cluster %s will destroy.", m.url.GetIdentity())
 		for _, r := range m.Registries {
-			vlog.Infof("unsubscribe from registry %s .\n", r.GetURL().GetIdentity())
+			vlog.Infof("unsubscribe from registry %s .", r.GetURL().GetIdentity())
 			r.Unsubscribe(m.url, m)
 		}
 		for _, e := range m.Refers {
-			vlog.Infof("destroy endpoint %s .\n", e.GetURL().GetIdentity())
+			vlog.Infof("destroy endpoint %s .", e.GetURL().GetIdentity())
 			e.Destroy()
 		}
 		m.closed = true
