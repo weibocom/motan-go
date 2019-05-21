@@ -48,6 +48,9 @@ const (
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
+	UnixSockKey             = "unixSock"
+	ManagementUnixSockKey   = "managementUnixSock"
+	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 )
 
 // nodeType

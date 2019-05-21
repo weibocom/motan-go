@@ -24,14 +24,14 @@ import (
 )
 
 const (
-	defaultPort       = 9981
-	defaultEport      = 9982
-	defaultHport      = 9983
-	defaultMport      = 8002
-	defaultPidFile    = "./agent.pid"
-	defaultAgentGroup = "default_agent_group"
-	defaultRuntimeDir = "./agent_runtime"
-	defaultStatusSnap = "status"
+	defaultPort             = 9981
+	defaultReverseProxyPort = 9982
+	defaultHTTPProxyPort    = 9983
+	defaultManagementPort   = 8002
+	defaultPidFile          = "./agent.pid"
+	defaultAgentGroup       = "default_agent_group"
+	defaultRuntimeDir       = "./agent_runtime"
+	defaultStatusSnap       = "status"
 )
 
 type Agent struct {
@@ -234,7 +234,7 @@ func (a *Agent) initParam() {
 		mPort = section["mport"].(int)
 	}
 	if mPort == 0 {
-		mPort = defaultMport
+		mPort = defaultManagementPort
 	}
 
 	ePort := *motan.Eport
@@ -242,7 +242,7 @@ func (a *Agent) initParam() {
 		ePort = section["eport"].(int)
 	}
 	if ePort == 0 {
-		ePort = defaultEport
+		ePort = defaultReverseProxyPort
 	}
 
 	hPort := *motan.Hport
@@ -250,7 +250,7 @@ func (a *Agent) initParam() {
 		hPort = section["hport"].(int)
 	}
 	if hPort == 0 {
-		hPort = defaultHport
+		hPort = defaultHTTPProxyPort
 	}
 
 	pidFile := *motan.Pidfile
@@ -737,6 +737,24 @@ func (a *Agent) startMServer() {
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
+
+	if managementUnixSockAddr := a.agentURL.GetParam(motan.ManagementUnixSockKey, ""); managementUnixSockAddr != "" {
+		listener, err := motan.ListenUnixSock(managementUnixSockAddr)
+		if err != nil {
+			fmt.Printf("start listen manage unix sock fail! err:%s\n", err.Error())
+			vlog.Warningf("start listen manage unix sock fail! err:%s\n", err.Error())
+			return
+		}
+
+		ms := http.Server{}
+		msErr := ms.Serve(listener)
+		if msErr != nil {
+			fmt.Printf("start serve manage unix sock fail! err:%s\n", msErr.Error())
+			vlog.Warningf("start serve manage unix sock fail! err:%s\n", msErr.Error())
+		}
+		return
+	}
+
 	vlog.Infof("start listen manage port %d ...", a.mport)
 	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
 	if err != nil {
