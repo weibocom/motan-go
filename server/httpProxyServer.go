@@ -141,6 +141,24 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		Name:                  HTTPProxyServerName,
 		NoDefaultServerHeader: true,
 	}
+
+	if httpProxyUnixSockAddr := s.url.GetParam(core.HTTPProxyUnixSockKey, ""); httpProxyUnixSockAddr != "" {
+		listener, err := core.ListenUnixSock(httpProxyUnixSockAddr)
+		if err != nil {
+			vlog.Errorf("listenUnixSock fail. err:%v", err)
+			return err
+		}
+
+		if block {
+			s.httpServer.Serve(listener)
+		} else {
+			go func() {
+				s.httpServer.Serve(listener)
+			}()
+		}
+		return nil
+	}
+
 	if block {
 		s.httpServer.ListenAndServe(s.url.Host + ":" + s.url.GetPortStr())
 	} else {

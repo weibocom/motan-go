@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math/rand"
 	"net"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -155,4 +156,20 @@ func TrimSplit(s string, sep string) []string {
 	}
 	a[i] = s
 	return a[:i+1]
+}
+
+// ListenUnixSock try to listen a unix socket address
+// this method using by create motan agent server, management server and http proxy server
+func ListenUnixSock(unixSockAddr string) (net.Listener, error) {
+	if err := os.RemoveAll(unixSockAddr); err != nil {
+		vlog.Errorf("listenUnixSock err, remove old unix sock file fail. err: %v", err)
+		return nil, err
+	}
+
+	listener, err := net.Listen("unix", unixSockAddr)
+	if err != nil {
+		vlog.Errorf("listenUnixSock err, listen unix sock fail. err:%v", err)
+		return nil, err
+	}
+	return listener, nil
 }

@@ -25,15 +25,28 @@ type MotanServer struct {
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
-	addr := ":" + strconv.Itoa(int(m.URL.Port))
-	if registry.IsAgent(m.URL) {
-		addr = m.URL.Host + addr
+
+	var lis net.Listener
+	if unixSockAddr := m.URL.GetParam(motan.UnixSockKey, ""); unixSockAddr != "" {
+		listener, err := motan.ListenUnixSock(unixSockAddr)
+		if err != nil {
+			vlog.Errorf("listenUnixSock fail. err:%v", err)
+			return err
+		}
+		lis = listener
+	} else {
+		addr := ":" + strconv.Itoa(int(m.URL.Port))
+		if registry.IsAgent(m.URL) {
+			addr = m.URL.Host + addr
+		}
+		lisTmp, err := net.Listen("tcp", addr)
+		if err != nil {
+			vlog.Errorf("listen port:%d fail. err: %v", m.URL.Port, err)
+			return err
+		}
+		lis = lisTmp
 	}
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		vlog.Errorf("listen port:%d fail. err: %v", m.URL.Port, err)
-		return err
-	}
+
 	m.listener = lis
 	m.handler = handler
 	m.extFactory = extFactory
@@ -89,7 +102,9 @@ func (m *MotanServer) run() {
 				vlog.Errorf("motan server accept from port %v fail. err:%s", m.listener.Addr(), err.Error())
 			}
 		} else {
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
 			go m.handleConn(conn)
 		}
 	}
