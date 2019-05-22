@@ -31,6 +31,7 @@ const (
 const (
 	MotanMagic      = 0xf1f1
 	HeaderLength    = 13
+	Version2        = 1
 	defaultProtocol = "motan2"
 )
 const (
@@ -311,13 +312,18 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 	}
 	mn := binary.BigEndian.Uint16(temp[:2])
 	if mn != MotanMagic {
-		vlog.Errorf("worng magic num:%d, err:%v", mn, err)
+		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
 
 	header := &Header{Magic: MotanMagic}
 	header.MsgType = temp[2]
 	header.VersionStatus = temp[3]
+	version := header.GetVersion()
+	if version != Version2 {
+		vlog.Errorf("unsupported protocol version number: %d", version)
+		return nil, start, ErrVersion
+	}
 	header.Serialize = temp[4]
 	header.RequestID = binary.BigEndian.Uint64(temp[5:])
 

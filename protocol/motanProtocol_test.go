@@ -127,7 +127,7 @@ func check(f func() int, ev int, t *testing.T) {
 
 func TestEncode(t *testing.T) {
 	h := &Header{}
-	h.SetVersion(7)
+	h.SetVersion(Version2)
 	h.SetStatus(6)
 	h.SetOneWay(true)
 	h.SetSerialize(5)
@@ -153,7 +153,7 @@ func TestEncode(t *testing.T) {
 	assertTrue(newMsg.Header.IsHeartbeat(), "heartbeat", t)
 	assertTrue(newMsg.Header.IsProxy(), "proxy", t)
 	assertTrue(newMsg.Header.isRequest(), "request", t)
-	assertTrue(newMsg.Header.GetVersion() == 7, "version", t)
+	assertTrue(newMsg.Header.GetVersion() == Version2, "version", t)
 	assertTrue(newMsg.Header.GetSerialize() == 5, "serialize", t)
 	assertTrue(newMsg.Header.GetStatus() == 6, "status", t)
 	assertTrue(newMsg.Metadata.LoadOrEmpty("k1") == "v1", "meta", t)
