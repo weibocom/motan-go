@@ -57,12 +57,12 @@ func GetMotanServerContext(confFile string) *MSContext {
 			fmt.Println("get config of \"motan-server\" fail! err " + err.Error())
 		}
 
-		logdir := ""
+		logDir := ""
 		if section != nil && section["log_dir"] != nil {
-			logdir = section["log_dir"].(string)
+			logDir = section["log_dir"].(string)
 		}
-		if logdir == "" {
-			logdir = "."
+		if logDir == "" {
+			logDir = "."
 		}
 		logAsync := ""
 		if section != nil && section["log_async"] != nil {
@@ -76,7 +76,11 @@ func GetMotanServerContext(confFile string) *MSContext {
 		if section != nil && section["rotate_per_hour"] != nil {
 			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
 		}
-		initLog(logdir, logAsync, logStructured, rotatePerHour)
+		logLevel := ""
+		if section != nil && section["log_level"] != nil {
+			logLevel = section["log_level"].(string)
+		}
+		initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
 		registerSwitchers(ms.context)
 	}
 	return ms

@@ -282,8 +282,9 @@ type StatProcessEntity struct {
 	NumFDs         int32       `json:"numFds"`
 	CpuPercent     float64     `json:"cpuPercent"`
 	MemoryPercent  float32     `json:"memoryPercent"`
-	CreateTime     string      `json:"createTime"`
+	UsedMemory     float64     `json:"usedMemory(MB)"`
 	OpenFilesCount int32       `json:"openFilesCount"`
+	CreateTime     string      `json:"createTime"`
 	IO             *StatIOInfo `json:"io"`
 	Connections    *StatConn   `json:"connections"`
 }
@@ -385,6 +386,7 @@ func StatProcess(w http.ResponseWriter) {
 		}
 	}
 	createTime, _ := p.CreateTime()
+	memInfo, _ := p.MemoryInfo()
 	memoryPercent, _ := p.MemoryPercent()
 	openFiles, _ := p.OpenFiles()
 	var ioCounters *StatIOInfo
@@ -404,6 +406,7 @@ func StatProcess(w http.ResponseWriter) {
 		CpuPercent:     oneDecimal(cpuPercent),
 		CreateTime:     time.Unix(createTime/1000, 0).String(),
 		MemoryPercent:  float32(oneDecimal(float64(memoryPercent))),
+		UsedMemory:     oneDecimal(float64(memInfo.RSS) / 1000000),
 		IO:             ioCounters,
 		OpenFilesCount: int32(len(openFiles)),
 		Connections:    &connInfo,
