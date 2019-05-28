@@ -18,6 +18,7 @@ var (
 	once           sync.Once
 	logDir         = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
 	logAsync       = flag.Bool("log_async", true, "If false, write log sync, default is true")
+	logLevel       = flag.String("log_level", "info", "Init log level, default is info.")
 	logStructured  = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
 	rotatePerHour  = flag.Bool("rotate_per_hour", true, "")
 )
@@ -239,7 +240,12 @@ func newDefaultLog() Logger {
 		EncodeTime:   zapcore.ISO8601TimeEncoder,
 		EncodeCaller: zapcore.ShortCallerEncoder,
 	}
-	level := zap.NewAtomicLevel()
+	var ll LogLevel
+	if err := ll.Set(*logLevel); err != nil {
+		ll = defaultLogLevel
+		Warningf("init log level failed: %s, use default level: %s", err.Error(), defaultLogLevel.String())
+	}
+	level := zap.NewAtomicLevelAt(zapcore.Level(ll))
 	pName := filepath.Base(os.Args[0])
 	zapCore := zapcore.NewCore(
 		zapcore.NewConsoleEncoder(encoderConfig),
