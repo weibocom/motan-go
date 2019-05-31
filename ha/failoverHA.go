@@ -41,8 +41,9 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 		lastErr = response.GetException()
 		vlog.Warningf("FailOverHA call fail! url:%s, err:%+v", ep.GetURL().GetIdentity(), lastErr)
 	}
-	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("FailOverHA call fail %d times. Exception: %s", retries+1, lastErr.ErrMsg))
-
+	errorResponse := getErrorResponse(request.GetRequestID(), fmt.Sprintf("FailOverHA call fail %d times. Exception: %s", retries+1, lastErr.ErrMsg))
+	errorResponse.Exception.ErrCode = lastErr.ErrCode
+	return errorResponse
 }
 
 func getErrorResponse(requestID uint64, errMsg string) *motan.MotanResponse {

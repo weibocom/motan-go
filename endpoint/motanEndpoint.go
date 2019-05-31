@@ -133,7 +133,11 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	if err != nil {
 		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s", m.url.GetAddressStr(), err.Error())
 		m.recordErrAndKeepalive()
-		return m.defaultErrMotanResponse(request, "can not get a channel")
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+			ErrCode: motan.ENoChannel,
+			ErrMsg:  "can not get a channel",
+			ErrType: motan.ServiceException,
+		})
 	}
 	deadline := m.GetRequestTimeout(request)
 	// do call
