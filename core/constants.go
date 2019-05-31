@@ -79,4 +79,5 @@ const (
 // errorCodes
 const (
 	ENoEndpoints = 1001
+	ENoChannel   = 1002
 )
