@@ -104,6 +104,7 @@ func (m *MotanServer) run() {
 		} else {
 			if c, ok := conn.(*net.TCPConn); ok {
 				c.SetNoDelay(true)
+				c.SetKeepAlive(true)
 			}
 			go m.handleConn(conn)
 		}
