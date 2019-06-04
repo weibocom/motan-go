@@ -32,7 +32,9 @@ var (
 
 type MotanEndpoint struct {
 	url                       *motan.URL
+	lock                      sync.Mutex
 	channels                  *ChannelPool
+	destroyed                 bool
 	destroyCh                 chan struct{}
 	available                 bool
 	errorCount                uint32
@@ -42,8 +44,9 @@ type MotanEndpoint struct {
 	requestTimeoutMillisecond int64
 
 	// for heartbeat requestID
-	keepaliveID   uint64
-	serialization motan.Serialization
+	keepaliveID      uint64
+	keepaliveRunning bool
+	serialization    motan.Serialization
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
@@ -101,8 +104,14 @@ func (m *MotanEndpoint) Initialize() {
 }
 
 func (m *MotanEndpoint) Destroy() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if m.destroyed {
+		return
+	}
 	m.setAvailable(false)
 	m.destroyCh <- struct{}{}
+	m.destroyed = true
 	if m.channels != nil {
 		vlog.Infof("motan2 endpoint %s will destroyed", m.url.GetAddressStr())
 		m.channels.Close()
@@ -205,6 +214,26 @@ func (m *MotanEndpoint) resetErr() {
 }
 
 func (m *MotanEndpoint) keepalive() {
+	m.lock.Lock()
+	// if the endpoint has been destroyed, we should not do keepalive
+	if m.destroyed {
+		m.lock.Unlock()
+		return
+	}
+	// ensure only one keepalive handler
+	if m.keepaliveRunning {
+		m.lock.Unlock()
+		return
+	}
+	m.keepaliveRunning = true
+	m.lock.Unlock()
+
+	defer func() {
+		m.lock.Lock()
+		m.keepaliveRunning = false
+		m.lock.Unlock()
+	}()
+
 	defer motan.HandlePanic(nil)
 	ticker := time.NewTicker(m.keepaliveInterval)
 	defer ticker.Stop()
