@@ -37,6 +37,7 @@ type MotanEndpoint struct {
 	url                       *motan.URL
 	lock                      sync.Mutex
 	channels                  *ChannelPool
+	destroyed                 bool
 	destroyCh                 chan struct{}
 	available                 bool
 	errorCount                uint32
@@ -46,7 +47,6 @@ type MotanEndpoint struct {
 	initialized               *motan.AtomicBool
 	channelPoolCheckCh        chan struct{}
 	lastChannelUsingTime      atomic.Value
-	destroyed                 bool
 	requestTimeoutMillisecond int64
 
 	// for heartbeat requestID
@@ -90,12 +90,15 @@ func (m *MotanEndpoint) checkChannelUsing() {
 
 func (m *MotanEndpoint) Initialize() {
 	m.initialized = motan.NewAtomicBool(false)
+	m.channelPoolCheckCh = make(chan struct{}, 1)
 	m.lastChannelUsingTime.Store(time.Now())
 	isLazyInit := false
 	// TODO: lazyInit should be a channel connect number, when set to 0, will using lazy init
 	if lazyInit, err := strconv.ParseBool(m.url.GetParam(motan.LazyInitEndpointKey, "false")); err == nil {
 		isLazyInit = lazyInit
 	}
+	isLazyInit = false
+	// TODO: Lazy init now has a problem of idle close, we should not use it now
 	if !isLazyInit {
 		m.doInitialize()
 		return
@@ -162,6 +165,7 @@ func (m *MotanEndpoint) Destroy() {
 	}
 	m.setAvailable(false)
 	m.destroyCh <- struct{}{}
+	m.channelPoolCheckCh <- struct{}{}
 	m.destroyed = true
 	if m.channels != nil {
 		vlog.Infof("motan2 endpoint %s will destroyed", m.url.GetAddressStr())
