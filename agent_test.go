@@ -1,6 +1,7 @@
 package motan
 
 import (
+	"bytes"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -25,6 +26,17 @@ const (
 )
 
 var proxyClient *http.Client
+
+func TestHTTPProxyBodySize(t *testing.T) {
+	body := bytes.NewReader(make([]byte, 1000))
+	resp, _ := proxyClient.Post("http://test.domain/tst/test", "application/octet-stream", body)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	body = bytes.NewReader(make([]byte, 1001))
+	resp, _ = proxyClient.Post("http://test.domain/tst/test", "application/octet-stream", body)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
 
 func TestHTTPProxy(t *testing.T) {
 	wg := &sync.WaitGroup{}

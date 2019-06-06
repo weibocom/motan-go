@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -19,14 +20,18 @@ import (
 )
 
 const (
-	HTTPProxyServerName = "motan"
-	DefaultTimeout      = 5 * time.Second
+	HTTPProxyServerName       = "motan"
+	DefaultTimeout            = 5 * time.Second
+	DefaultKeepaliveTimeout   = 5 * time.Second
+	DefaultMaxRequestBodySize = math.MaxInt32
 )
 
 const (
-	HTTPProxyKeepaliveKey     = "httpProxyKeepalive"
-	HTTPProxyDefaultDomainKey = "httpProxyDefaultDomain"
-	HTTPProxyTimeoutKey       = "httpProxyTimeout"
+	HTTPProxyKeepaliveKey          = "httpProxyKeepalive"
+	HTTPProxyKeepaliveTimeoutKey   = "httpProxyKeepaliveTimeout"
+	HTTPProxyDefaultDomainKey      = "httpProxyDefaultDomain"
+	HTTPProxyTimeoutKey            = "httpProxyTimeout"
+	HTTPProxyMaxRequestBodySizeKey = "httpProxyMaxRequestBodySize"
 )
 
 type HTTPClusterGetter interface {
@@ -58,6 +63,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 	s.deny = append(s.deny, "localhost:"+s.url.GetPortStr())
 	s.deny = append(s.deny, core.GetLocalIP()+":"+s.url.GetPortStr())
 	proxyTimeout := s.url.GetTimeDuration(HTTPProxyTimeoutKey, time.Millisecond, DefaultTimeout)
+	keepaliveTimeout := s.url.GetTimeDuration(HTTPProxyKeepaliveTimeoutKey, time.Millisecond, DefaultKeepaliveTimeout)
 	s.httpClient = &fasthttp.Client{
 		Name: "motan",
 		Dial: func(addr string) (net.Conn, error) {
@@ -67,8 +73,9 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 			}
 			return c, nil
 		},
-		ReadTimeout:  proxyTimeout,
-		WriteTimeout: proxyTimeout,
+		MaxIdleConnDuration: keepaliveTimeout,
+		ReadTimeout:         proxyTimeout,
+		WriteTimeout:        proxyTimeout,
 	}
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
@@ -136,10 +143,12 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		s.doHTTPProxy(ctx)
 	}
 
+	maxRequestBodySize := s.url.GetPositiveIntValue(HTTPProxyMaxRequestBodySizeKey, DefaultMaxRequestBodySize)
 	s.httpServer = &fasthttp.Server{
 		Handler:               s.httpHandler,
 		Name:                  HTTPProxyServerName,
 		NoDefaultServerHeader: true,
+		MaxRequestBodySize:    int(maxRequestBodySize),
 	}
 
 	if httpProxyUnixSockAddr := s.url.GetParam(core.HTTPProxyUnixSockKey, ""); httpProxyUnixSockAddr != "" {
