@@ -999,6 +999,8 @@ func (c *registryGroupServiceCacheInfo) refreshServices() {
 		return
 	}
 	services, err := c.sr.DiscoverAllServices(c.group)
+	// update time avoid retry when err always not nil
+	c.lastUpdTime.Store(time.Now())
 	if err != nil {
 		return
 	}
@@ -1008,7 +1010,6 @@ func (c *registryGroupServiceCacheInfo) refreshServices() {
 		serviceMap[service] = service
 	}
 	c.serviceMap.Store(serviceMap)
-	c.lastUpdTime.Store(time.Now())
 }
 
 type registryGroupServiceCache struct {

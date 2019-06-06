@@ -14,6 +14,7 @@ import (
 const (
 	Random     = "random"
 	Roundrobin = "roundrobin"
+	Backup     = "backup"
 )
 
 const (

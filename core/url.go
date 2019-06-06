@@ -100,6 +100,16 @@ func (u *URL) GetInt(key string) (int64, bool) {
 	return 0, false
 }
 
+func (u *URL) GetStringValue(key string) string {
+	return u.GetStringParamsWithDefault(key, "")
+}
+
+func (u *URL) GetBoolValue(key string) bool {
+	strVal := u.GetStringValue(key)
+	b, _ := strconv.ParseBool(strVal)
+	return b
+}
+
 func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {
 	var ret string
 	if u.Parameters != nil {

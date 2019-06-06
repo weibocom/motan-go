@@ -52,6 +52,7 @@ const (
 	UnixSockKey             = "unixSock"
 	ManagementUnixSockKey   = "managementUnixSock"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
+	GroupLoadBalanceKey     = "groupLoadbalance"
 )
 
 // nodeType

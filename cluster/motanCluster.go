@@ -12,6 +12,7 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/lb"
 	"github.com/weibocom/motan-go/log"
 )
 
@@ -475,6 +476,22 @@ const (
 	backupGroupDelimiter  = ","
 )
 
+func GetAllMatchedGroup(group string, gr motan.GroupDiscoverableRegistry) []string {
+	regex, err := regexp.Compile("^" + strings.Replace(group, clusterIdcPlaceHolder, "(.*)", 1) + "$")
+	if err != nil {
+		vlog.Errorf("Unexpected group %s", group)
+		return nil
+	}
+	matchedGroup := make([]string, 0, 3)
+	groups := motan.GetAllGroups(gr)
+	for _, group := range groups {
+		if regex.MatchString(group) {
+			matchedGroup = append(matchedGroup, group)
+		}
+	}
+	return matchedGroup
+}
+
 // DetermineGroupConfig redeclare DetermineGroupConfig
 var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) GroupConfigInfo {
 	registry := registries[0]
@@ -485,11 +502,16 @@ var DetermineGroupConfig = func(url *motan.URL, registries []motan.Registry) Gro
 			for _, group := range groupList {
 				groupConfigList = append(groupConfigList, GroupConfig{group: group})
 			}
-			return GroupConfigInfo{GroupConfigs: groupConfigList, UseBackupGroup: true}
+			glb := url.GetStringValue(motan.GroupLoadBalanceKey)
+			useBackupGroup := true
+			if glb != "" && glb != lb.Backup {
+				useBackupGroup = false
+			}
+			return GroupConfigInfo{GroupConfigs: groupConfigList, UseBackupGroup: useBackupGroup}
 		}
 	}
 
-	if strings.Index(url.Group, clusterIdcPlaceHolder) == -1 {
+	if !strings.Contains(url.Group, clusterIdcPlaceHolder) {
 		return GroupConfigInfo{GroupConfigs: []GroupConfig{{group: url.Group}}}
 	}
 
@@ -609,7 +631,7 @@ func (p *PingDynamicGroup) GetGroupConfigs() []GroupConfig {
 		pingPrivileged = false
 	}
 
-	var totalRtt int64 = 0
+	var totalRtt int64
 	for group, nodes := range p.groupNodes {
 		pinger, err := motan.NewPinger(nodes[rand.Intn(len(nodes))].Host, 5, 1*time.Second, 1024, pingPrivileged)
 		if err != nil {
