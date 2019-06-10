@@ -34,28 +34,28 @@ func TestBreezeMessage(t *testing.T) {
 
 func getTestMsg(num int) *breeze.TestMsg {
 	tsm := getTestSubMsg(num)
-	t := &breeze.TestMsg{I: num, S: "jiernoce"}
-	t.M = make(map[string]*breeze.TestSubMsg)
-	t.M["m1"] = tsm
-	t.A = make([]*breeze.TestSubMsg, 0, 12)
-	t.A = append(t.A, tsm)
+	t := &breeze.TestMsg{MyInt: int32(num), MyString: "jiernoce"}
+	t.MyMap = make(map[string]*breeze.TestSubMsg)
+	t.MyMap["m1"] = tsm
+	t.MyArray = make([]*breeze.TestSubMsg, 0, 12)
+	t.MyArray = append(t.MyArray, tsm)
 	return t
 }
 
 func getTestSubMsg(num int) *breeze.TestSubMsg {
-	tsm := &breeze.TestSubMsg{S: "uoiwer", I: num * 2, I64: 234, F32: 23.434, F64: 8923.234234, Byte: 5, Bytes: []byte("ipower"), B: true}
+	tsm := &breeze.TestSubMsg{MyString: "uoiwer", MyInt: int32(num * 2), MyInt64: 234, MyFloat32: 23.434, MyFloat64: 8923.234234, MyByte: 5, MyBytes: []byte("ipower"), MyBool: true}
 	im1 := make(map[string][]byte, 16)
 	im1["jdie"] = []byte("ierjkkkd")
 	im1["jddfwwie"] = []byte("ieere9943rjkkkd")
-	tsm.Map1 = im1
-	il := make([]interface{}, 0, 12)
+	tsm.MyMap1 = im1
+	il := make([]int32, 0, 12)
 	il = append(il, 34)
 	il = append(il, 56)
-	im2 := make(map[int][]interface{}, 16)
+	im2 := make(map[int32][]int32, 16)
 	im2[12] = il
-	im2[3] = []interface{}{34, 45, 657}
-	im2[6] = []interface{}{23, 66}
-	tsm.Map2 = im2
-	tsm.List = []int{234, 6456, 234, 6859}
+	im2[3] = []int32{34, 45, 657}
+	im2[6] = []int32{23, 66}
+	tsm.MyMap2 = im2
+	tsm.MyArray = []int32{234, 6456, 234, 6859}
 	return tsm
 }
