@@ -163,6 +163,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 		}
 		// with http cluster we prepare the group and just do not use backup group
 		originalGroup := url.Group
+		defaultGroupLoadBalance := lb.Backup
 		if strings.Contains(originalGroup, backupGroupDelimiter) {
 			groups := core.TrimSplit(originalGroup, ",")
 			if len(groups) > 0 {
@@ -183,11 +184,12 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 				c.masterGroup = groups[0]
 				url.SetGroup(strings.Join(groups, ","))
 			}
+			defaultGroupLoadBalance = lb.Random
 			vlog.Infof("Http cluster for domain %s resolve group %s to %s", domain, originalGroup, url.Group)
 		}
 		// http cluster do not use backup group as default
 		if url.GetStringValue(core.GroupLoadBalanceKey) == "" {
-			url.PutParam(core.GroupLoadBalanceKey, lb.Random)
+			url.PutParam(core.GroupLoadBalanceKey, defaultGroupLoadBalance)
 		}
 	}
 	c.upstreamClusters = make(map[string]*clusterHolder, 16)
