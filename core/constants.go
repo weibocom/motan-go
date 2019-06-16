@@ -27,6 +27,7 @@ const (
 	Lbkey                   = "loadbalance"
 	TimeOutKey              = "requestTimeout"
 	SessionTimeOutKey       = "registrySessionTimeout"
+	RetriesKey              = "retries"
 	ApplicationKey          = "application"
 	VersionKey              = "version"
 	FilterKey               = "filter"

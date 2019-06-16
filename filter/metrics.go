@@ -5,6 +5,7 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/metrics"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -81,13 +82,13 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 		}
 	}
 	//get application
-	application := request.GetAttachment("M_s")
+	application := request.GetAttachment(protocol.MSource)
 	if provider {
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
 	key := role + ":" + application + ":" + request.GetMethod()
-	addMetric(metrics.Escape(request.GetAttachment("M_g")),
-		metrics.Escape(request.GetAttachment("M_p")),
+	addMetric(metrics.Escape(request.GetAttachment(protocol.MGroup)),
+		metrics.Escape(request.GetAttachment(protocol.MPath)),
 		metrics.Escape(key), time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }

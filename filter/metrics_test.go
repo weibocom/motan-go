@@ -9,6 +9,7 @@ import (
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/metrics"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 func TestMetricsFilter(t *testing.T) {
@@ -28,8 +29,8 @@ func TestMetricsFilter(t *testing.T) {
 	request := defaultRequest()
 
 	request.GetRPCContext(true).Proxy = true
-	request.SetAttachment("M_s", application)
-	request.SetAttachment("M_p", testService)
+	request.SetAttachment(protocol.MSource, application)
+	request.SetAttachment(protocol.MPath, testService)
 	assert.Nil(t, metrics.GetStatItem(testGroup, testService), "metric stat")
 	ep := factory.GetEndPoint(url)
 	provider := factory.GetProvider(url)

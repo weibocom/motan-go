@@ -25,7 +25,7 @@ func (f *FailOverHA) SetURL(url *motan.URL) {
 	f.url = url
 }
 func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
-	retries := f.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", defaultRetries)
+	retries := f.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, defaultRetries)
 	var lastErr *motan.Exception
 	for i := 0; i <= int(retries); i++ {
 		ep := loadBalance.Select(request)
