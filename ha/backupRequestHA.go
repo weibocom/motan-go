@@ -8,6 +8,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/metrics"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -44,17 +45,16 @@ func (br *BackupRequestHA) SetURL(url *motan.URL) {
 }
 
 func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
-
 	epList := loadBalance.SelectArray(request)
 	if len(epList) == 0 {
 		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints, fmt.Sprintf("call backup request fail: %s", "no endpoints"))
 	}
 
-	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", 0)
+	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, 0)
 	if retries == 0 {
 		return br.doCall(request, epList[0])
 	}
-	item := metrics.GetStatItem(request.GetAttachment("M_g"), request.GetAttachment("M_p"))
+	item := metrics.GetStatItem(metrics.Escape(request.GetAttachment(protocol.MGroup)), metrics.Escape(request.GetAttachment(protocol.MPath)))
 	if item == nil || item.LastSnapshot() == nil {
 		return br.doCall(request, epList[0])
 	}
@@ -158,5 +158,5 @@ func getKey(request motan.Request) string {
 	if ctx != nil && ctx.Proxy {
 		role = "motan-client-agent"
 	}
-	return role + ":" + request.GetAttachment("M_s") + ":" + request.GetMethod()
+	return metrics.Escape(role + ":" + request.GetAttachment(protocol.MSource) + ":" + request.GetMethod())
 }

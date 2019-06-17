@@ -11,7 +11,9 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/endpoint"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 type MotanCluster struct {
@@ -63,6 +65,13 @@ func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 		vlog.Errorf("cluster call panic. req:%s", motan.GetReqInfo(request))
 	})
 	if m.available {
+		if m.proxy {
+			// TODO: for case client has no group or protocol convert
+			// we should have the same entry to set all necessary attachments
+			if endpoint.GetRequestGroup(request) == "" {
+				request.SetAttachment(protocol.MGroup, m.url.Group)
+			}
+		}
 		return m.clusterFilter.Filter(m.HaStrategy, m.LoadBalance, request)
 	}
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")

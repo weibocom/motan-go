@@ -17,6 +17,7 @@ import (
 	"github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -222,6 +223,7 @@ func (s *HTTPProxyServer) doHTTPRpcProxy(ctx *fasthttp.RequestCtx, httpCluster *
 	motanRequest.ServiceName = service
 	motanRequest.Method = string(ctx.Path())
 	motanRequest.SetAttachment(mhttp.Proxy, "true")
+	motanRequest.SetAttachment(protocol.MPath, service)
 
 	headerBuffer := &bytes.Buffer{}
 	// server do the url rewrite

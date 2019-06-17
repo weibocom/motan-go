@@ -1,6 +1,7 @@
 package ha
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -9,29 +10,42 @@ import (
 	"github.com/weibocom/motan-go/filter"
 	"github.com/weibocom/motan-go/lb"
 	"github.com/weibocom/motan-go/metrics"
+	"github.com/weibocom/motan-go/protocol"
+)
+
+const (
+	TestGroup   = "motan/test.group"
+	TestService = "motan/test.service"
+	TestMethod  = "motan/test.method"
 )
 
 func TestBackupRequestHA_Call(t *testing.T) {
 	params := make(map[string]string)
-	params["retries"] = "2"
-	url := &motan.URL{Protocol: "motan", Path: "test/path", Parameters: params}
+	params[motan.RetriesKey] = "2"
+	url := &motan.URL{Protocol: "motan2", Path: TestService, Parameters: params}
 	ha := &BackupRequestHA{url: url}
 	ha.Initialize()
 	haName := ha.GetName()
 	if haName != BackupRequest {
 		t.Error("Test Case failed.")
 	}
-	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-	request.SetAttachment("M_g", "group")
-	request.SetAttachment("M_p", "service")
+	request := &motan.MotanRequest{ServiceName: TestService, Method: TestMethod}
+	request.SetAttachment(protocol.MGroup, TestGroup)
+	request.SetAttachment(protocol.MPath, TestService)
 	nlb := &lb.RoundrobinLB{}
+
+	ctx := &motan.Context{}
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+metrics:
+  period: 1
+`)))
+	ctx.Config = config
+	metrics.StartReporter(ctx)
 
 	//init histogram
 	nlb.OnRefresh([]motan.EndPoint{getEP(1)})
 	res := ha.Call(request, nlb)
-	time.Sleep(10 * time.Millisecond)
-	metrics.GetStatItem("group", "service").SnapshotAndClear()
-
+	time.Sleep(10*time.Millisecond + 1*time.Second)
 	ep1 := getEP(1)  // third round
 	ep2 := getEP(40) // first round
 	ep3 := getEP(20) // second round
