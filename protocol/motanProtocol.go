@@ -56,6 +56,16 @@ type Header struct {
 	RequestID     uint64
 }
 
+func (h *Header) Clone() *Header {
+	return &Header{
+		Magic:         h.Magic,
+		MsgType:       h.MsgType,
+		VersionStatus: h.VersionStatus,
+		Serialize:     h.Serialize,
+		RequestID:     h.RequestID,
+	}
+}
+
 type Message struct {
 	Header   *Header
 	Metadata *motan.StringMap
@@ -286,7 +296,7 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 
 func (msg *Message) Clone() interface{} {
 	newMessage := &Message{
-		Header: msg.Header,
+		Header: msg.Header.Clone(),
 		Body:   msg.Body,
 		Type:   msg.Type,
 	}
@@ -526,6 +536,8 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	if rc.Proxy && rc.OriginalMessage != nil {
 		if msg, ok := rc.OriginalMessage.(*Message); ok {
 			msg.Header.SetProxy(true)
+			// Make sure group is the requested group
+			msg.Metadata.Store(MGroup, request.GetAttachment(MGroup))
 			EncodeMessageGzip(msg, rc.GzipSize)
 			rc.BodySize = len(msg.Body)
 			return msg, nil
