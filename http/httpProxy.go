@@ -43,6 +43,7 @@ const (
 
 var (
 	WhitespaceSplitPattern = regexp.MustCompile(`\s+`)
+	CommaSplitPattern      = regexp.MustCompile(`\s*[,]+\s*`)
 
 	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString}
 )

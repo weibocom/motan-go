@@ -39,6 +39,36 @@ func (u *URL) GetIdentity() string {
 	return u.identity
 }
 
+func NewURL(protocol string, host string, port int, path string, group string) *URL {
+	return &URL{
+		Protocol: protocol,
+		Host:     host,
+		Port:     port,
+		Path:     path,
+		Group:    group,
+	}
+}
+
+func (u *URL) SetGroup(group string) {
+	u.Group = group
+	u.ClearCachedInfo()
+}
+
+func (u *URL) SetProtocol(protocol string) {
+	u.Protocol = protocol
+	u.ClearCachedInfo()
+}
+
+func (u *URL) SetHost(host string) {
+	u.Host = host
+	u.ClearCachedInfo()
+}
+
+func (u *URL) SetPort(port int) {
+	u.Port = port
+	u.ClearCachedInfo()
+}
+
 func (u *URL) ClearCachedInfo() {
 	u.address = ""
 	u.identity = ""
@@ -68,6 +98,16 @@ func (u *URL) GetInt(key string) (int64, bool) {
 		}
 	}
 	return 0, false
+}
+
+func (u *URL) GetStringValue(key string) string {
+	return u.GetStringParamsWithDefault(key, "")
+}
+
+func (u *URL) GetBoolValue(key string) bool {
+	strVal := u.GetStringValue(key)
+	b, _ := strconv.ParseBool(strVal)
+	return b
 }
 
 func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {

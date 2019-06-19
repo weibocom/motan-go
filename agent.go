@@ -707,13 +707,13 @@ type AgentListener struct {
 }
 
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
-	vlog.Infof("agentlistener command notify:%s", commandInfo)
+	vlog.Infof("agent listener command notify:%s", commandInfo)
 	//TODO notify according cluster
 	if commandInfo != a.CurrentCommandInfo {
 		a.CurrentCommandInfo = commandInfo
 		a.agent.clusterMap.Range(func(k, v interface{}) bool {
 			cls := v.(*cluster.MotanCluster)
-			for _, registry := range cls.Registries {
+			for _, registry := range cls.Registries() {
 				if cr, ok := registry.(motan.CommandNotifyListener); ok {
 					cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 				}

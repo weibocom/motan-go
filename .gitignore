@@ -25,6 +25,7 @@ __*
 # motan-go
 *.pid
 snapshot*
+coverage.txt
 main/data
 main/logs
 main/serverlogs
