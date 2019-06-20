@@ -87,7 +87,8 @@ func (lb *multiGroupLoadBalance) OnRefresh(endpoints []motan.EndPoint) {
 
 func (lb *multiGroupLoadBalance) Select(request motan.Request) motan.EndPoint {
 	groupConfigs := lb.groupConfigInfo.GroupConfigs
-	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Get() {
+	groupSize := len(groupConfigs)
+	if groupSize == 1 || lb.cluster.isCommandWorking.Get() {
 		return lb.balances[groupConfigs[0].group].Select(request)
 	}
 	if lb.groupConfigInfo.UseBackupGroup {
@@ -98,12 +99,20 @@ func (lb *multiGroupLoadBalance) Select(request motan.Request) motan.EndPoint {
 		}
 	}
 	// TODO: more complex strategy for backup group
-	return lb.balances[groupConfigs[rand.Intn(len(groupConfigs))].group].Select(request)
+	startGroupIndex := rand.Intn(groupSize)
+	for i := 0; i < groupSize; i++ {
+		ep := lb.balances[groupConfigs[(startGroupIndex+i)%groupSize].group].Select(request)
+		if ep != nil {
+			return ep
+		}
+	}
+	return nil
 }
 
 func (lb *multiGroupLoadBalance) SelectArray(request motan.Request) []motan.EndPoint {
 	groupConfigs := lb.groupConfigInfo.GroupConfigs
-	if len(lb.groupConfigInfo.GroupConfigs) == 1 || lb.cluster.isCommandWorking.Get() {
+	groupSize := len(groupConfigs)
+	if groupSize == 1 || lb.cluster.isCommandWorking.Get() {
 		return lb.balances[groupConfigs[0].group].SelectArray(request)
 	}
 	if lb.groupConfigInfo.UseBackupGroup {
@@ -114,7 +123,13 @@ func (lb *multiGroupLoadBalance) SelectArray(request motan.Request) []motan.EndP
 		}
 	}
 	// TODO: more complex strategy for backup group
-	return lb.balances[groupConfigs[rand.Intn(len(groupConfigs))].group].SelectArray(request)
+	startGroupIndex := rand.Intn(groupSize)
+	for i := 0; i < groupSize; i++ {
+		if eps := lb.balances[groupConfigs[(startGroupIndex+i)%groupSize].group].SelectArray(request); len(eps) > 0 {
+			return eps
+		}
+	}
+	return nil
 }
 
 func (lb *multiGroupLoadBalance) SetWeight(weight string) {

@@ -80,12 +80,9 @@ func (m *MotanEndpoint) checkChannelUsing() {
 				if m.channels != nil {
 					m.channels.Close()
 					m.channels = nil
-
-					// after close a lazy init endpoint's channel pool, we should reset it to uninit and available
+					// after close a lazy init endpoint's channel pool, we should reset it to uninit
 					m.initialized.Set(false)
-					m.setAvailable(true)
-
-					vlog.Errorln("check channel using close m.channels")
+					vlog.Infof("check channel using close m.channels")
 				}
 				m.lock.Unlock()
 			}
@@ -422,7 +419,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
 			if err != nil {
-				vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s", s.channel.address, msg.Header.RequestID, err.Error())
+				vlog.Errorf("convert to response fail. ep: %s, requestID:%d, err:%s", s.channel.address, msg.Header.RequestID, err.Error())
 				result.Error = err
 				result.Done <- result
 				return
