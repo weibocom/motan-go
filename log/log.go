@@ -1,11 +1,13 @@
 package vlog
 
 import (
+	"bytes"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strconv"
 	"sync"
 	"time"
 
@@ -59,7 +61,7 @@ type Logger interface {
 	Errorf(string, ...interface{})
 	Fatalln(...interface{})
 	Fatalf(string, ...interface{})
-	AccessLog(AccessLogEntity)
+	AccessLog(*AccessLogEntity)
 	MetricsLog(string)
 	Flush()
 	SetAsync(bool)
@@ -149,7 +151,7 @@ func Fatalf(format string, args ...interface{}) {
 	}
 }
 
-func AccessLog(logType AccessLogEntity) {
+func AccessLog(logType *AccessLogEntity) {
 	if loggerInstance != nil {
 		loggerInstance.AccessLog(logType)
 	}
@@ -166,7 +168,7 @@ func startFlush() {
 		defer func() {
 			if err := recover(); err != nil {
 				log.Printf("flush logs failed. err:%v", err)
-				Warningf("flush logs failed. err:%v", err)
+				debug.PrintStack()
 			}
 		}()
 		ticker := time.NewTicker(defaultFlushInterval)
@@ -295,7 +297,7 @@ func newZapLogger(logName string) (*zap.Logger, zap.AtomicLevel) {
 type defaultLogger struct {
 	async            bool
 	accessStructured bool
-	outputChan       chan AccessLogEntity
+	outputChan       chan *AccessLogEntity
 	logger           *zap.SugaredLogger
 	accessLogger     *zap.Logger
 	metricsLogger    *zap.Logger
@@ -336,7 +338,7 @@ func (d *defaultLogger) Fatalf(format string, fields ...interface{}) {
 	d.logger.Fatalf(format, fields...)
 }
 
-func (d *defaultLogger) AccessLog(logObject AccessLogEntity) {
+func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
 	if d.async {
 		d.outputChan <- logObject
 	} else {
@@ -344,7 +346,7 @@ func (d *defaultLogger) AccessLog(logObject AccessLogEntity) {
 	}
 }
 
-func (d *defaultLogger) doAccessLog(logObject AccessLogEntity) {
+func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 	if d.accessStructured {
 		d.accessLogger.Info("",
 			zap.String("filterName", logObject.FilterName),
@@ -361,21 +363,33 @@ func (d *defaultLogger) doAccessLog(logObject AccessLogEntity) {
 			zap.Bool("success", logObject.Success),
 			zap.String("exception", logObject.Exception))
 	} else {
-		d.accessLogger.Info(
-			fmt.Sprintf("%s|%s|%d|%s|%s|%s|%s|%d|%d|%d|%d|%t|%s",
-				logObject.FilterName,
-				logObject.Role,
-				logObject.RequestID,
-				logObject.Service,
-				logObject.Method,
-				logObject.Desc,
-				logObject.RemoteAddress,
-				logObject.ReqSize,
-				logObject.ResSize,
-				logObject.BizTime,
-				logObject.TotalTime,
-				logObject.Success,
-				logObject.Exception))
+		var buffer bytes.Buffer
+		buffer.WriteString(logObject.FilterName)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.Role)
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.FormatUint(logObject.RequestID, 10))
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.Service)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.Method)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.Desc)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.RemoteAddress)
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.Itoa(logObject.ReqSize))
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.Itoa(logObject.ResSize))
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.FormatInt(logObject.BizTime, 10))
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.FormatInt(logObject.TotalTime, 10))
+		buffer.WriteString("|")
+		buffer.WriteString(strconv.FormatBool(logObject.Success))
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.Exception)
+		d.accessLogger.Info(buffer.String())
 	}
 }
 
@@ -392,12 +406,12 @@ func (d *defaultLogger) Flush() {
 func (d *defaultLogger) SetAsync(value bool) {
 	d.async = value
 	if value {
-		d.outputChan = make(chan AccessLogEntity, defaultAsyncLogLen)
+		d.outputChan = make(chan *AccessLogEntity, defaultAsyncLogLen)
 		go func() {
 			defer func() {
 				if err := recover(); err != nil {
 					log.Printf("logs async output failed. err:%v", err)
-					Warningf("logs async output failed. err:%v", err)
+					debug.PrintStack()
 				}
 			}()
 			for {
