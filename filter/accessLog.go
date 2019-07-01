@@ -69,7 +69,7 @@ func doAccessLog(filterName string, role string, address string, start time.Time
 	if exception != nil {
 		exceptionData, _ = json.Marshal(exception)
 	}
-	vlog.AccessLog(vlog.AccessLogEntity{
+	vlog.AccessLog(&vlog.AccessLogEntity{
 		FilterName:    filterName,
 		Role:          role,
 		RequestID:     response.GetRequestID(),
