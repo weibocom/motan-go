@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -745,27 +746,55 @@ func (a *Agent) startMServer() {
 		a.mhandle(k, v)
 	}
 
+	var managementListener net.Listener
 	if managementUnixSockAddr := a.agentURL.GetParam(motan.ManagementUnixSockKey, ""); managementUnixSockAddr != "" {
 		listener, err := motan.ListenUnixSock(managementUnixSockAddr)
 		if err != nil {
-			fmt.Printf("start listen manage unix sock fail! err:%s\n", err.Error())
 			vlog.Warningf("start listen manage unix sock fail! err:%s\n", err.Error())
 			return
 		}
-
-		ms := http.Server{}
-		msErr := ms.Serve(listener)
-		if msErr != nil {
-			fmt.Printf("start serve manage unix sock fail! err:%s\n", msErr.Error())
-			vlog.Warningf("start serve manage unix sock fail! err:%s\n", msErr.Error())
+		managementListener = listener
+	} else if managementRangePort := a.agentURL.GetParam(motan.ManagementPortRangeKey, ""); managementRangePort != "" {
+		startAndPortStr := motan.TrimSplit(managementRangePort, "-")
+		if len(startAndPortStr) < 2 {
+			vlog.Infof("illegal management port range %s", managementRangePort)
+			return
 		}
-		return
+		startPort, err := strconv.ParseInt(startAndPortStr[0], 10, 64)
+		if err != nil {
+			vlog.Infof("illegal management port range %s with wrong start port %s", managementRangePort, startAndPortStr[0])
+			return
+		}
+		endPort, err := strconv.ParseInt(startAndPortStr[1], 10, 64)
+		if err != nil {
+			vlog.Infof("illegal management port range %s with wrong end port %s", managementRangePort, startAndPortStr[1])
+			return
+		}
+		for port := int(startPort); port <= int(endPort); port++ {
+			listener, err := net.Listen("tcp", ":"+strconv.Itoa(port))
+			if err != nil {
+				continue
+			}
+			a.mport = port
+			managementListener = motan.TcpKeepAliveListener{listener.(*net.TCPListener)}
+			break
+		}
+		if managementListener == nil {
+			vlog.Warningf("start management server failed for port range %s", startAndPortStr)
+			return
+		}
+	} else {
+		listener, err := net.Listen("tcp", ":"+strconv.Itoa(a.mport))
+		if err != nil {
+			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
+			return
+		}
+		managementListener = motan.TcpKeepAliveListener{listener.(*net.TCPListener)}
 	}
 
-	vlog.Infof("start listen manage port %d ...", a.mport)
-	err := http.ListenAndServe(":"+strconv.Itoa(a.mport), nil)
+	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())
+	err := http.Serve(managementListener, nil)
 	if err != nil {
-		fmt.Printf("start listen manage port fail! port:%d, err:%s\n", a.mport, err.Error())
 		vlog.Warningf("start listen manage port fail! port:%d, err:%s", a.mport, err.Error())
 	}
 }
