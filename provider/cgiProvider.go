@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	cgi "github.com/beberlei/fastcgi-serve/fcgiclient"
+	cgi "github.com/MarioKartMaster/fastcgi-serve/fcgiclient"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	// "github.com/yangchenxing/go-nginx-conf-parser"
