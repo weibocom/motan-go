@@ -51,6 +51,7 @@ const (
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"
 	ManagementUnixSockKey   = "managementUnixSock"
+	ManagementPortRangeKey  = "managementPortRange"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 )
 
