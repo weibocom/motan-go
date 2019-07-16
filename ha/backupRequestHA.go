@@ -51,7 +51,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	}
 
 	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, 0)
-	if retries == 0 {
+	if retries <= 0 {
 		return br.doCall(request, ep)
 	}
 	// TODO: we should use metrics of the cluster, with traffic control the group may changed
@@ -63,6 +63,9 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
 	backupRequestMaxRetryRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestMaxRetryRatio", defaultBackupRequestMaxRetryRatio)
 	requestTimeout := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "requestTimeout", defaultRequestTimeout)
+
+	deadline := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
+	defer deadline.Stop()
 
 	successCh := make(chan motan.Response, retries+1)
 
@@ -106,20 +109,18 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			return resp
 		case <-lastErrorCh:
 		case <-timer.C:
+		case <-deadline.C:
+			goto BREAK
 		}
 	}
-
-	timer := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
-	defer timer.Stop()
 	select {
 	case resp = <-successCh:
 		return resp
 	case resp = <-lastErrorCh:
-	case <-timer.C:
+	case <-deadline.C:
 	}
-
+BREAK:
 	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "timeout"))
-
 }
 
 func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint) motan.Response {

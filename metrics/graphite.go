@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/weibocom/motan-go/log"
 )
@@ -23,7 +25,6 @@ var (
 		"p999":  0.999,
 		"p9999": 0.9999}
 	minKeyLength = 3
-	localAddr    net.Addr
 )
 
 type graphite struct {
@@ -31,6 +32,17 @@ type graphite struct {
 	Port    int
 	Name    string
 	localIP string
+	lock    sync.Mutex
+	conn    net.Conn
+}
+
+func getUDPConn(ip string, port int) net.Conn {
+	conn, err := net.Dial("udp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	if err != nil {
+		vlog.Warningf("Open graphite conn failed. err:%s", err.Error())
+		return nil
+	}
+	return conn
 }
 
 func newGraphite(ip, pool string, port int) *graphite {
@@ -38,31 +50,35 @@ func newGraphite(ip, pool string, port int) *graphite {
 		Host: ip,
 		Port: port,
 		Name: pool,
+		lock: sync.Mutex{},
+		conn: getUDPConn(ip, port),
 	}
 }
 
 func (g *graphite) Write(snapshots []Snapshot) error {
-	dial := net.Dialer{LocalAddr: localAddr}
-	conn, err := dial.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
-	if err != nil {
-		vlog.Warningf("open graphite conn fail. err:%s", err.Error())
-		return err
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	if g.conn == nil {
+		if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+			return errors.New("open graphite conn failed")
+		}
 	}
-	defer conn.Close()
-	if localAddr == nil {
-		localAddr = conn.LocalAddr()
-	}
+
 	if g.localIP == "" {
-		g.localIP = strings.Replace(strings.Split(conn.LocalAddr().String(), ":")[0], ".", "_", -1)
+		g.localIP = strings.Replace(strings.Split(g.conn.LocalAddr().String(), ":")[0], ".", "_", -1)
 	}
 
 	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
 		if message != "" {
 			vlog.MetricsLog("\n" + message)
-			_, err = conn.Write([]byte(message))
-			if err != nil {
-				return err
+			if _, err := g.conn.Write([]byte(message)); err != nil {
+				vlog.Warningln("Write graphite error, reconnect. err:", err.Error())
+				g.conn.Close()
+				if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+					return errors.New("open graphite conn failed")
+				}
 			}
 		}
 	}
