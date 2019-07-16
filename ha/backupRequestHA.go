@@ -45,19 +45,19 @@ func (br *BackupRequestHA) SetURL(url *motan.URL) {
 }
 
 func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
-	epList := loadBalance.SelectArray(request)
-	if len(epList) == 0 {
+	ep := loadBalance.Select(request)
+	if ep == nil {
 		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints, fmt.Sprintf("call backup request fail: %s", "no endpoints"))
 	}
 
 	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, 0)
 	if retries == 0 {
-		return br.doCall(request, epList[0])
+		return br.doCall(request, ep)
 	}
 	// TODO: we should use metrics of the cluster, with traffic control the group may changed
 	item := metrics.GetStatItem(metrics.Escape(request.GetAttachment(protocol.MGroup)), metrics.Escape(request.GetAttachment(protocol.MPath)))
 	if item == nil || item.LastSnapshot() == nil {
-		return br.doCall(request, epList[0])
+		return br.doCall(request, ep)
 	}
 	var resp motan.Response
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
@@ -72,10 +72,11 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	}
 	var lastErrorCh chan motan.Response
 
-	for i := 0; i <= int(retries) && i < len(epList); i++ {
-		ep := epList[i]
+	for i := 0; i <= int(retries); i++ {
 		if i == 0 {
 			br.updateCallRecord(counterRoundCount)
+		} else {
+			ep = loadBalance.Select(request)
 		}
 		if i > 0 && !br.tryAcquirePermit(int(backupRequestMaxRetryRatio)) {
 			vlog.Warningf("The permit is used up, request id: %d", request.GetRequestID())

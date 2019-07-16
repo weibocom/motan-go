@@ -23,6 +23,7 @@ var (
 		"p999":  0.999,
 		"p9999": 0.9999}
 	minKeyLength = 3
+	localAddr    net.Addr
 )
 
 type graphite struct {
@@ -41,12 +42,16 @@ func newGraphite(ip, pool string, port int) *graphite {
 }
 
 func (g *graphite) Write(snapshots []Snapshot) error {
-	conn, err := net.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
+	dial := net.Dialer{LocalAddr: localAddr}
+	conn, err := dial.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
 	if err != nil {
 		vlog.Warningf("open graphite conn fail. err:%s", err.Error())
 		return err
 	}
 	defer conn.Close()
+	if localAddr == nil {
+		localAddr = conn.LocalAddr()
+	}
 	if g.localIP == "" {
 		g.localIP = strings.Replace(strings.Split(conn.LocalAddr().String(), ":")[0], ".", "_", -1)
 	}
