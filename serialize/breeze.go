@@ -4,6 +4,8 @@ import (
 	"github.com/weibreeze/breeze-go"
 )
 
+var BreezeDefaultBufferSize = 1024
+
 type BreezeSerialization struct {
 }
 
@@ -12,7 +14,7 @@ func (b *BreezeSerialization) GetSerialNum() int {
 }
 
 func (b *BreezeSerialization) Serialize(v interface{}) ([]byte, error) {
-	buf := breeze.NewBuffer(256)
+	buf := breeze.NewBuffer(BreezeDefaultBufferSize)
 	err := breeze.WriteValue(buf, v)
 	return buf.Bytes(), err
 }
@@ -23,7 +25,7 @@ func (b *BreezeSerialization) DeSerialize(bytes []byte, v interface{}) (interfac
 }
 
 func (b *BreezeSerialization) SerializeMulti(v []interface{}) ([]byte, error) {
-	buf := breeze.NewBuffer(256)
+	buf := breeze.NewBuffer(BreezeDefaultBufferSize)
 	for _, sv := range v {
 		err := breeze.WriteValue(buf, sv)
 		if err != nil {
