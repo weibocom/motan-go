@@ -776,7 +776,7 @@ func (a *Agent) startMServer() {
 				continue
 			}
 			a.mport = port
-			managementListener = motan.TcpKeepAliveListener{listener.(*net.TCPListener)}
+			managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
 			break
 		}
 		if managementListener == nil {
@@ -789,7 +789,7 @@ func (a *Agent) startMServer() {
 			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
 			return
 		}
-		managementListener = motan.TcpKeepAliveListener{listener.(*net.TCPListener)}
+		managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
 	}
 
 	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())
