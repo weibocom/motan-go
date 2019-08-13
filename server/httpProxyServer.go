@@ -33,6 +33,7 @@ const (
 	HTTPProxyDefaultDomainKey      = "httpProxyDefaultDomain"
 	HTTPProxyTimeoutKey            = "httpProxyTimeout"
 	HTTPProxyMaxRequestBodySizeKey = "httpProxyMaxRequestBodySize"
+	HTTPProxyEnableKey             = "httpProxyEnable"
 )
 
 type HTTPClusterGetter interface {
@@ -150,6 +151,12 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 		Name:                  HTTPProxyServerName,
 		NoDefaultServerHeader: true,
 		MaxRequestBodySize:    int(maxRequestBodySize),
+	}
+
+	enableProxy, _ := strconv.ParseBool(s.url.GetParam(HTTPProxyEnableKey, "false"))
+	if !enableProxy {
+		vlog.Infof("http proxy disabled, do not listen http forwarded proxy port")
+		return nil
 	}
 
 	if httpProxyUnixSockAddr := s.url.GetParam(core.HTTPProxyUnixSockKey, ""); httpProxyUnixSockAddr != "" {

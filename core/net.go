@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-type TcpKeepAliveListener struct {
+type TCPKeepAliveListener struct {
 	*net.TCPListener
 }
 
-func (ln TcpKeepAliveListener) Accept() (net.Conn, error) {
+func (ln TCPKeepAliveListener) Accept() (net.Conn, error) {
 	tc, err := ln.AcceptTCP()
 	if err != nil {
 		return nil, err

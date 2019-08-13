@@ -6,6 +6,7 @@ motan-agent:
   registry: "direct-registry"
   application: "agent-test"
   httpProxyMaxRequestBodySize: 1000
+  httpProxyEnable: true
 
 motan-registry:
   direct-registry:
