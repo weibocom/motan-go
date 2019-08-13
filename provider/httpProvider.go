@@ -271,6 +271,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpRes.Header.Del("Connection")
 		httpRes.Header.WriteTo(headerBuffer)
 		body := httpRes.Body()
+		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		// copy response body is needed
 		responseBodyBytes := make([]byte, len(body))
 		copy(responseBodyBytes, body)
@@ -296,6 +297,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)
 		if err != nil {
 			fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
+			return resp
 		}
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
@@ -309,6 +311,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			return resp
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
+		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		return resp
 	}
 
