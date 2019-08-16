@@ -78,8 +78,8 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	for i := 0; i <= int(retries); i++ {
 		if i == 0 {
 			br.updateCallRecord(counterRoundCount)
-		} else {
-			ep = loadBalance.Select(request)
+		} else if ep = loadBalance.Select(request); ep == nil {
+			continue
 		}
 		if i > 0 && !br.tryAcquirePermit(int(backupRequestMaxRetryRatio)) {
 			vlog.Warningf("The permit is used up, request id: %d", request.GetRequestID())
