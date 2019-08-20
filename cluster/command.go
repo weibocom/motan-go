@@ -3,6 +3,7 @@ package cluster
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -64,10 +65,18 @@ type serviceListener struct {
 	referURL *motan.URL
 	urls     []*motan.URL
 	crw      *CommandRegistryWrapper
+
+	// cached identity
+	identity motan.AtomicString
 }
 
 func (s *serviceListener) GetIdentity() string {
-	return "serviceListener-" + s.referURL.GetIdentity()
+	id := s.identity.Load()
+	if id == "" {
+		id = fmt.Sprintf("serviceListener-%p-%s", s, s.referURL.GetIdentity())
+		s.identity.Store(id)
+	}
+	return id
 }
 
 func (s *serviceListener) Notify(registryURL *motan.URL, urls []*motan.URL) {
