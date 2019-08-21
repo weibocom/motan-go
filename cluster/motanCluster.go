@@ -31,6 +31,9 @@ type MotanCluster struct {
 	available      bool
 	closed         bool
 	proxy          bool
+
+	// cached identity
+	identity motan.AtomicString
 }
 
 func (m *MotanCluster) IsAvailable() bool {
@@ -226,9 +229,18 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 	fep.Filter = lastf
 	return fep
 }
+
 func (m *MotanCluster) GetIdentity() string {
-	return m.url.GetIdentity()
+	id := m.identity.Load()
+	if id == "" {
+		// TODO: if using moving GC another object may use the same address as m,
+		//       but now it's ok
+		id = fmt.Sprintf("%p-%s", m, m.url.GetIdentity())
+		m.identity.Store(id)
+	}
+	return id
 }
+
 func (m *MotanCluster) Destroy() {
 	if !m.closed {
 		m.notifyLock.Lock()
