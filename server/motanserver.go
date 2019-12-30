@@ -6,13 +6,32 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 )
+
+var currentConnections int64
+
+var motanServerOnce sync.Once
+
+func incrConnections() {
+	atomic.AddInt64(&currentConnections, 1)
+}
+
+func decrConnections() {
+	atomic.AddInt64(&currentConnections, -1)
+}
+
+func getConnections() int64 {
+	return atomic.LoadInt64(&currentConnections)
+}
 
 type MotanServer struct {
 	URL         *motan.URL
@@ -25,6 +44,10 @@ type MotanServer struct {
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
+
+	motanServerOnce.Do(func() {
+		metrics.RegisterStatusSampleFunc("motan_server_connection_count", getConnections)
+	})
 
 	var lis net.Listener
 	if unixSockAddr := m.URL.GetParam(motan.UnixSockKey, ""); unixSockAddr != "" {
@@ -112,6 +135,8 @@ func (m *MotanServer) run() {
 }
 
 func (m *MotanServer) handleConn(conn net.Conn) {
+	incrConnections()
+	defer decrConnections()
 	defer conn.Close()
 	defer motan.HandlePanic(nil)
 	buf := bufio.NewReader(conn)
