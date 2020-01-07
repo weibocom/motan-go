@@ -1,5 +1,7 @@
 module github.com/weibocom/motan-go
 
+go 1.11
+
 require (
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5

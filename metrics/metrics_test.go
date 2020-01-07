@@ -132,11 +132,13 @@ func TestAddWriter(t *testing.T) {
 	AddCounter(group, service, "c2", 2)
 	AddHistograms(group, service, "h1", 100)
 	AddHistograms(group, service, "h2", 200)
+	AddGauge(group, service, "g1", 100)
+	AddGauge(group, service, "g2", 200)
 
 	time.Sleep(520 * time.Millisecond)
-	assert.Equal(t, 1, len(w.GetSanpshot()), "writer snapshot size")
-	assert.Equal(t, group, w.GetSanpshot()[0].GetGroup(), "snapshot group")
-	assert.Equal(t, service, w.GetSanpshot()[0].GetService(), "snapshot group")
+	assert.Equal(t, 1, len(w.GetSnapshot()), "writer snapshot size")
+	assert.Equal(t, group, w.GetSnapshot()[0].GetGroup(), "snapshot group")
+	assert.Equal(t, service, w.GetSnapshot()[0].GetService(), "snapshot group")
 }
 
 func TestStat(t *testing.T) {
@@ -161,6 +163,8 @@ func TestStat(t *testing.T) {
 		d = rand.Int63n(1000)
 		total += d
 		AddHistograms(group, service, "h3", d)
+		AddGauge(group, service, "g1", 100)
+		AddGauge(group, service, "g2", 200)
 	}
 	time.Sleep(100 * time.Millisecond)
 	item := GetStatItem(group, service)
@@ -212,6 +216,10 @@ func TestStat(t *testing.T) {
 	assert.Equal(t, p95, pr[1], "percentiles")
 	assert.Equal(t, p99, pr[2], "percentiles")
 	assert.Equal(t, p999, pr[3], "percentiles")
+
+	// test gauge
+	assert.Equal(t, int64(100), snap.Value("g1"))
+	assert.Equal(t, int64(200), snap.Value("g2"))
 }
 
 type mockWriter struct {
@@ -226,7 +234,7 @@ func (m *mockWriter) Write(snapshots []Snapshot) error {
 	return nil
 }
 
-func (m *mockWriter) GetSanpshot() []Snapshot {
+func (m *mockWriter) GetSnapshot() []Snapshot {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return m.snapshots

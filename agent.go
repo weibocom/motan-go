@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/shirou/gopsutil/process"
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
@@ -133,6 +135,7 @@ func (a *Agent) StartMotanAgent() {
 	a.initAgentURL()
 	// start metrics reporter early, here agent context has already initialized
 	metrics.StartReporter(a.Context)
+	a.registerStatusSampler()
 	a.initStatus()
 	a.initClusters()
 	a.startServerAgent()
@@ -154,6 +157,28 @@ func (a *Agent) StartMotanAgent() {
 	}
 	vlog.Infoln("Motan agent is starting...")
 	a.startAgent()
+}
+
+func (a *Agent) registerStatusSampler() {
+	metrics.RegisterStatusSampleFunc("memory", func() int64 {
+		p, _ := process.NewProcess(int32(os.Getpid()))
+		memInfo, err := p.MemoryInfo()
+		if err != nil {
+			return 0
+		}
+		return int64(memInfo.RSS >> 20)
+	})
+	metrics.RegisterStatusSampleFunc("cpu", func() int64 {
+		p, _ := process.NewProcess(int32(os.Getpid()))
+		cpuPercent, err := p.CPUPercent()
+		if err != nil {
+			return 0
+		}
+		return int64(cpuPercent)
+	})
+	metrics.RegisterStatusSampleFunc("goroutine_count", func() int64 {
+		return int64(runtime.NumGoroutine())
+	})
 }
 
 func (a *Agent) initStatus() {

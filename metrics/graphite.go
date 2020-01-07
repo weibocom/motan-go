@@ -105,9 +105,12 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 					}
 					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
 						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
-				} else { //counter
+				} else if snap.IsCounter(k) { //counter
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
 						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Count(k))
+				} else { // gauge
+					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Value(k))
 				}
 				if buf.Len() > 0 && buf.Len()+len(segment) > messageMaxLen {
 					messages = append(messages, buf.String())

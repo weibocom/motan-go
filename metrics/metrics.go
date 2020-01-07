@@ -16,6 +16,7 @@ const (
 	// stat event type
 	eventCounter int32 = iota
 	eventHistograms
+	eventGauge
 )
 
 const (
@@ -27,9 +28,10 @@ const (
 	eventBufferSize = 1024 * 100
 
 	// default value
-	defaultEventProcessor = 1
-	maxEventProcessor     = 50
-	defaultSinkDuration   = 5 * time.Second
+	defaultEventProcessor     = 1
+	maxEventProcessor         = 50
+	defaultSinkDuration       = 5 * time.Second
+	defaultStatusSamplePeriod = 30 * time.Second
 
 	KeyDelimiter           = ":"
 	DefaultStatGroup       = "motan-stat"
@@ -56,6 +58,8 @@ var (
 		writers:   make(map[string]StatWriter),
 		evtBuf:    &sync.Pool{New: func() interface{} { return new(event) }},
 	}
+	statusSamplerRegisterLock sync.Mutex
+	statusSamplers            = make(map[string]StatusSampler)
 )
 
 type StatItem interface {
@@ -65,6 +69,7 @@ type StatItem interface {
 	GetGroup() string
 	AddCounter(key string, value int64)
 	AddHistograms(key string, duration int64)
+	AddGauge(key string, value int64)
 	Snapshot() Snapshot
 	SnapshotAndClear() Snapshot
 	LastSnapshot() Snapshot
@@ -87,13 +92,25 @@ type Snapshot interface {
 	P999(key string) float64
 	Percentile(key string, v float64) float64
 	Percentiles(key string, f []float64) []float64
+	Value(key string) int64
 	RangeKey(f func(k string))
 	IsHistogram(key string) bool
 	IsCounter(key string) bool
+	IsGauge(key string) bool
 }
 
 type StatWriter interface {
 	Write(snapshots []Snapshot) error
+}
+
+type StatusSampler interface {
+	Sample() int64
+}
+
+type StatusSampleFunc func() int64
+
+func (f StatusSampleFunc) Sample() int64 {
+	return f()
 }
 
 func GetOrRegisterStatItem(group string, service string) StatItem {
@@ -181,6 +198,10 @@ func AddHistograms(group string, service string, key string, duration int64) {
 	sendEvent(eventHistograms, group, service, key, duration)
 }
 
+func AddGauge(group string, service string, key string, value int64) {
+	sendEvent(eventGauge, group, service, key, value)
+}
+
 func sendEvent(eventType int32, group string, service string, key string, value int64) {
 	evt := rp.evtBuf.Get().(*event)
 	evt.event = eventType
@@ -208,6 +229,41 @@ func ElapseTimeSuffix(t int64) string {
 	default:
 		return elapseMore500ms
 	}
+}
+
+func RegisterStatusSampleFunc(key string, sf func() int64) {
+	RegisterStatusSampler(key, StatusSampleFunc(sf))
+}
+
+func RegisterStatusSampler(key string, sampler StatusSampler) {
+	statusSamplerRegisterLock.Lock()
+	defer statusSamplerRegisterLock.Unlock()
+	statusSamplers[key] = sampler
+}
+
+func UnregisterStatusSampler(key string) {
+	statusSamplerRegisterLock.Lock()
+	defer statusSamplerRegisterLock.Unlock()
+	delete(statusSamplers, key)
+}
+
+func sampleStatus(application string) {
+	statusSamplerRegisterLock.Lock()
+	defer statusSamplerRegisterLock.Unlock()
+	defer motan.HandlePanic(nil)
+	for key, s := range statusSamplers {
+		AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, s.Sample())
+	}
+}
+
+func startSampleStatus(application string) {
+	go func() {
+		ticker := time.NewTicker(defaultStatusSamplePeriod)
+		defer ticker.Stop()
+		for range ticker.C {
+			sampleStatus(application)
+		}
+	}()
 }
 
 type event struct {
@@ -265,6 +321,14 @@ func (d *DefaultStatItem) AddHistograms(key string, duration int64) {
 		h = metrics.GetOrRegisterHistogram(key, d.getRegistry(), metrics.NewExpDecaySample(1024, 0))
 	}
 	h.(metrics.Histogram).Update(duration)
+}
+
+func (d *DefaultStatItem) AddGauge(key string, value int64) {
+	c := d.getRegistry().Get(key)
+	if c == nil {
+		c = metrics.GetOrRegisterGauge(key, d.getRegistry())
+	}
+	c.(metrics.Gauge).Update(value)
 }
 
 func (d *DefaultStatItem) Snapshot() Snapshot {
@@ -380,6 +444,14 @@ func (d *DefaultStatItem) Percentiles(key string, f []float64) []float64 {
 	return nil
 }
 
+func (d *DefaultStatItem) Value(key string) int64 {
+	v := d.getRegistry().Get(key)
+	if g, ok := v.(metrics.Gauge); ok {
+		return g.Value()
+	}
+	return 0
+}
+
 func (d *DefaultStatItem) RangeKey(f func(k string)) {
 	d.getRegistry().Each(func(s string, i interface{}) {
 		f(s)
@@ -393,6 +465,11 @@ func (d *DefaultStatItem) IsHistogram(key string) bool {
 
 func (d *DefaultStatItem) IsCounter(key string) bool {
 	_, ok := d.getRegistry().Get(key).(metrics.Counter)
+	return ok
+}
+
+func (d *DefaultStatItem) IsGauge(key string) bool {
+	_, ok := d.getRegistry().Get(key).(metrics.Gauge)
 	return ok
 }
 
@@ -424,7 +501,6 @@ func StartReporter(ctx *motan.Context) {
 			go rp.eventLoop()
 		}
 		go rp.sink()
-
 		// panic stat when agent model
 		if ctx.AgentURL != nil {
 			application := ctx.AgentURL.GetParam(motan.ApplicationKey, DefaultStatApplication)
@@ -432,6 +508,7 @@ func StartReporter(ctx *motan.Context) {
 				key := DefaultStatRole + KeyDelimiter + application + KeyDelimiter + "panic.total_count"
 				AddCounter(DefaultStatGroup, DefaultStatService, key, 1)
 			}
+			startSampleStatus(application)
 		}
 	})
 }
@@ -472,6 +549,8 @@ func (r *reporter) processEvent(evt *event) {
 		item.AddCounter(evt.key, evt.value)
 	case eventHistograms:
 		item.AddHistograms(evt.key, evt.value)
+	case eventGauge:
+		item.AddGauge(evt.key, evt.value)
 	}
 }
 
