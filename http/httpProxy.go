@@ -21,12 +21,13 @@ const (
 )
 
 const (
-	DomainKey           = "domain"
-	KeepaliveTimeoutKey = "keepaliveTimeout"
-	ProxyAddressKey     = "proxyAddress"
-	ProxySchemaKey      = "proxySchema"
-	MaxConnectionsKey   = "maxConnections"
-	EnableRewriteKey    = "enableRewrite"
+	DomainKey                = "domain"
+	KeepaliveTimeoutKey      = "keepaliveTimeout"
+	IdleConnectionTimeoutKey = "idleConnectionTimeout"
+	ProxyAddressKey          = "proxyAddress"
+	ProxySchemaKey           = "proxySchema"
+	MaxConnectionsKey        = "maxConnections"
+	EnableRewriteKey         = "enableRewrite"
 )
 
 const (

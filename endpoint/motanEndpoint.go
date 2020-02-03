@@ -247,6 +247,7 @@ func (m *MotanEndpoint) keepalive() {
 				_, err = channel.Call(mpro.BuildHeartbeat(m.keepaliveID, mpro.Req), defaultRequestTimeout, nil)
 				if err == nil {
 					m.setAvailable(true)
+					m.resetErr()
 					vlog.Infof("[keepalive] heartbeat success. url: %s", m.url.GetIdentity())
 					return
 				}
