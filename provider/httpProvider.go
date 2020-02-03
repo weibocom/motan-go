@@ -56,7 +56,9 @@ const (
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
 	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
-	keepaliveTimeout := h.url.GetTimeDuration(mhttp.KeepaliveTimeoutKey, time.Millisecond, 5*time.Second)
+	// http proxy connection keepalive duration, default 0 means unlimited
+	keepaliveTimeout := h.url.GetTimeDuration(mhttp.KeepaliveTimeoutKey, time.Millisecond, 0)
+	idleConnectionTimeout := h.url.GetTimeDuration(mhttp.IdleConnectionTimeoutKey, time.Millisecond, 5*time.Second)
 	h.srvURLMap = make(srvURLMapT)
 	urlConf, _ := h.gctx.Config.GetSection("http-service")
 	if urlConf != nil {
@@ -103,7 +105,8 @@ func (h *HTTPProvider) Initialize() {
 			}
 			return c, nil
 		},
-		MaxIdleConnDuration: keepaliveTimeout,
+		MaxConnDuration:     keepaliveTimeout,
+		MaxIdleConnDuration: idleConnectionTimeout,
 		MaxConns:            h.maxConnections,
 		ReadTimeout:         timeout,
 		WriteTimeout:        timeout,
