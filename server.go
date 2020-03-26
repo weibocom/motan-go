@@ -41,7 +41,11 @@ var (
 // a motan server context can listen multi ports and provide many services. so a single motan server context is suggested
 // default context will be used if confFile is empty
 func GetMotanServerContext(confFile string) *MSContext {
-	if !flag.Parsed() {
+	return GetMotanServerContextWithFlagParse(confFile, true)
+}
+
+func GetMotanServerContextWithFlagParse(confFile string, parseFlag bool) *MSContext {
+	if parseFlag && !flag.Parsed() {
 		flag.Parse()
 	}
 	serverContextMutex.Lock()

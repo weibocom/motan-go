@@ -88,9 +88,12 @@ func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 	req.SetAttachment(mpro.MPath, req.GetServiceName())
 	return req
 }
-
 func GetClientContext(confFile string) *MCContext {
-	if !flag.Parsed() {
+	return GetClientContextWithFlagParse(confFile, true)
+}
+
+func GetClientContextWithFlagParse(confFile string, parseFlag bool) *MCContext {
+	if parseFlag && !flag.Parsed() {
 		flag.Parse()
 	}
 	clientContextMutex.Lock()
