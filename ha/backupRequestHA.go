@@ -62,16 +62,19 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	var resp motan.Response
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
 	backupRequestMaxRetryRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestMaxRetryRatio", defaultBackupRequestMaxRetryRatio)
+	delay := int(br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayTime", 0))
 	requestTimeout := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "requestTimeout", defaultRequestTimeout)
 
 	deadline := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
 	defer deadline.Stop()
 
 	successCh := make(chan motan.Response, retries+1)
-
-	delay := (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
-	if delay < 10 {
-		delay = 10 // min 10ms
+	if delay <= 0 {
+		// if no delay time configuration, use pXX time as delay time
+		delay = (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
+		if delay < 10 {
+			delay = 10 // min 10ms
+		}
 	}
 	var lastErrorCh chan motan.Response
 
