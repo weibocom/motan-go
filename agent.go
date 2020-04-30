@@ -334,7 +334,7 @@ func (a *Agent) startHTTPAgent() {
 	url := a.agentURL.Copy()
 	url.Port = a.hport
 	a.httpProxyServer = mserver.NewHTTPProxyServer(url)
-	a.httpProxyServer.Open(false, true, &httpClusterGetter{a: a})
+	a.httpProxyServer.Open(false, true, &httpClusterGetter{a: a}, &agentMessageHandler{agent: a})
 	vlog.Infof("Start http forward proxy server on port %d", a.hport)
 }
 
