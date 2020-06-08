@@ -3,9 +3,11 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	"github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/endpoint"
 	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/protocol"
@@ -41,24 +44,26 @@ type HTTPClusterGetter interface {
 }
 
 type HTTPProxyServer struct {
-	url           *core.URL
-	clusterGetter HTTPClusterGetter
-	httpHandler   fasthttp.RequestHandler
-	httpServer    *fasthttp.Server
-	httpClient    *fasthttp.Client
-	deny          []string
-	keepalive     bool
-	defaultDomain string
+	url            *core.URL
+	clusterGetter  HTTPClusterGetter
+	messageHandler core.MessageHandler
+	httpHandler    fasthttp.RequestHandler
+	httpServer     *fasthttp.Server
+	httpClient     *fasthttp.Client
+	deny           []string
+	keepalive      bool
+	defaultDomain  string
 }
 
 func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
 	return &HTTPProxyServer{url: url}
 }
 
-func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPClusterGetter) error {
+func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPClusterGetter, messageHandler core.MessageHandler) error {
 	os.Unsetenv("http_proxy")
 	os.Unsetenv("https_proxy")
 	s.clusterGetter = clusterGetter
+	s.messageHandler = messageHandler
 	s.keepalive, _ = strconv.ParseBool(s.url.GetParam(HTTPProxyKeepaliveKey, "true"))
 	s.defaultDomain = s.url.GetParam(HTTPProxyDefaultDomainKey, "")
 	s.deny = append(s.deny, "127.0.0.1:"+s.url.GetPortStr())
@@ -82,12 +87,17 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 
 	s.httpHandler = func(ctx *fasthttp.RequestCtx) {
 		defer core.HandlePanic(func() {
-			vlog.Errorf("Http proxy handler for [%s] panic", string(ctx.Request.URI().String()))
+			vlog.Errorf("Http proxy handler for [%s] panic", ctx.Request.URI().String())
 			ctx.Response.Header.SetServer(HTTPProxyServerName)
-			ctx.Response.SetStatusCode(fasthttp.StatusBadGateway)
-			ctx.Response.SetBodyString("err_msg: http proxy panic")
+			ctx.SetStatusCode(fasthttp.StatusBadGateway)
+			ctx.SetBodyString("err_msg: http proxy panic")
 		})
 		httpReq := &ctx.Request
+		requestPath := httpReq.URI().Path()
+		if string(requestPath) == "/proxy_to_rpc" {
+			s.doRPC(ctx)
+			return
+		}
 		if ctx.IsConnect() {
 			// For https proxy we just proxy it to the real domain
 			proxyHost := string(ctx.Request.Host())
@@ -133,7 +143,7 @@ func (s *HTTPProxyServer) Open(block bool, proxy bool, clusterGetter HTTPCluster
 			}
 		}
 		// no upstream handler found, if direct request the host ip and do not set Host header we should reject it
-		if httpReq.RequestURI()[0] == '/' {
+		if requestPath[0] == '/' {
 			for _, d := range s.deny {
 				if hostAndPort == d {
 					ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
@@ -203,6 +213,64 @@ func (s *HTTPProxyServer) Destroy() {
 
 func (s *HTTPProxyServer) GetHTTPClient() *fasthttp.Client {
 	return s.httpClient
+}
+
+func (s *HTTPProxyServer) doRPC(ctx *fasthttp.RequestCtx) {
+	request := &ctx.Request
+	response := &ctx.Response
+	service := string(ctx.FormValue("service"))
+	method := string(ctx.FormValue("method"))
+	if service == "" || method == "" {
+		ctx.SetStatusCode(http.StatusBadRequest)
+		ctx.SetBodyString(fmt.Sprintf("service:%s or method:%s musn't be empty", service, method))
+		return
+	}
+	group := string(ctx.FormValue("group"))
+	argType := string(ctx.FormValue("arg_type"))
+	argStr := string(ctx.FormValue("arg"))
+	if argType != "string" {
+		ctx.SetStatusCode(http.StatusBadRequest)
+		ctx.SetBodyString(fmt.Sprintf("arg_type %s not support now", argType))
+		return
+	}
+	motanArgs := []interface{}{argStr}
+	motanRequest := &core.MotanRequest{
+		RequestID:   endpoint.GenerateRequestID(),
+		ServiceName: service,
+		Method:      method,
+		Arguments:   motanArgs,
+	}
+	motanRequest.SetAttachment(protocol.MGroup, group)
+	motanRequest.SetAttachment(protocol.MPath, service)
+	motanRequest.SetAttachment(protocol.MMethod, method)
+	motanRequest.SetAttachment(protocol.MProxyProtocol, "motan2")
+	request.Header.VisitAll(func(key, value []byte) {
+		if len(value) == 0 {
+			return
+		}
+		motanRequest.SetAttachment(string(key), string(value))
+	})
+	motanResponse := s.messageHandler.Call(motanRequest)
+	responseException := motanResponse.GetException()
+	if responseException != nil {
+		ctx.SetStatusCode(http.StatusBadGateway)
+		ctx.SetBodyString(responseException.ErrMsg)
+		return
+	}
+	var responseBody []byte
+	err := motanResponse.ProcessDeserializable(&responseBody)
+	if err != nil {
+		ctx.SetStatusCode(http.StatusBadGateway)
+		ctx.SetBodyString("get response body failed: " + err.Error())
+		return
+	}
+	motanResponse.GetAttachments().Range(func(k, v string) bool {
+		response.Header.Set(k, v)
+		return true
+	})
+	response.Header.Set("Content-Type", "text/plain")
+	ctx.SetBody(motanResponse.GetValue().([]byte))
+	return
 }
 
 func (s *HTTPProxyServer) doHTTPProxy(ctx *fasthttp.RequestCtx) {
