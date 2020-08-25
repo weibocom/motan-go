@@ -212,7 +212,7 @@ func (u *URL) MergeParams(params map[string]string) {
 }
 
 func (u *URL) CanServe(other *URL) bool {
-	if u.Protocol != other.Protocol {
+	if u.Protocol != other.Protocol && u.Protocol != ProtocolLocal {
 		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s", u.Protocol, other.Protocol)
 		return false
 	}

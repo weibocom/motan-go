@@ -15,7 +15,7 @@ import (
 
 const (
 	defaultServerPort = "9982"
-	defaultProtocal   = "motan2"
+	defaultProtocol   = "motan2"
 )
 
 var (
@@ -26,7 +26,7 @@ var (
 
 func ParseExportInfo(export string) (string, int, error) {
 	port := defaultServerPort
-	protocol := defaultProtocal
+	protocol := defaultProtocol
 	s := TrimSplit(export, ":")
 	if len(s) == 1 && s[0] != "" {
 		port = s[0]

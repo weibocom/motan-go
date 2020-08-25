@@ -83,6 +83,36 @@ func (t *TestEndPointFilter) GetType() int32 {
 	return EndPointFilterType
 }
 
+type TestProvider struct {
+	URL *URL
+}
+
+func (t *TestProvider) SetService(s interface{}) {
+}
+
+func (t *TestProvider) GetURL() *URL {
+	return t.URL
+}
+
+func (t *TestProvider) SetURL(url *URL) {
+	t.URL = url
+}
+
+func (t *TestProvider) IsAvailable() bool {
+	return true
+}
+
+func (t *TestProvider) Call(request Request) Response {
+	return &MotanResponse{RequestID: request.GetRequestID(), Value: &TestObject{}}
+}
+
+func (t *TestProvider) Destroy() {
+}
+
+func (t *TestProvider) GetPath() string {
+	return t.URL.Path
+}
+
 type TestEndPoint struct {
 	URL         *URL
 	ProcessTime int64
