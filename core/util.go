@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math/rand"
 	"net"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -37,7 +38,7 @@ func ParseExportInfo(export string) (string, int, error) {
 	}
 	porti, err := strconv.Atoi(port)
 	if err != nil {
-		vlog.Errorf("export port not int. port:%s\n", port)
+		vlog.Errorf("export port not int. port:%s", port)
 		return protocol, porti, err
 	}
 	return protocol, porti, err
@@ -123,7 +124,7 @@ func GetReqInfo(request Request) string {
 
 func HandlePanic(f func()) {
 	if err := recover(); err != nil {
-		vlog.Errorf("recover panic. error:%v, stack: %s\n", err, debug.Stack())
+		vlog.Errorf("recover panic. error:%v, stack: %s", err, debug.Stack())
 		if f != nil {
 			f()
 		}
@@ -155,4 +156,20 @@ func TrimSplit(s string, sep string) []string {
 	}
 	a[i] = s
 	return a[:i+1]
+}
+
+// ListenUnixSock try to listen a unix socket address
+// this method using by create motan agent server, management server and http proxy server
+func ListenUnixSock(unixSockAddr string) (net.Listener, error) {
+	if err := os.RemoveAll(unixSockAddr); err != nil {
+		vlog.Errorf("listenUnixSock err, remove old unix sock file fail. err: %v", err)
+		return nil, err
+	}
+
+	listener, err := net.Listen("unix", unixSockAddr)
+	if err != nil {
+		vlog.Errorf("listenUnixSock err, listen unix sock fail. err:%v", err)
+		return nil, err
+	}
+	return listener, nil
 }

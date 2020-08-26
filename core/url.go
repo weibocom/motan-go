@@ -156,7 +156,7 @@ func (u *URL) ToExtInfo() string {
 func FromExtInfo(extinfo string) *URL {
 	defer func() { // if extinfo format not correct, just return nil URL
 		if err := recover(); err != nil {
-			vlog.Warningf("from ext to url fail. extinfo:%s, err:%v\n", extinfo, err)
+			vlog.Warningf("from ext to url fail. extinfo:%s, err:%v", extinfo, err)
 		}
 	}()
 	arr := strings.Split(extinfo, "?")
@@ -213,19 +213,19 @@ func (u *URL) MergeParams(params map[string]string) {
 
 func (u *URL) CanServe(other *URL) bool {
 	if u.Protocol != other.Protocol {
-		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s\n", u.Protocol, other.Protocol)
+		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s", u.Protocol, other.Protocol)
 		return false
 	}
 	if u.Path != other.Path {
-		vlog.Errorf("can not serve path, err : p1:%s, p2:%s\n", u.Path, other.Path)
+		vlog.Errorf("can not serve path, err : p1:%s, p2:%s", u.Path, other.Path)
 		return false
 	}
 	if !IsSame(u.Parameters, other.Parameters, SerializationKey, "") {
-		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s\n", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
+		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
 		return false
 	}
 	if !IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") {
-		vlog.Errorf("can not serve version, err : v1:%s, v2:%s\n", u.Parameters[VersionKey], other.Parameters[VersionKey])
+		vlog.Errorf("can not serve version, err : v1:%s, v2:%s", u.Parameters[VersionKey], other.Parameters[VersionKey])
 		return false
 	}
 	return true

@@ -62,7 +62,7 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 		if info, ok := c.url.Parameters[cgiKey]; ok {
 			env[key] = info
 		} else {
-			vlog.Infof("NeededCGIEnv %s is not exist\n", cgiKey)
+			vlog.Infof("NeededCGIEnv %s is not exist", cgiKey)
 		}
 	}
 
@@ -99,7 +99,7 @@ func (c *CgiProvider) Call(request motan.Request) motan.Response {
 	}
 	content, _, err := ccgi.Request(env, reqParams)
 	if err != nil {
-		vlog.Errorf("CGI Call error: %+v\n", err)
+		vlog.Errorf("CGI Call error: %+v", err)
 		fillException(resp, t, err)
 		return resp
 	}

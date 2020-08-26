@@ -39,6 +39,7 @@ type HTTPProvider struct {
 	maxConnections    int
 	domain            string
 	defaultHTTPMethod string
+	enableRewrite     bool
 }
 
 const (
@@ -55,7 +56,9 @@ const (
 // Initialize http provider
 func (h *HTTPProvider) Initialize() {
 	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
-	keepaliveTimeout := h.url.GetTimeDuration(mhttp.KeepaliveTimeoutKey, time.Millisecond, 5*time.Second)
+	// http proxy connection keepalive duration, default 0 means unlimited
+	keepaliveTimeout := h.url.GetTimeDuration(mhttp.KeepaliveTimeoutKey, time.Millisecond, 0)
+	idleConnectionTimeout := h.url.GetTimeDuration(mhttp.IdleConnectionTimeoutKey, time.Millisecond, 5*time.Second)
 	h.srvURLMap = make(srvURLMapT)
 	urlConf, _ := h.gctx.Config.GetSection("http-service")
 	if urlConf != nil {
@@ -82,9 +85,16 @@ func (h *HTTPProvider) Initialize() {
 	}
 	h.domain = h.url.GetParam(mhttp.DomainKey, "")
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(h.domain, h.gctx)
-	h.proxyAddr = h.url.GetParam("proxyAddress", "")
-	h.proxySchema = h.url.GetParam("proxySchema", "http")
-	h.maxConnections = int(h.url.GetPositiveIntValue("maxConnections", 512))
+	h.proxyAddr = h.url.GetParam(mhttp.ProxyAddressKey, "")
+	h.proxySchema = h.url.GetParam(mhttp.ProxySchemaKey, "http")
+	h.maxConnections = int(h.url.GetPositiveIntValue(mhttp.MaxConnectionsKey, 512))
+	h.enableRewrite = true
+	enableRewriteStr := h.url.GetParam(mhttp.EnableRewriteKey, "true")
+	if enableRewrite, err := strconv.ParseBool(enableRewriteStr); err != nil {
+		vlog.Errorf("%s should be a bool value, but got: %s", mhttp.EnableRewriteKey, enableRewriteStr)
+	} else {
+		h.enableRewrite = enableRewrite
+	}
 	h.fastClient = &fasthttp.HostClient{
 		Name: "motan",
 		Addr: h.proxyAddr,
@@ -95,7 +105,8 @@ func (h *HTTPProvider) Initialize() {
 			}
 			return c, nil
 		},
-		MaxIdleConnDuration: keepaliveTimeout,
+		MaxConnDuration:     keepaliveTimeout,
+		MaxIdleConnDuration: idleConnectionTimeout,
 		MaxConns:            h.maxConnections,
 		ReadTimeout:         timeout,
 		WriteTimeout:        timeout,
@@ -164,7 +175,8 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 		vparamsTmp := reflect.ValueOf(paramsTmp[0])
 
 		t := fmt.Sprintf("%s", vparamsTmp.Type())
-		buffer.WriteString("requestIdFromClient=")
+		buffer.WriteString(mhttp.ProxyRequestIDKey)
+		buffer.WriteString("=")
 		buffer.WriteString(fmt.Sprintf("%d", request.GetRequestID()))
 		switch t {
 		case "map[string]string":
@@ -224,22 +236,30 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}
 	// Ok here we do transparent http proxy and return
 	if doTransparentProxy {
-		// Do not check upstream for compatibility
-		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok {
-			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
-			return resp
+		rewritePath := request.GetMethod()
+		if h.enableRewrite {
+			// Do not check upstream for compatibility
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+			if !ok {
+				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				return resp
+			}
+			rewritePath = path
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
-		httpReq.Header.DisableNormalizing()
-		httpRes.Header.DisableNormalizing()
 		defer fasthttp.ReleaseRequest(httpReq)
 		defer fasthttp.ReleaseResponse(httpRes)
 		httpReq.Header.Read(bufio.NewReader(bytes.NewReader(headerBytes)))
 
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
+		request.GetAttachments().Range(func(k, v string) bool {
+			if strings.HasPrefix(k, "M_") {
+				httpReq.Header.Add(strings.Replace(k, "M_", "MOTAN-", -1), v)
+			}
+			return true
+		})
 		httpReq.Header.Del("Connection")
 		httpReq.Header.Set("X-Forwarded-For", ip)
 		if len(bodyBytes) != 0 {
@@ -254,6 +274,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		httpRes.Header.Del("Connection")
 		httpRes.Header.WriteTo(headerBuffer)
 		body := httpRes.Body()
+		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		// copy response body is needed
 		responseBodyBytes := make([]byte, len(body))
 		copy(responseBodyBytes, body)
@@ -263,33 +284,37 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 
 	if h.proxyAddr != "" {
 		// rpc client call to this server
-		_, rewritePath, ok := h.locationMatcher.Pick(request.GetMethod(), true)
-		if !ok {
-			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
-			return resp
+		rewritePath := request.GetMethod()
+		if h.enableRewrite {
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+			if !ok {
+				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				return resp
+			}
+			rewritePath = path
 		}
 		httpReq := fasthttp.AcquireRequest()
 		httpRes := fasthttp.AcquireResponse()
-		httpReq.Header.DisableNormalizing()
-		httpRes.Header.DisableNormalizing()
 		defer fasthttp.ReleaseRequest(httpReq)
 		defer fasthttp.ReleaseResponse(httpRes)
 		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)
 		if err != nil {
 			fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
+			return resp
 		}
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
 		if len(httpReq.Header.Host()) == 0 {
 			httpReq.Header.SetHost(h.domain)
 		}
-		httpReq.Header.Add("X-Forwarded-For", ip)
+		httpReq.Header.Set("X-Forwarded-For", ip)
 		err = h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
+		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		return resp
 	}
 
@@ -356,7 +381,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
-		vlog.Warningf("server_agent result is empty :%d,%d,%s\n", statusCode, request.GetRequestID(), httpReqURL)
+		vlog.Warningf("server_agent result is empty :%d,%d,%s", statusCode, request.GetRequestID(), httpReqURL)
 	}
 	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
 	if err != nil {

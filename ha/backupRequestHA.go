@@ -8,6 +8,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/metrics"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 const (
@@ -44,46 +45,53 @@ func (br *BackupRequestHA) SetURL(url *motan.URL) {
 }
 
 func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
-
-	epList := loadBalance.SelectArray(request)
-	if len(epList) == 0 {
+	ep := loadBalance.Select(request)
+	if ep == nil {
 		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints, fmt.Sprintf("call backup request fail: %s", "no endpoints"))
 	}
 
-	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "retries", 0)
-	if retries == 0 {
-		return br.doCall(request, epList[0])
+	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, 0)
+	if retries <= 0 {
+		return br.doCall(request, ep)
 	}
-	item := metrics.GetStatItem(request.GetAttachment("M_g"), request.GetAttachment("M_p"))
+	// TODO: we should use metrics of the cluster, with traffic control the group may changed
+	item := metrics.GetStatItem(metrics.Escape(request.GetAttachment(protocol.MGroup)), metrics.Escape(request.GetAttachment(protocol.MPath)))
 	if item == nil || item.LastSnapshot() == nil {
-		return br.doCall(request, epList[0])
+		return br.doCall(request, ep)
 	}
 	var resp motan.Response
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
 	backupRequestMaxRetryRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestMaxRetryRatio", defaultBackupRequestMaxRetryRatio)
+	delay := int(br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayTime", 0))
 	requestTimeout := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "requestTimeout", defaultRequestTimeout)
 
-	successCh := make(chan motan.Response, retries+1)
+	deadline := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
+	defer deadline.Stop()
 
-	delay := (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
-	if delay < 10 {
-		delay = 10 // min 10ms
+	successCh := make(chan motan.Response, retries+1)
+	if delay <= 0 {
+		// if no delay time configuration, use pXX time as delay time
+		delay = (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
+		if delay < 10 {
+			delay = 10 // min 10ms
+		}
 	}
 	var lastErrorCh chan motan.Response
 
-	for i := 0; i <= int(retries) && i < len(epList); i++ {
-		ep := epList[i]
+	for i := 0; i <= int(retries); i++ {
 		if i == 0 {
 			br.updateCallRecord(counterRoundCount)
+		} else if ep = loadBalance.Select(request); ep == nil {
+			continue
 		}
 		if i > 0 && !br.tryAcquirePermit(int(backupRequestMaxRetryRatio)) {
-			vlog.Warningf("The permit is used up, request id: %d\n", request.GetRequestID())
+			vlog.Warningf("The permit is used up, request id: %d", request.GetRequestID())
 			break
 		}
 		// log & clone backup request
 		pr := request
 		if i > 0 {
-			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s\n", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
+			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
 			pr = request.Clone().(motan.Request)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
@@ -104,20 +112,18 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			return resp
 		case <-lastErrorCh:
 		case <-timer.C:
+		case <-deadline.C:
+			goto BREAK
 		}
 	}
-
-	timer := time.NewTimer(time.Duration(requestTimeout) * time.Millisecond)
-	defer timer.Stop()
 	select {
 	case resp = <-successCh:
 		return resp
 	case resp = <-lastErrorCh:
-	case <-timer.C:
+	case <-deadline.C:
 	}
-
+BREAK:
 	return getErrorResponse(request.GetRequestID(), fmt.Sprintf("call backup request fail: %s", "timeout"))
-
 }
 
 func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint) motan.Response {
@@ -125,7 +131,7 @@ func (br *BackupRequestHA) doCall(request motan.Request, endpoint motan.EndPoint
 	if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
 		return response
 	}
-	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v\n", endpoint.GetURL().GetIdentity(), response.GetException())
+	vlog.Warningf("BackupRequestHA call fail! url:%s, err:%+v", endpoint.GetURL().GetIdentity(), response.GetException())
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 400, ErrMsg: fmt.Sprintf(
 		"call backup request fail.Exception:%s", response.GetException().ErrMsg), ErrType: motan.ServiceException})
 }
@@ -158,5 +164,5 @@ func getKey(request motan.Request) string {
 	if ctx != nil && ctx.Proxy {
 		role = "motan-client-agent"
 	}
-	return role + ":" + request.GetAttachment("M_s") + ":" + request.GetMethod()
+	return metrics.Escape(role + ":" + request.GetAttachment(protocol.MSource) + ":" + request.GetMethod())
 }

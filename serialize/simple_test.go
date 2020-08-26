@@ -9,6 +9,13 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 )
 
+var simpleSerialization = &SimpleSerialization{}
+
+func TestCommonBasic(t *testing.T) {
+	testBasic(t, simpleSerialization)
+	testMultiBasic(t, simpleSerialization)
+}
+
 // serialize && deserialize string
 func TestSerializeString(t *testing.T) {
 	simple := &SimpleSerialization{}

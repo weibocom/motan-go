@@ -27,6 +27,7 @@ const (
 	Lbkey                   = "loadbalance"
 	TimeOutKey              = "requestTimeout"
 	SessionTimeOutKey       = "registrySessionTimeout"
+	RetriesKey              = "retries"
 	ApplicationKey          = "application"
 	VersionKey              = "version"
 	FilterKey               = "filter"
@@ -48,6 +49,10 @@ const (
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
+	UnixSockKey             = "unixSock"
+	ManagementUnixSockKey   = "managementUnixSock"
+	ManagementPortRangeKey  = "managementPortRange"
+	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 )
 
 // nodeType
@@ -76,4 +81,5 @@ const (
 // errorCodes
 const (
 	ENoEndpoints = 1001
+	ENoChannel   = 1002
 )

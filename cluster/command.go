@@ -3,6 +3,7 @@ package cluster
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
@@ -64,16 +65,24 @@ type serviceListener struct {
 	referURL *motan.URL
 	urls     []*motan.URL
 	crw      *CommandRegistryWrapper
+
+	// cached identity
+	identity motan.AtomicString
 }
 
 func (s *serviceListener) GetIdentity() string {
-	return "serviceListener-" + s.referURL.GetIdentity()
+	id := s.identity.Load()
+	if id == "" {
+		id = fmt.Sprintf("serviceListener-%p-%s", s, s.referURL.GetIdentity())
+		s.identity.Store(id)
+	}
+	return id
 }
 
 func (s *serviceListener) Notify(registryURL *motan.URL, urls []*motan.URL) {
-	vlog.Infof("serviceListener notify urls size is %d. refer: %v, registry: %v\n", len(urls), s.referURL, registryURL)
+	vlog.Infof("serviceListener notify urls size is %d. refer: %v, registry: %v", len(urls), s.referURL, registryURL)
 	if s.crw == nil {
-		vlog.Infof("serviceListener maybe unSubscribed. notify will ignore. s:%+v\n", s)
+		vlog.Infof("serviceListener maybe unSubscribed. notify will ignore. s:%+v", s)
 		return
 	}
 	s.urls = urls
@@ -114,7 +123,7 @@ func (c *ClientCommand) MatchCmdPattern(url *motan.URL) bool {
 	}
 	isRegMatch, err := regexp.MatchString(c.Pattern, url.Path)
 	if err != nil {
-		vlog.Errorf("check regexp command pattern fail. err :%s\n", err.Error())
+		vlog.Errorf("check regexp command pattern fail. err :%s", err.Error())
 	}
 	if isRegMatch {
 		return true
@@ -125,7 +134,7 @@ func (c *ClientCommand) MatchCmdPattern(url *motan.URL) bool {
 func ParseCommand(commandInfo string) *Command {
 	command := new(Command)
 	if err := json.Unmarshal([]byte(commandInfo), command); err != nil {
-		vlog.Infof("ParseCommand error, command: %s, err:%s\n", commandInfo, err.Error())
+		vlog.Infof("ParseCommand error, command: %s, err:%s", commandInfo, err.Error())
 		return nil
 	}
 	return command
@@ -215,22 +224,22 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 	defer c.mux.Unlock()
 	result := make([]*motan.URL, 0)
 	if c.tcCommand != nil {
-		vlog.Infof("%s get result with tc command.%+v\n", c.cluster.GetIdentity(), c.tcCommand)
+		vlog.Infof("%s get result with tc command.%+v", c.cluster.GetIdentity(), c.tcCommand)
 		var buffer bytes.Buffer
 		for _, group := range c.tcCommand.MergeGroups {
 			g := strings.Split(group, ":")        //group name should not include ':'
 			if c.cluster.GetURL().Group == g[0] { // own group
-				vlog.Infof("%s get result from own group: %s, group result size:%d\n", c.cluster.GetIdentity(), g[0], len(c.ownGroupURLs))
+				vlog.Infof("%s get result from own group: %s, group result size:%d", c.cluster.GetIdentity(), g[0], len(c.ownGroupURLs))
 				for _, u := range c.ownGroupURLs {
 					result = append(result, u)
 				}
 			} else if l, ok := c.otherGroupListener[g[0]]; ok {
-				vlog.Infof("%s get result merge group: %s, group result size:%d\n", c.cluster.GetIdentity(), g[0], len(l.urls))
+				vlog.Infof("%s get result merge group: %s, group result size:%d", c.cluster.GetIdentity(), g[0], len(l.urls))
 				for _, u := range l.urls {
 					result = append(result, u)
 				}
 			} else {
-				vlog.Warningf("TC command merge group not found. refer:%s, group not found: %s, TC command %v\n", c.cluster.GetURL().GetIdentity(), g[0], c.tcCommand)
+				vlog.Warningf("TC command merge group not found. refer:%s, group not found: %s, TC command %v", c.cluster.GetURL().GetIdentity(), g[0], c.tcCommand)
 				continue
 			}
 			if buffer.Len() > 0 {
@@ -245,7 +254,7 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 		result = processRoute(result, c.tcCommand.RouteRules)
 		if len(result) == 0 {
 			result = c.ownGroupURLs
-			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v\n", c.cluster.GetURL().GetIdentity(), c.tcCommand.MergeGroups, c.tcCommand.RouteRules)
+			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v", c.cluster.GetURL().GetIdentity(), c.tcCommand.MergeGroups, c.tcCommand.RouteRules)
 		}
 	} else {
 		result = c.ownGroupURLs
@@ -253,7 +262,7 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 	if needNotify {
 		c.notifyListener.Notify(c.registry.GetURL(), result)
 	}
-	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t\n", c.cluster.GetURL().GetIdentity(), c.tcCommand != nil, c.degradeCommand != nil, len(result), needNotify)
+	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t", c.cluster.GetURL().GetIdentity(), c.tcCommand != nil, c.degradeCommand != nil, len(result), needNotify)
 	return result
 }
 
@@ -263,7 +272,7 @@ func processRoute(urls []*motan.URL, routers []string) []*motan.URL {
 		for _, r := range routers {
 			rs := strings.Split(r, "to")
 			if len(rs) != 2 {
-				vlog.Warningf("wrong command router:%s is ignored!\n", r)
+				vlog.Warningf("wrong command router:%s is ignored!", r)
 				continue
 			}
 			from := strings.TrimSpace(rs[0])
@@ -329,7 +338,7 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 		}
 		c.serviceCommandInfo = commandInfo
 	default:
-		vlog.Warningf("unknown command type %d\n", commandType)
+		vlog.Warningf("unknown command type %d", commandType)
 		return false
 	}
 
@@ -360,13 +369,13 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	//process all kinds commands
 	c.tcCommand = newTcCommand
 	if c.tcCommand == nil {
-		vlog.Infof("%s process command result : no tc command. \n", c.cluster.GetURL().GetIdentity())
+		vlog.Infof("%s process command result : no tc command. ", c.cluster.GetURL().GetIdentity())
 		for _, v := range c.otherGroupListener {
 			v.unSubscribe(c.registry)
 		}
 		c.otherGroupListener = make(map[string]*serviceListener)
 	} else {
-		vlog.Infof("%s process command result : has tc command. tc command will enable.command : %+v\n", c.cluster.GetURL().GetIdentity(), newTcCommand)
+		vlog.Infof("%s process command result : has tc command. tc command will enable.command : %+v", c.cluster.GetURL().GetIdentity(), newTcCommand)
 		newOtherGroupListener := make(map[string]*serviceListener)
 		for _, group := range c.tcCommand.MergeGroups {
 			g := strings.Split(group, ":")
@@ -374,11 +383,11 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 				continue
 			}
 			if listener, ok := c.otherGroupListener[g[0]]; ok { // already exist
-				vlog.Infof("commandWrapper %s process tc command. reuse group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
+				vlog.Infof("commandWrapper %s process tc command. reuse group %s", c.cluster.GetURL().GetIdentity(), g[0])
 				newOtherGroupListener[g[0]] = listener
 				delete(c.otherGroupListener, g[0])
 			} else {
-				vlog.Infof("commandWrapper %s process tc command. subscribe new group %s\n", c.cluster.GetURL().GetIdentity(), g[0])
+				vlog.Infof("commandWrapper %s process tc command. subscribe new group %s", c.cluster.GetURL().GetIdentity(), g[0])
 				newGroupURL := c.cluster.GetURL().Copy()
 				newGroupURL.Group = g[0]
 				l := &serviceListener{crw: c, referURL: newGroupURL}
@@ -396,10 +405,10 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	}
 	c.degradeCommand = newDegradeCommand
 	if c.degradeCommand == nil {
-		vlog.Infof("%s no degrade command. this cluster is available.\n", c.cluster.GetURL().GetIdentity())
+		vlog.Infof("%s no degrade command. this cluster is available.", c.cluster.GetURL().GetIdentity())
 		c.cluster.available = true
 	} else {
-		vlog.Infof("%s has degrade command. this cluster will degrade.\n", c.cluster.GetURL().GetIdentity())
+		vlog.Infof("%s has degrade command. this cluster will degrade.", c.cluster.GetURL().GetIdentity())
 		c.cluster.available = false
 	}
 
@@ -440,7 +449,7 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 	//only one command of a type will enable in same service. depends on the index of command
 	cmd := ParseCommand(commandInfo)
 	if cmd == nil {
-		vlog.Warningf("parse command fail, command is ignored. command info: %s\n", commandInfo)
+		vlog.Warningf("parse command fail, command is ignored. command info: %s", commandInfo)
 	} else {
 		var cmdList CmdList = cmd.ClientCommandList
 		sort.Sort(cmdList)
@@ -468,7 +477,7 @@ func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand,
 }
 
 func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
-	vlog.Infof("%s receive Command notify. type:%d, command:%s\n", c.cluster.GetURL().GetIdentity(), commandType, commandInfo)
+	vlog.Infof("%s receive Command notify. type:%d, command:%s", c.cluster.GetURL().GetIdentity(), commandType, commandInfo)
 	needNotify := c.processCommand(commandType, commandInfo)
 	if needNotify {
 		c.getResultWithCommand(needNotify)
@@ -476,7 +485,7 @@ func (c *CommandRegistryWrapper) NotifyCommand(registryURL *motan.URL, commandTy
 }
 
 func (c *CommandRegistryWrapper) Notify(registryURL *motan.URL, urls []*motan.URL) {
-	vlog.Infof("CommandRegistryWrapper notify urls size is %d. refer: %v, registry: %v\n", len(urls), c.cluster.GetURL(), registryURL)
+	vlog.Infof("CommandRegistryWrapper notify urls size is %d. refer: %v, registry: %v", len(urls), c.cluster.GetURL(), registryURL)
 	c.ownGroupURLs = urls
 	needNotify := false
 	if c.tcCommand != nil {

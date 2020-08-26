@@ -74,9 +74,9 @@ func newCircuitBreaker(filterName string, url *motan.URL) bool {
 	commandConfig := buildCommandConfig(filterName, url)
 	hystrix.ConfigureCommand(url.GetIdentity(), *commandConfig)
 	if _, _, err = hystrix.GetCircuit(url.GetIdentity()); err != nil {
-		vlog.Errorf("[%s] new circuit fail. err:%s, url:%v, config{%s}\n", err.Error(), filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
+		vlog.Errorf("[%s] new circuit fail. err:%s, url:%v, config{%s}", err.Error(), filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
 	} else {
-		vlog.Infof("[%s] new circuit success. url:%v, config{%s}\n", filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
+		vlog.Infof("[%s] new circuit success. url:%v, config{%s}", filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
 	}
 	return bizException
 }

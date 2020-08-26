@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/weibocom/motan-go/cluster"
@@ -87,9 +88,12 @@ func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 	req.SetAttachment(mpro.MPath, req.GetServiceName())
 	return req
 }
-
 func GetClientContext(confFile string) *MCContext {
-	if !flag.Parsed() {
+	return GetClientContextWithFlagParse(confFile, true)
+}
+
+func GetClientContextWithFlagParse(confFile string, parseFlag bool) *MCContext {
+	if parseFlag && !flag.Parsed() {
 		flag.Parse()
 	}
 	clientContextMutex.Lock()
@@ -104,14 +108,30 @@ func GetClientContext(confFile string) *MCContext {
 			fmt.Println("get config of \"motan-client\" fail! err " + err.Error())
 		}
 
-		logdir := ""
+		logDir := ""
 		if section != nil && section["log_dir"] != nil {
-			logdir = section["log_dir"].(string)
+			logDir = section["log_dir"].(string)
 		}
-		if logdir == "" {
-			logdir = "."
+		if logDir == "" {
+			logDir = "."
 		}
-		initLog(logdir)
+		logAsync := ""
+		if section != nil && section["log_async"] != nil {
+			logAsync = strconv.FormatBool(section["log_async"].(bool))
+		}
+		logStructured := ""
+		if section != nil && section["log_structured"] != nil {
+			logStructured = strconv.FormatBool(section["log_structured"].(bool))
+		}
+		rotatePerHour := ""
+		if section != nil && section["rotate_per_hour"] != nil {
+			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+		}
+		logLevel := ""
+		if section != nil && section["log_level"] != nil {
+			logLevel = section["log_level"].(string)
+		}
+		initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
 		registerSwitchers(mc.context)
 	}
 	return mc

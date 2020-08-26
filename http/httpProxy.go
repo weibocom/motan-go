@@ -21,8 +21,17 @@ const (
 )
 
 const (
-	DomainKey           = "domain"
-	KeepaliveTimeoutKey = "keepaliveTimeout"
+	DomainKey                = "domain"
+	KeepaliveTimeoutKey      = "keepaliveTimeout"
+	IdleConnectionTimeoutKey = "idleConnectionTimeout"
+	ProxyAddressKey          = "proxyAddress"
+	ProxySchemaKey           = "proxySchema"
+	MaxConnectionsKey        = "maxConnections"
+	EnableRewriteKey         = "enableRewrite"
+)
+
+const (
+	ProxyRequestIDKey = "requestIdFromClient"
 )
 
 const (
@@ -364,8 +373,6 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		fasthttpRequest.Header.Add(k, v)
 		return true
 	})
-	// TODO: should we force disable http gzip?
-	fasthttpRequest.Header.Del("Accept-Encoding")
 	fasthttpRequest.Header.Del("Connection")
 	arguments := motanRequest.GetArguments()
 	if len(arguments) > 1 {
@@ -377,17 +384,21 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		if arg0 != nil {
 			switch arg0.(type) {
 			case map[string]string:
-				for k, v := range arg0.(map[string]string) {
-					buffer.WriteString("&")
-					buffer.WriteString(k)
-					buffer.WriteString("=")
-					buffer.WriteString(url.QueryEscape(v))
-				}
-				if buffer.Len() != 0 {
-					// the first character is '&', we need remove it
-					if httpMethod == "GET" && queryString == "" {
-						fasthttpRequest.URI().SetQueryStringBytes(buffer.Bytes()[1:])
-					} else {
+				if httpMethod == "GET" {
+					queryArgs := fasthttpRequest.URI().QueryArgs()
+					for k, v := range arg0.(map[string]string) {
+						// no need escape, fasthttp will do escape atomic
+						queryArgs.Add(k, v)
+					}
+				} else {
+					for k, v := range arg0.(map[string]string) {
+						buffer.WriteString("&")
+						buffer.WriteString(k)
+						buffer.WriteString("=")
+						buffer.WriteString(url.QueryEscape(v))
+					}
+					if buffer.Len() != 0 {
+						// the first character is '&', we need remove it
 						fasthttpRequest.Header.SetContentType("application/x-www-form-urlencoded")
 						fasthttpRequest.SetBody(buffer.Bytes()[1:])
 					}

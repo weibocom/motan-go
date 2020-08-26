@@ -49,8 +49,8 @@ var (
 func CheckSnapshotDir() {
 	dir := snapshotConf.SnapshotDir
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.Mkdir(dir, 0774); err != nil {
-			vlog.Errorf("registry make directory error. dir:%s, err:%s\n", dir, err.Error())
+		if err := os.Mkdir(dir, 0775); err != nil {
+			vlog.Errorf("registry make directory error. dir:%s, err:%s", dir, err.Error())
 			return
 		}
 	}

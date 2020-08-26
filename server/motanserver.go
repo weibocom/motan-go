@@ -6,13 +6,32 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 )
+
+var currentConnections int64
+
+var motanServerOnce sync.Once
+
+func incrConnections() {
+	atomic.AddInt64(&currentConnections, 1)
+}
+
+func decrConnections() {
+	atomic.AddInt64(&currentConnections, -1)
+}
+
+func getConnections() int64 {
+	return atomic.LoadInt64(&currentConnections)
+}
 
 type MotanServer struct {
 	URL         *motan.URL
@@ -25,20 +44,37 @@ type MotanServer struct {
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
-	addr := ":" + strconv.Itoa(int(m.URL.Port))
-	if registry.IsAgent(m.URL) {
-		addr = m.URL.Host + addr
+
+	motanServerOnce.Do(func() {
+		metrics.RegisterStatusSampleFunc("motan_server_connection_count", getConnections)
+	})
+
+	var lis net.Listener
+	if unixSockAddr := m.URL.GetParam(motan.UnixSockKey, ""); unixSockAddr != "" {
+		listener, err := motan.ListenUnixSock(unixSockAddr)
+		if err != nil {
+			vlog.Errorf("listenUnixSock fail. err:%v", err)
+			return err
+		}
+		lis = listener
+	} else {
+		addr := ":" + strconv.Itoa(int(m.URL.Port))
+		if registry.IsAgent(m.URL) {
+			addr = m.URL.Host + addr
+		}
+		lisTmp, err := net.Listen("tcp", addr)
+		if err != nil {
+			vlog.Errorf("listen port:%d fail. err: %v", m.URL.Port, err)
+			return err
+		}
+		lis = lisTmp
 	}
-	lis, err := net.Listen("tcp", addr)
-	if err != nil {
-		vlog.Errorf("listen port:%d fail. err: %v\n", m.URL.Port, err)
-		return err
-	}
+
 	m.listener = lis
 	m.handler = handler
 	m.extFactory = extFactory
 	m.proxy = proxy
-	vlog.Infof("motan server is started. port:%d\n", m.URL.Port)
+	vlog.Infof("motan server is started. port:%d", m.URL.Port)
 	if block {
 		m.run()
 	} else {
@@ -71,9 +107,9 @@ func (m *MotanServer) Destroy() {
 	err := m.listener.Close()
 	if err == nil {
 		m.isDestroyed <- true
-		vlog.Infof("motan server destroy success.url %v\n", m.URL)
+		vlog.Infof("motan server destroy success.url %v", m.URL)
 	} else {
-		vlog.Errorf("motan server destroy fail.url %v, err :%s\n", m.URL, err.Error())
+		vlog.Errorf("motan server destroy fail.url %v, err :%s", m.URL, err.Error())
 	}
 }
 
@@ -86,16 +122,21 @@ func (m *MotanServer) run() {
 				vlog.Infof("Motan agent server been Destroyed and stoped.")
 				return
 			default:
-				vlog.Errorf("motan server accept from port %v fail. err:%s\n", m.listener.Addr(), err.Error())
+				vlog.Errorf("motan server accept from port %v fail. err:%s", m.listener.Addr(), err.Error())
 			}
 		} else {
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+				c.SetKeepAlive(true)
+			}
 			go m.handleConn(conn)
 		}
 	}
 }
 
 func (m *MotanServer) handleConn(conn net.Conn) {
+	incrConnections()
+	defer decrConnections()
 	defer conn.Close()
 	defer motan.HandlePanic(nil)
 	buf := bufio.NewReader(conn)
@@ -111,7 +152,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 		request, t, err := mpro.DecodeWithTime(buf)
 		if err != nil {
 			if err.Error() != "EOF" {
-				vlog.Warningf("decode motan message fail! con:%s, err:%s\n.", conn.RemoteAddr().String(), err.Error())
+				vlog.Warningf("decode motan message fail! con:%s, err:%s.", conn.RemoteAddr().String(), err.Error())
 			}
 			break
 		}
@@ -182,7 +223,7 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
 	_, err := conn.Write(resBuf.Bytes())
 	if err != nil {
-		vlog.Errorf("connection will close. conn: %s, err:%s\n", conn.RemoteAddr().String(), err.Error())
+		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
 	}
 	if tc != nil {

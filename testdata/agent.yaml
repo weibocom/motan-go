@@ -5,6 +5,8 @@ motan-agent:
   log_dir: "stdout"
   registry: "direct-registry"
   application: "agent-test"
+  httpProxyMaxRequestBodySize: 1000
+  httpProxyEnable: true
 
 motan-registry:
   direct-registry:

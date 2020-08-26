@@ -11,7 +11,9 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/endpoint"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 )
 
 type MotanCluster struct {
@@ -29,6 +31,9 @@ type MotanCluster struct {
 	available      bool
 	closed         bool
 	proxy          bool
+
+	// cached identity
+	identity motan.AtomicString
 }
 
 func (m *MotanCluster) IsAvailable() bool {
@@ -60,9 +65,16 @@ func (m *MotanCluster) SetURL(url *motan.URL) {
 func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster call panic", ErrType: motan.ServiceException})
-		vlog.Errorf("cluster call panic. req:%s\n", motan.GetReqInfo(request))
+		vlog.Errorf("cluster call panic. req:%s", motan.GetReqInfo(request))
 	})
 	if m.available {
+		if m.proxy {
+			// TODO: for case client has no group or protocol convert
+			// we should have the same entry to set all necessary attachments
+			if endpoint.GetRequestGroup(request) == "" {
+				request.SetAttachment(protocol.MGroup, m.url.Group)
+			}
+		}
 		return m.clusterFilter.Filter(m.HaStrategy, m.LoadBalance, request)
 	}
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
@@ -90,7 +102,7 @@ func (m *MotanCluster) initCluster() bool {
 	// parse registry and subscribe
 	m.parseRegistry()
 
-	vlog.Infof("init MotanCluster %s\n", m.GetIdentity())
+	vlog.Infof("init MotanCluster %s", m.GetIdentity())
 
 	return true
 }
@@ -117,7 +129,7 @@ func (m *MotanCluster) AddRegistry(registry motan.Registry) {
 	m.Registries = append(m.Registries, registry)
 }
 func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
-	vlog.Infof("cluster %s receive notify size %d. \n", m.GetIdentity(), len(urls))
+	vlog.Infof("cluster %s receive notify size %d. ", m.GetIdentity(), len(urls))
 	m.notifyLock.Lock()
 	defer m.notifyLock.Unlock()
 	// process weight if has
@@ -135,9 +147,9 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			vlog.Errorln("cluster receive nil url!")
 			continue
 		}
-		vlog.Infof("cluster %s received notify url:%s:%d\n", m.GetIdentity(), u.Host, u.Port)
+		vlog.Infof("cluster %s received notify url:%s:%d", m.GetIdentity(), u.Host, u.Port)
 		if !u.CanServe(m.url) {
-			vlog.Infof("cluster notify:can not use server:%+v\n", u)
+			vlog.Infof("cluster notify:can not use server:%+v", u)
 			continue
 		}
 		var ep motan.EndPoint
@@ -154,7 +166,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 				ep.SetProxy(m.proxy)
 				serialization := motan.GetSerialization(newURL, m.extFactory)
 				if serialization == nil {
-					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v\n", m.url)
+					vlog.Warningf("MotanCluster can not find Serialization in DefaultExtensionFactory! url:%+v", m.url)
 				} else {
 					ep.SetSerialization(serialization)
 				}
@@ -172,7 +184,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			delete(m.registryRefers, registryURL.GetIdentity())
 		} else {
 			// notify will ignored if endpoints size is 0 in single regisry mode
-			vlog.Infof("cluster %s notify endpoint is 0. notify ignored.\n", m.GetIdentity())
+			vlog.Infof("cluster %s notify endpoint is 0. notify ignored.", m.GetIdentity())
 			return
 		}
 	} else {
@@ -217,20 +229,29 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 	fep.Filter = lastf
 	return fep
 }
+
 func (m *MotanCluster) GetIdentity() string {
-	return m.url.GetIdentity()
+	id := m.identity.Load()
+	if id == "" {
+		// TODO: if using moving GC another object may use the same address as m,
+		//       but now it's ok
+		id = fmt.Sprintf("%p-%s", m, m.url.GetIdentity())
+		m.identity.Store(id)
+	}
+	return id
 }
+
 func (m *MotanCluster) Destroy() {
 	if !m.closed {
 		m.notifyLock.Lock()
 		defer m.notifyLock.Unlock()
-		vlog.Infof("cluster %s will destroy.\n", m.url.GetIdentity())
+		vlog.Infof("cluster %s will destroy.", m.url.GetIdentity())
 		for _, r := range m.Registries {
-			vlog.Infof("unsubscribe from registry %s .\n", r.GetURL().GetIdentity())
+			vlog.Infof("unsubscribe from registry %s .", r.GetURL().GetIdentity())
 			r.Unsubscribe(m.url, m)
 		}
 		for _, e := range m.Refers {
-			vlog.Infof("destroy endpoint %s .\n", e.GetURL().GetIdentity())
+			vlog.Infof("destroy endpoint %s .", e.GetURL().GetIdentity())
 			e.Destroy()
 		}
 		m.closed = true

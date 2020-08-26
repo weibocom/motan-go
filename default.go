@@ -54,11 +54,19 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/debug/pprof/trace"] = debug
 		defaultManageHandlers["/debug/mesh/trace"] = debug
 		defaultManageHandlers["/debug/pprof/sw"] = debug
+		defaultManageHandlers["/debug/stat/system"] = debug
+		defaultManageHandlers["/debug/stat/process"] = debug
+		defaultManageHandlers["/debug/stat/openFiles"] = debug
+		defaultManageHandlers["/debug/stat/connections"] = debug
 
 		switcher := &SwitcherHandler{}
 		defaultManageHandlers["/switcher/set"] = switcher
 		defaultManageHandlers["/switcher/get"] = switcher
 		defaultManageHandlers["/switcher/getAll"] = switcher
+
+		log := &LogHandler{}
+		defaultManageHandlers["/logConfig/get"] = log
+		defaultManageHandlers["/logConfig/set"] = log
 
 		dynamicConfigurer := &DynamicConfigurerHandler{}
 		defaultManageHandlers["/registry/register"] = dynamicConfigurer

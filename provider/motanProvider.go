@@ -23,7 +23,7 @@ const (
 func (m *MotanProvider) Initialize() {
 	protocol, port, err := motan.ParseExportInfo(m.url.GetParam(motan.ProxyKey, ""))
 	if err != nil {
-		vlog.Errorf("reverse proxy service config in %s error!\n", motan.ProxyKey)
+		vlog.Errorf("reverse proxy service config in %s error!", motan.ProxyKey)
 		return
 	} else if port <= 0 {
 		vlog.Errorln("reverse proxy service port config error!")
@@ -45,7 +45,7 @@ func (m *MotanProvider) Initialize() {
 	}
 	m.ep = m.extFactory.GetEndPoint(endpointURL)
 	if m.ep == nil {
-		vlog.Errorf("Can not find %s endpoint in ExtensionFactory!\n", protocol)
+		vlog.Errorf("Can not find %s endpoint in ExtensionFactory!", protocol)
 		return
 	}
 	m.ep.SetProxy(true)

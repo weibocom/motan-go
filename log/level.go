@@ -1,37 +1,72 @@
 package vlog
 
 import (
-	"strconv"
-	"sync/atomic"
+	"errors"
+	"fmt"
+	"strings"
 )
 
-type Level int32
+const (
+	TraceLevel LogLevel = iota - 2
+	DebugLevel
+	InfoLevel
+	WarnLevel
+	ErrorLevel
+	DPanicLevel
+	PanicLevel
+	FatalLevel
+)
 
-func (l *Level) get() Level {
-	return Level(atomic.LoadInt32((*int32)(l)))
-}
+type LogLevel int8
 
-func (l *Level) set(val Level) {
-	atomic.StoreInt32((*int32)(l), int32(val))
-}
-
-func (l *Level) String() string {
-	return strconv.FormatInt(int64(*l), 10)
-}
-
-// Get is part of the flag.Value interface.
-func (l *Level) Get() interface{} {
-	return *l
-}
-
-// Set is part of the flag.Value interface.
-func (l *Level) Set(value string) error {
-	v, err := strconv.Atoi(value)
-	if err != nil {
-		return err
+func (l LogLevel) String() string {
+	switch l {
+	case TraceLevel:
+		return "trace"
+	case DebugLevel:
+		return "debug"
+	case InfoLevel:
+		return "info"
+	case WarnLevel:
+		return "warn"
+	case ErrorLevel:
+		return "error"
+	case DPanicLevel:
+		return "dpanic"
+	case PanicLevel:
+		return "panic"
+	case FatalLevel:
+		return "fatal"
+	default:
+		return fmt.Sprintf("Level(%d)", l)
 	}
-	logging.mu.Lock()
-	defer logging.mu.Unlock()
-	logging.setVState(Level(v), logging.vmodule.filter, false)
+}
+
+func (l *LogLevel) Set(level string) error {
+	if l == nil {
+		return errors.New("level is nil")
+	}
+	switch strings.ToLower(level) {
+	case "":
+		*l = defaultLogLevel
+	case "trace":
+		*l = TraceLevel
+	case "debug":
+		*l = DebugLevel
+	case "info":
+		*l = InfoLevel
+	case "warn":
+		*l = WarnLevel
+	case "error":
+		*l = ErrorLevel
+	case "dpanic":
+		*l = DPanicLevel
+	case "panic":
+		*l = PanicLevel
+	case "fatal":
+		*l = FatalLevel
+	default:
+		return errors.New("unrecognized level:" + string(level))
+	}
 	return nil
 }

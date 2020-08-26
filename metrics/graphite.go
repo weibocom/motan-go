@@ -2,10 +2,12 @@ package metrics
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/weibocom/motan-go/log"
 )
@@ -30,6 +32,17 @@ type graphite struct {
 	Port    int
 	Name    string
 	localIP string
+	lock    sync.Mutex
+	conn    net.Conn
+}
+
+func getUDPConn(ip string, port int) net.Conn {
+	conn, err := net.Dial("udp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	if err != nil {
+		vlog.Warningf("Open graphite conn failed. err:%s", err.Error())
+		return nil
+	}
+	return conn
 }
 
 func newGraphite(ip, pool string, port int) *graphite {
@@ -37,25 +50,36 @@ func newGraphite(ip, pool string, port int) *graphite {
 		Host: ip,
 		Port: port,
 		Name: pool,
+		lock: sync.Mutex{},
+		conn: getUDPConn(ip, port),
 	}
 }
 
 func (g *graphite) Write(snapshots []Snapshot) error {
-	conn, err := net.Dial("udp", net.JoinHostPort(g.Host, strconv.Itoa(g.Port)))
-	if err != nil {
-		vlog.Warningf("open graphite conn fail. err:%s\n", err.Error())
-		return err
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	if g.conn == nil {
+		if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+			return errors.New("open graphite conn failed")
+		}
 	}
-	defer conn.Close()
+
 	if g.localIP == "" {
-		g.localIP = strings.Replace(strings.Split(conn.LocalAddr().String(), ":")[0], ".", "_", -1)
+		g.localIP = strings.Replace(strings.Split(g.conn.LocalAddr().String(), ":")[0], ".", "_", -1)
 	}
 
 	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
-		_, err = conn.Write([]byte(message))
-		if err != nil {
-			return err
+		if message != "" {
+			vlog.MetricsLog("\n" + message)
+			if _, err := g.conn.Write([]byte(message)); err != nil {
+				vlog.Warningln("Write graphite error, reconnect. err:", err.Error())
+				g.conn.Close()
+				if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+					return errors.New("open graphite conn failed")
+				}
+			}
 		}
 	}
 	return nil
@@ -70,7 +94,7 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 		if snap.IsReport() {
 			snap.RangeKey(func(k string) {
 				var segment string
-				pni := strings.SplitN(k, ":", minKeyLength)
+				pni := strings.SplitN(k, KeyDelimiter, minKeyLength)
 				if len(pni) < minKeyLength {
 					return
 				}
@@ -81,9 +105,12 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 					}
 					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
 						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
-				} else { //counter
+				} else if snap.IsCounter(k) { //counter
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
 						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Count(k))
+				} else { // gauge
+					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Value(k))
 				}
 				if buf.Len() > 0 && buf.Len()+len(segment) > messageMaxLen {
 					messages = append(messages, buf.String())

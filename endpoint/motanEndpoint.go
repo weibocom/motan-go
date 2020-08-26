@@ -32,7 +32,9 @@ var (
 
 type MotanEndpoint struct {
 	url                       *motan.URL
+	lock                      sync.Mutex
 	channels                  *ChannelPool
+	destroyed                 bool
 	destroyCh                 chan struct{}
 	available                 bool
 	errorCount                uint32
@@ -42,8 +44,9 @@ type MotanEndpoint struct {
 	requestTimeoutMillisecond int64
 
 	// for heartbeat requestID
-	keepaliveID   uint64
-	serialization motan.Serialization
+	keepaliveID      uint64
+	keepaliveRunning bool
+	serialization    motan.Serialization
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
@@ -71,7 +74,7 @@ func (m *MotanEndpoint) Initialize() {
 	}
 	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
 	if err != nil {
-		vlog.Errorf("Channel pool init failed. err:%s\n", err.Error())
+		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
 		// retry connect
 		go func() {
 			defer motan.HandlePanic(nil)
@@ -85,7 +88,7 @@ func (m *MotanEndpoint) Initialize() {
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
-						vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
+						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
 						return
 					}
 				case <-m.destroyCh:
@@ -96,13 +99,19 @@ func (m *MotanEndpoint) Initialize() {
 	} else {
 		m.channels = channels
 		m.setAvailable(true)
-		vlog.Infof("Channel pool init success. url:%s\n", m.url.GetAddressStr())
+		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
 	}
 }
 
 func (m *MotanEndpoint) Destroy() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if m.destroyed {
+		return
+	}
 	m.setAvailable(false)
 	m.destroyCh <- struct{}{}
+	m.destroyed = true
 	if m.channels != nil {
 		vlog.Infof("motan2 endpoint %s will destroyed", m.url.GetAddressStr())
 		m.channels.Close()
@@ -120,7 +129,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
 
 	if m.channels == nil {
-		vlog.Errorf("motanEndpoint %s error: channels is null\n", m.url.GetAddressStr())
+		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
@@ -131,9 +140,13 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	// get a channel
 	channel, err := m.channels.Get()
 	if err != nil {
-		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s\n", m.url.GetAddressStr(), err.Error())
+		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s", m.url.GetAddressStr(), err.Error())
 		m.recordErrAndKeepalive()
-		return m.defaultErrMotanResponse(request, "can not get a channel")
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+			ErrCode: motan.ENoChannel,
+			ErrMsg:  "can not get a channel",
+			ErrType: motan.ServiceException,
+		})
 	}
 	deadline := m.GetRequestTimeout(request)
 	// do call
@@ -146,7 +159,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	msg, err = mpro.ConvertToReqMessage(request, m.serialization)
 
 	if err != nil {
-		vlog.Errorf("convert motan request fail! ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
+		vlog.Errorf("convert motan request fail! ep: %s, req: %s, err:%s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert motan request fail!", ErrType: motan.ServiceException})
 	}
 	if rc.Tc != nil {
@@ -154,7 +167,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	}
 	recvMsg, err := channel.Call(msg, deadline, rc)
 	if err != nil {
-		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
+		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
 	}
@@ -168,7 +181,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 	}
 	if err != nil {
-		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s\n", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
+		vlog.Errorf("convert to response fail.ep: %s, req: %s, err:%s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
 	}
 	excep := response.GetException()
@@ -201,6 +214,26 @@ func (m *MotanEndpoint) resetErr() {
 }
 
 func (m *MotanEndpoint) keepalive() {
+	m.lock.Lock()
+	// if the endpoint has been destroyed, we should not do keepalive
+	if m.destroyed {
+		m.lock.Unlock()
+		return
+	}
+	// ensure only one keepalive handler
+	if m.keepaliveRunning {
+		m.lock.Unlock()
+		return
+	}
+	m.keepaliveRunning = true
+	m.lock.Unlock()
+
+	defer func() {
+		m.lock.Lock()
+		m.keepaliveRunning = false
+		m.lock.Unlock()
+	}()
+
 	defer motan.HandlePanic(nil)
 	ticker := time.NewTicker(m.keepaliveInterval)
 	defer ticker.Stop()
@@ -209,15 +242,16 @@ func (m *MotanEndpoint) keepalive() {
 		case <-ticker.C:
 			m.keepaliveID++
 			if channel, err := m.channels.Get(); err != nil {
-				vlog.Infof("[keepalive] failed. url:%s, requestID=%d, err:%s\n", m.url.GetIdentity(), m.keepaliveID, err.Error())
+				vlog.Infof("[keepalive] failed. url:%s, requestID=%d, err:%s", m.url.GetIdentity(), m.keepaliveID, err.Error())
 			} else {
 				_, err = channel.Call(mpro.BuildHeartbeat(m.keepaliveID, mpro.Req), defaultRequestTimeout, nil)
 				if err == nil {
 					m.setAvailable(true)
-					vlog.Infof("[keepalive] heartbeat success. url: %s\n", m.url.GetIdentity())
+					m.resetErr()
+					vlog.Infof("[keepalive] heartbeat success. url: %s", m.url.GetIdentity())
 					return
 				}
-				vlog.Infof("[keepalive] heartbeat failed. url:%s, requestID=%d, err:%s\n", m.url.GetIdentity(), m.keepaliveID, err.Error())
+				vlog.Infof("[keepalive] heartbeat failed. url:%s, requestID=%d, err:%s", m.url.GetIdentity(), m.keepaliveID, err.Error())
 			}
 		case <-m.destroyCh:
 			return
@@ -370,7 +404,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
 			if err != nil {
-				vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s\n", s.channel.address, msg.Header.RequestID, err.Error())
+				vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s", s.channel.address, msg.Header.RequestID, err.Error())
 				result.Error = err
 				result.Done <- result
 				return
@@ -505,7 +539,7 @@ func (c *Channel) send() {
 				for sent < len(ready.data) {
 					n, err := c.conn.Write(ready.data[sent:])
 					if err != nil {
-						vlog.Errorf("Failed to write channel. ep: %s, err: %s\n", c.address, err.Error())
+						vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
 						c.closeOnErr(err)
 						return
 					}
@@ -523,7 +557,7 @@ func (c *Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	stream := c.heartbeats[msg.Header.RequestID]
 	c.heartbeatLock.Unlock()
 	if stream == nil {
-		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s\n", msg.Header.RequestID, c.address)
+		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
 	} else {
 		stream.notify(msg, t)
 	}
@@ -535,7 +569,7 @@ func (c *Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	stream := c.streams[msg.Header.RequestID]
 	c.streamLock.Unlock()
 	if stream == nil {
-		vlog.Warningf("handle recv message, missing stream: %d, ep:%s\n", msg.Header.RequestID, c.address)
+		vlog.Warningf("handle recv message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
 	} else {
 		stream.notify(msg, t)
 	}
@@ -591,7 +625,7 @@ func (c *ChannelPool) Get() (*Channel, error) {
 	if ok && (channel == nil || channel.IsClosed()) {
 		conn, err := c.factory()
 		if err != nil {
-			vlog.Errorf("create channel failed. err:%s\n", err.Error())
+			vlog.Errorf("create channel failed. err:%s", err.Error())
 		}
 		channel = buildChannel(conn, c.config, c.serialization)
 	}

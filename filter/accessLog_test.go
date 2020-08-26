@@ -6,6 +6,7 @@ import (
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/provider"
 )
 
@@ -52,6 +53,6 @@ func defaultRequest() *motan.MotanRequest {
 }
 func getRequest(service string, group string, method string) *motan.MotanRequest {
 	r := &motan.MotanRequest{ServiceName: service, Method: method}
-	r.SetAttachment("M_g", group)
+	r.SetAttachment(protocol.MGroup, group)
 	return r
 }
