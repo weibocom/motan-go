@@ -229,7 +229,7 @@ func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {
 	var config *cfg.Config
 	config, err := cfg.NewConfigFromFile(c.ConfigFile)
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("parse configuration [%s] failed. err:%s", c.ConfigFile, err.Error()))
+		return nil, fmt.Errorf("parse configuration [%s] failed. err:%s", c.ConfigFile, err.Error())
 	}
 	dp, err := config.GetSection(dynamicSection)
 	if err == nil && len(dp) > 0 {

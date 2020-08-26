@@ -9,10 +9,19 @@ motan-agent:
   httpProxyEnable: true
 
 motan-registry:
+  local-registry:
+    protocol: local
   direct-registry:
     protocol: direct
     host: localhost
     port: 9982
+
+motan-refer:
+  local_test_service:
+    registry: local-registry
+    protocol: motan2
+    group: test-group
+    path: LocalTestService
 
 motan-service:
   test.domain:

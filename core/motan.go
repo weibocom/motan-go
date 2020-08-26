@@ -29,6 +29,8 @@ func init() {
 
 const (
 	DefaultAttachmentSize = 16
+
+	ProtocolLocal = "local"
 )
 
 var (
@@ -645,14 +647,12 @@ func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
 
 func (d *DefaultExtensionFactory) GetRegistry(url *URL) Registry {
 	key := url.GetIdentity()
-	if registry, exist := d.registries[key]; exist {
-		return registry
-	}
 	d.newRegistryLock.Lock()
 	defer d.newRegistryLock.Unlock()
 	if registry, exist := d.registries[key]; exist {
 		return registry
-	} else if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
+	}
+	if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
 		registry := newRegistry(url)
 		Initialize(registry)
 		d.registries[key] = registry
@@ -777,21 +777,15 @@ func (d *DefaultExtensionFactory) Initialize() {
 }
 
 var (
-	lef *lastEndPointFilter
-	lcf *lastClusterFilter
+	lef = new(lastEndPointFilter)
+	lcf = new(lastClusterFilter)
 )
 
 func GetLastEndPointFilter() EndPointFilter {
-	if lef == nil {
-		lef = new(lastEndPointFilter)
-	}
 	return lef
 }
 
 func GetLastClusterFilter() ClusterFilter {
-	if lcf == nil {
-		lcf = new(lastClusterFilter)
-	}
 	return lcf
 }
 
@@ -1045,4 +1039,17 @@ func ServiceInGroup(sr ServiceDiscoverableRegistry, group string, service string
 		return true
 	}
 	return false
+}
+
+var localProviders = NewCopyOnWriteMap()
+
+func RegistLocalProvider(service string, provider Provider) {
+	localProviders.Store(service, provider)
+}
+
+func GetLocalProvider(service string) Provider {
+	if p, ok := localProviders.Load(service); ok {
+		return p.(Provider)
+	}
+	return nil
 }
