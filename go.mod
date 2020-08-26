@@ -21,7 +21,7 @@ require (
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/stretchr/testify v1.2.2
 	github.com/valyala/fasthttp v1.2.0
-	github.com/weibreeze/breeze-go v0.1.0
+	github.com/weibreeze/breeze-go v0.1.1
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v0.0.0-00010101000000-000000000000
