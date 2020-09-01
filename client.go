@@ -33,6 +33,14 @@ type Client struct {
 	extFactory motan.ExtensionFactory
 }
 
+func NewClient(url *motan.URL, cluster *cluster.MotanCluster, extFactory motan.ExtensionFactory) *Client {
+	return &Client{
+		url:        url,
+		cluster:    cluster,
+		extFactory: extFactory,
+	}
+}
+
 func (c *Client) Call(method string, args []interface{}, reply interface{}) error {
 	req := c.BuildRequest(method, args)
 	return c.BaseCall(req, reply)
@@ -159,7 +167,7 @@ func (m *MCContext) Start(extfactory motan.ExtensionFactory) {
 
 	for key, url := range m.context.RefersURLs {
 		c := cluster.NewCluster(m.context, m.extFactory, url, false)
-		m.clients[key] = &Client{url: url, cluster: c, extFactory: m.extFactory}
+		m.clients[key] = NewClient(url, c, m.extFactory)
 	}
 }
 
