@@ -340,8 +340,22 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
-	d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, holder: (*RegistryHolder)(old)}
+	d.lastSnapshot = &ReadonlyStatItem{
+		group:            d.group,
+		service:          d.service,
+		holder:           (*RegistryHolder)(old),
+		isReport:         d.isReport,
+		cacheV1:          map[string]interface{}{},
+		buildCacheLockV1: &sync.RWMutex{},
+		//cache:          sync.Map{},
+		//buildCacheLock: &sync.Mutex{},
+	}
 	return d.lastSnapshot
+	//d.lock.Lock()
+	//defer d.lock.Unlock()
+	//old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
+	//d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, holder: (*RegistryHolder)(old)}
+	//return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) LastSnapshot() Snapshot {
@@ -470,6 +484,255 @@ func (d *DefaultStatItem) IsCounter(key string) bool {
 
 func (d *DefaultStatItem) IsGauge(key string) bool {
 	_, ok := d.getRegistry().Get(key).(metrics.Gauge)
+	return ok
+}
+
+type ReadonlyStatItem struct {
+	group    string
+	service  string
+	holder   *RegistryHolder
+	isReport bool
+
+	// sync.Map + lock
+	//cache          sync.Map
+	//buildCacheLock *sync.Mutex
+
+	// map + RWMutex
+	cacheV1          map[string]interface{}
+	buildCacheLockV1 *sync.RWMutex
+}
+
+func (d *ReadonlyStatItem) getRegistry() metrics.Registry {
+	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
+}
+func (d *ReadonlyStatItem) getCache(key string) interface{} {
+	d.buildCacheLockV1.RLock()
+	if v, ok := d.cacheV1[key]; ok {
+		d.buildCacheLockV1.RUnlock()
+		return v
+	}
+	d.buildCacheLockV1.RUnlock()
+
+	d.buildCacheLockV1.Lock()
+	defer d.buildCacheLockV1.Unlock()
+
+	if v, ok := d.cacheV1[key]; ok {
+		return v
+	}
+
+	v := d.getRegistry().Get(key)
+	if v == nil {
+		return nil
+	}
+	var val interface{}
+	switch h := v.(type) {
+	case metrics.Counter:
+		val = h.Snapshot()
+	case metrics.Gauge:
+		val = h.Snapshot()
+	case metrics.Histogram:
+		val = h.Snapshot()
+	case metrics.Timer:
+		val = h.Snapshot()
+	case metrics.Meter:
+		val = h.Snapshot()
+	}
+	d.cacheV1[key] = val
+	return val
+}
+
+//func (d *ReadonlyStatItem) getCache(key string) interface{} {
+//	if v, ok := d.cache.Load(key); ok {
+//		return v
+//	}
+//	d.buildCacheLock.Lock()
+//	defer d.buildCacheLock.Unlock()
+//
+//	if v, ok := d.cache.Load(key); ok {
+//		return v
+//	}
+//
+//	v := d.getRegistry().Get(key)
+//	if v == nil {
+//		return nil
+//	}
+//	var val interface{}
+//	switch h := v.(type) {
+//	case metrics.Counter:
+//		val = h.Snapshot()
+//	case metrics.Gauge:
+//		val = h.Snapshot()
+//	case metrics.Histogram:
+//		val = h.Snapshot()
+//	}
+//	d.cache.Store(key, val)
+//	return val
+//}
+
+func (d *ReadonlyStatItem) SetService(service string) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) GetService() string {
+	return d.service
+}
+
+func (d *ReadonlyStatItem) SetGroup(group string) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) GetGroup() string {
+	return d.group
+}
+
+func (d *ReadonlyStatItem) AddCounter(key string, value int64) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) AddHistograms(key string, duration int64) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) AddGauge(key string, value int64) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) Snapshot() Snapshot {
+	// TODO need real-time snapshot?
+	return d.LastSnapshot()
+}
+
+func (d *ReadonlyStatItem) SnapshotAndClear() Snapshot {
+	panic("action not supported")
+	return nil
+}
+
+func (d *ReadonlyStatItem) LastSnapshot() Snapshot {
+	panic("action not supported")
+	return nil
+}
+
+func (d *ReadonlyStatItem) SetReport(b bool) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) IsReport() bool {
+	return d.isReport
+}
+
+func (d *ReadonlyStatItem) Remove(key string) {
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) Clear() {
+	//d.getRegistry().UnregisterAll()
+	panic("action not supported")
+}
+
+func (d *ReadonlyStatItem) Count(key string) (i int64) {
+	v := d.getCache(key)
+	if v != nil {
+		switch m := v.(type) {
+		case metrics.Counter:
+			i = m.Count()
+		case metrics.Histogram:
+			i = m.Count()
+		}
+	}
+	return i
+}
+
+func (d *ReadonlyStatItem) Sum(key string) int64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Sum()
+	}
+	return 0
+}
+
+func (d *ReadonlyStatItem) Max(key string) int64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Max()
+	}
+	return 0
+}
+
+func (d *ReadonlyStatItem) Mean(key string) float64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Mean()
+	}
+	return 0
+}
+
+func (d *ReadonlyStatItem) Min(key string) int64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Min()
+	}
+	return 0
+}
+
+func (d *ReadonlyStatItem) P90(key string) float64 {
+	return d.Percentile(key, 0.9)
+}
+
+func (d *ReadonlyStatItem) P95(key string) float64 {
+	return d.Percentile(key, 0.95)
+}
+
+func (d *ReadonlyStatItem) P99(key string) float64 {
+	return d.Percentile(key, 0.99)
+}
+
+func (d *ReadonlyStatItem) P999(key string) float64 {
+	return d.Percentile(key, 0.999)
+}
+
+func (d *ReadonlyStatItem) Percentile(key string, f float64) float64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Percentile(f)
+	}
+	return 0
+}
+
+// Percentiles : return value is nil while key not exist
+func (d *ReadonlyStatItem) Percentiles(key string, f []float64) []float64 {
+	v := d.getCache(key)
+	if h, ok := v.(metrics.Histogram); ok {
+		return h.Percentiles(f)
+	}
+	return nil
+}
+
+func (d *ReadonlyStatItem) Value(key string) int64 {
+	v := d.getCache(key)
+	if g, ok := v.(metrics.Gauge); ok {
+		return g.Value()
+	}
+	return 0
+}
+
+func (d *ReadonlyStatItem) RangeKey(f func(k string)) {
+	d.getRegistry().Each(func(s string, i interface{}) {
+		f(s)
+	})
+}
+
+func (d *ReadonlyStatItem) IsHistogram(key string) bool {
+	_, ok := d.getCache(key).(metrics.Histogram)
+	return ok
+}
+
+func (d *ReadonlyStatItem) IsCounter(key string) bool {
+	_, ok := d.getCache(key).(metrics.Counter)
+	return ok
+}
+
+func (d *ReadonlyStatItem) IsGauge(key string) bool {
+	_, ok := d.getCache(key).(metrics.Gauge)
 	return ok
 }
 

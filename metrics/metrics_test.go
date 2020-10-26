@@ -109,12 +109,12 @@ func TestDefaultStatItem(t *testing.T) {
 	assert.True(t, item.IsReport(), "isReport")
 	item.SetReport(false)
 	assert.False(t, item.IsReport(), "isReport")
-	snap.Clear()
-	count = 0
-	snap.RangeKey(func(k string) {
-		count++
-	})
-	assert.Equal(t, 0, count, "key size")
+	//snap.Clear()
+	//count = 0
+	//snap.RangeKey(func(k string) {
+	//	count++
+	//})
+	//assert.Equal(t, 0, count, "key size")
 }
 
 func TestAddWriter(t *testing.T) {
