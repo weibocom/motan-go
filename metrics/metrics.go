@@ -358,6 +358,14 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	//return d.lastSnapshot
 }
 
+func (d *DefaultStatItem) SnapshotAndClearV0() Snapshot {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
+	d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, holder: (*RegistryHolder)(old)}
+	return d.lastSnapshot
+}
+
 func (d *DefaultStatItem) LastSnapshot() Snapshot {
 	d.lock.Lock()
 	defer d.lock.Unlock()
