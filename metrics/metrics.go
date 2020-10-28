@@ -345,17 +345,10 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 		service:          d.service,
 		holder:           (*RegistryHolder)(old),
 		isReport:         d.isReport,
-		cacheV1:          map[string]interface{}{},
-		buildCacheLockV1: &sync.RWMutex{},
-		//cache:          sync.Map{},
-		//buildCacheLock: &sync.Mutex{},
+		cache:          map[string]interface{}{},
+		buildCacheLock: &sync.RWMutex{},
 	}
 	return d.lastSnapshot
-	//d.lock.Lock()
-	//defer d.lock.Unlock()
-	//old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
-	//d.lastSnapshot = &DefaultStatItem{group: d.group, service: d.service, isReport: d.isReport, holder: (*RegistryHolder)(old)}
-	//return d.lastSnapshot
 }
 
 func (d *DefaultStatItem) SnapshotAndClearV0() Snapshot {
@@ -500,31 +493,25 @@ type ReadonlyStatItem struct {
 	service  string
 	holder   *RegistryHolder
 	isReport bool
-
-	// sync.Map + lock
-	//cache          sync.Map
-	//buildCacheLock *sync.Mutex
-
-	// map + RWMutex
-	cacheV1          map[string]interface{}
-	buildCacheLockV1 *sync.RWMutex
+	cache          map[string]interface{}
+	buildCacheLock *sync.RWMutex
 }
 
 func (d *ReadonlyStatItem) getRegistry() metrics.Registry {
 	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
 }
 func (d *ReadonlyStatItem) getCache(key string) interface{} {
-	d.buildCacheLockV1.RLock()
-	if v, ok := d.cacheV1[key]; ok {
-		d.buildCacheLockV1.RUnlock()
+	d.buildCacheLock.RLock()
+	if v, ok := d.cache[key]; ok {
+		d.buildCacheLock.RUnlock()
 		return v
 	}
-	d.buildCacheLockV1.RUnlock()
+	d.buildCacheLock.RUnlock()
 
-	d.buildCacheLockV1.Lock()
-	defer d.buildCacheLockV1.Unlock()
+	d.buildCacheLock.Lock()
+	defer d.buildCacheLock.Unlock()
 
-	if v, ok := d.cacheV1[key]; ok {
+	if v, ok := d.cache[key]; ok {
 		return v
 	}
 
@@ -545,37 +532,9 @@ func (d *ReadonlyStatItem) getCache(key string) interface{} {
 	case metrics.Meter:
 		val = h.Snapshot()
 	}
-	d.cacheV1[key] = val
+	d.cache[key] = val
 	return val
 }
-
-//func (d *ReadonlyStatItem) getCache(key string) interface{} {
-//	if v, ok := d.cache.Load(key); ok {
-//		return v
-//	}
-//	d.buildCacheLock.Lock()
-//	defer d.buildCacheLock.Unlock()
-//
-//	if v, ok := d.cache.Load(key); ok {
-//		return v
-//	}
-//
-//	v := d.getRegistry().Get(key)
-//	if v == nil {
-//		return nil
-//	}
-//	var val interface{}
-//	switch h := v.(type) {
-//	case metrics.Counter:
-//		val = h.Snapshot()
-//	case metrics.Gauge:
-//		val = h.Snapshot()
-//	case metrics.Histogram:
-//		val = h.Snapshot()
-//	}
-//	d.cache.Store(key, val)
-//	return val
-//}
 
 func (d *ReadonlyStatItem) SetService(service string) {
 	panic("action not supported")
@@ -606,7 +565,6 @@ func (d *ReadonlyStatItem) AddGauge(key string, value int64) {
 }
 
 func (d *ReadonlyStatItem) Snapshot() Snapshot {
-	// TODO need real-time snapshot?
 	return d.LastSnapshot()
 }
 
@@ -633,7 +591,6 @@ func (d *ReadonlyStatItem) Remove(key string) {
 }
 
 func (d *ReadonlyStatItem) Clear() {
-	//d.getRegistry().UnregisterAll()
 	panic("action not supported")
 }
 
