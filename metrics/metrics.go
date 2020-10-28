@@ -336,6 +336,7 @@ func (d *DefaultStatItem) Snapshot() Snapshot {
 	return d.LastSnapshot()
 }
 
+// SnapshotAndClear acquires Snapshot(ReadonlyStatItem), and it calculates metrics without locker, higher performance.
 func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -351,6 +352,10 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	return d.lastSnapshot
 }
 
+// Deprecated.
+// Using SnapshotAndClear instead.
+// Because of Snapshot(DefaultStatItem) calculates metrics will call locker to do that,
+// cause low performance
 func (d *DefaultStatItem) SnapshotAndClearV0() Snapshot {
 	d.lock.Lock()
 	defer d.lock.Unlock()
