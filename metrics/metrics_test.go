@@ -288,6 +288,7 @@ func TestReadonlyStatItem(t *testing.T) {
 
 func TestDefaultStatItem_1(t *testing.T) {
 	item := NewDefaultStatItem(group, service)
+	assert.Equal(t,"str",Escape("str"))
 	assert.NotNil(t, item, "GetOrRegisterStatItem")
 	assert.Equal(t, group, item.GetGroup(), "StatItem group")
 	assert.Equal(t, service, item.GetService(), "StatItem service")
@@ -330,4 +331,11 @@ func TestDefaultStatItem_1(t *testing.T) {
 	assert.EqualValues(t, 0, snap.Max("test1"))
 	assert.EqualValues(t, 0, snap.Sum("test"))
 	assert.Equal(t, snap, item.Snapshot())
+
+	assert.Equal(t,elapseLess50ms,ElapseTimeSuffix(49))
+	assert.Equal(t,elapseLess100ms,ElapseTimeSuffix(99))
+	assert.Equal(t,elapseLess200ms,ElapseTimeSuffix(199))
+	assert.Equal(t,elapseLess500ms,ElapseTimeSuffix(499))
+	assert.Equal(t,elapseMore500ms,ElapseTimeSuffix(599))
+	sampleStatus("app")
 }
