@@ -60,6 +60,16 @@ func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
 	return defaultValue
 }
 
+func (u *URL) GetBoolValue(key string, defaultValue bool) bool {
+	if v, ok := u.Parameters[key]; ok {
+		boolValue, err := strconv.ParseBool(v)
+		if err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
 func (u *URL) GetInt(key string) (int64, bool) {
 	if v, ok := u.Parameters[key]; ok {
 		intValue, err := strconv.ParseInt(v, 10, 64)

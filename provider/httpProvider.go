@@ -32,14 +32,15 @@ type HTTPProvider struct {
 	gctx      *motan.Context
 	mixVars   []string
 	// for transparent http proxy
-	fastClient        *fasthttp.HostClient
-	proxyAddr         string
-	proxySchema       string
-	locationMatcher   *mhttp.LocationMatcher
-	maxConnections    int
-	domain            string
-	defaultHTTPMethod string
-	enableRewrite     bool
+	fastClient           *fasthttp.HostClient
+	proxyAddr            string
+	proxySchema          string
+	locationMatcher      *mhttp.LocationMatcher
+	maxConnections       int
+	domain               string
+	defaultHTTPMethod    string
+	enableRewrite        bool
+	enableStringResponse bool
 }
 
 const (
@@ -83,18 +84,13 @@ func (h *HTTPProvider) Initialize() {
 	} else {
 		h.defaultHTTPMethod = DefaultMotanHTTPMethod
 	}
-	h.domain = h.url.GetParam(mhttp.DomainKey, "")
+	h.domain = h.url.GetParam(mhttp.DomainKey, h.url.Path)
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(h.domain, h.gctx)
 	h.proxyAddr = h.url.GetParam(mhttp.ProxyAddressKey, "")
 	h.proxySchema = h.url.GetParam(mhttp.ProxySchemaKey, "http")
 	h.maxConnections = int(h.url.GetPositiveIntValue(mhttp.MaxConnectionsKey, 512))
-	h.enableRewrite = true
-	enableRewriteStr := h.url.GetParam(mhttp.EnableRewriteKey, "true")
-	if enableRewrite, err := strconv.ParseBool(enableRewriteStr); err != nil {
-		vlog.Errorf("%s should be a bool value, but got: %s", mhttp.EnableRewriteKey, enableRewriteStr)
-	} else {
-		h.enableRewrite = enableRewrite
-	}
+	h.enableRewrite = h.url.GetBoolValue(mhttp.EnableRewriteKey, true)
+	h.enableStringResponse = h.url.GetBoolValue(mhttp.EnableStringResponse, false)
 	h.fastClient = &fasthttp.HostClient{
 		Name: "motan",
 		Addr: h.proxyAddr,
@@ -314,6 +310,10 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			return resp
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
+		// compatible for old client response type
+		if h.enableStringResponse && resp.Value != nil {
+			resp.Value = string(resp.Value.([]byte))
+		}
 		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		return resp
 	}

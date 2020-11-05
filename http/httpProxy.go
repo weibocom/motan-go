@@ -28,6 +28,7 @@ const (
 	ProxySchemaKey           = "proxySchema"
 	MaxConnectionsKey        = "maxConnections"
 	EnableRewriteKey         = "enableRewrite"
+	EnableStringResponse     = "enableStringResponse"
 )
 
 const (
