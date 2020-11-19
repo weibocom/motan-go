@@ -24,7 +24,7 @@ require (
 	github.com/weibreeze/breeze-go v0.1.0
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
-	go.uber.org/zap v0.0.0-00010101000000-000000000000
+	go.uber.org/zap v1.16.0
 	golang.org/x/net v0.0.0-20181005035420-146acd28ed58
 	golang.org/x/sys v0.0.0-20180903190138-2b024373dcd9 // indirect
 	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
