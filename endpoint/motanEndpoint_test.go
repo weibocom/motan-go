@@ -29,6 +29,7 @@ func TestGetName(t *testing.T) {
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
+	assert.Equal(t, defaultChannelPoolSize, ep.clientConnection)
 	fmt.Printf("format\n")
 	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
 	request.Attachment = motan.NewStringMap(0)
@@ -40,11 +41,13 @@ func TestMotanEndpoint_Call(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
 	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
 	request.Attachment = motan.NewStringMap(0)
 	res := ep.Call(request)
