@@ -42,6 +42,7 @@ type MotanEndpoint struct {
 	errorCountThreshold       int64
 	keepaliveInterval         time.Duration
 	requestTimeoutMillisecond int64
+	clientConnection          int
 
 	// for heartbeat requestID
 	keepaliveID      uint64
@@ -68,11 +69,11 @@ func (m *MotanEndpoint) Initialize() {
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
 	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
 	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
-
+	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
 	}
-	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
+	channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 	if err != nil {
 		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
 		// retry connect
@@ -84,7 +85,7 @@ func (m *MotanEndpoint) Initialize() {
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
+					channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)

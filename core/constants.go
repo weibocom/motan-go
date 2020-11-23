@@ -47,6 +47,7 @@ const (
 	ProxyRegistryKey        = "proxyRegistry"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
+	ClientConnectionKey     = "clientConnection"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"
