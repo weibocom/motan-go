@@ -342,10 +342,10 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	defer d.lock.Unlock()
 	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
 	d.lastSnapshot = &ReadonlyStatItem{
-		group:            d.group,
-		service:          d.service,
-		holder:           (*RegistryHolder)(old),
-		isReport:         d.isReport,
+		group:          d.group,
+		service:        d.service,
+		holder:         (*RegistryHolder)(old),
+		isReport:       d.isReport,
 		cache:          map[string]interface{}{},
 		buildCacheLock: &sync.RWMutex{},
 	}
@@ -494,10 +494,10 @@ func (d *DefaultStatItem) IsGauge(key string) bool {
 }
 
 type ReadonlyStatItem struct {
-	group    string
-	service  string
-	holder   *RegistryHolder
-	isReport bool
+	group          string
+	service        string
+	holder         *RegistryHolder
+	isReport       bool
 	cache          map[string]interface{}
 	buildCacheLock *sync.RWMutex
 }
@@ -575,12 +575,10 @@ func (d *ReadonlyStatItem) Snapshot() Snapshot {
 
 func (d *ReadonlyStatItem) SnapshotAndClear() Snapshot {
 	panic("action not supported")
-	return nil
 }
 
 func (d *ReadonlyStatItem) LastSnapshot() Snapshot {
 	panic("action not supported")
-	return nil
 }
 
 func (d *ReadonlyStatItem) SetReport(b bool) {
