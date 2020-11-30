@@ -25,7 +25,7 @@ func (t *ClusterAccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 func (t *ClusterAccessLogFilter) Filter(haStrategy motan.HaStrategy, loadBalance motan.LoadBalance, request motan.Request) motan.Response {
 	start := time.Now()
 	response := t.GetNext().Filter(haStrategy, loadBalance, request)
-	doAccessLog(t.GetName(), clientAgentRole, "", start, request, response)
+	doAccessLog(t.GetName(), clientAgentRole, "", time.Now().Sub(start).Nanoseconds()/1e6, request, response)
 	return response
 }
 

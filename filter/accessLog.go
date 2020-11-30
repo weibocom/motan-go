@@ -2,6 +2,7 @@ package filter
 
 import (
 	"encoding/json"
+	"strconv"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -43,7 +44,17 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 	}
 	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
-	doAccessLog(t.GetName(), role, ip+":"+caller.GetURL().GetPortStr(), start, request, response)
+	address := ip + ":" + caller.GetURL().GetPortStr()
+	if _, ok := caller.(motan.Provider); ok {
+		reqCtx := request.GetRPCContext(true)
+		resCtx := response.GetRPCContext(true)
+		resCtx.AddFinishHandler(motan.FinishHandleFunc(func() {
+			totalTime := reqCtx.ResponseSendTime.Sub(reqCtx.RequestReceiveTime).Nanoseconds() / 1e6
+			doAccessLog(t.GetName(), role, address, totalTime, request, response)
+		}))
+	} else {
+		doAccessLog(t.GetName(), role, address, time.Now().Sub(start).Nanoseconds()/1e6, request, response)
+	}
 	return response
 }
 
@@ -63,11 +74,21 @@ func (t *AccessLogFilter) GetType() int32 {
 	return motan.EndPointFilterType
 }
 
-func doAccessLog(filterName string, role string, address string, start time.Time, request motan.Request, response motan.Response) {
+func doAccessLog(filterName string, role string, address string, totalTime int64, request motan.Request, response motan.Response) {
 	exception := response.GetException()
+	reqCtx := request.GetRPCContext(true)
+	resCtx := response.GetRPCContext(true)
+	// response code should be same as upstream
+	responseCode := resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
 	var exceptionData []byte
 	if exception != nil {
 		exceptionData, _ = json.Marshal(exception)
+		responseCode = strconv.Itoa(exception.ErrCode)
+	} else {
+		// default success response code use http ok status code
+		if responseCode == "" {
+			responseCode = "200"
+		}
 	}
 	vlog.AccessLog(&vlog.AccessLogEntity{
 		FilterName:    filterName,
@@ -77,10 +98,11 @@ func doAccessLog(filterName string, role string, address string, start time.Time
 		Method:        request.GetMethod(),
 		RemoteAddress: address,
 		Desc:          request.GetMethodDesc(),
-		ReqSize:       request.GetRPCContext(true).BodySize,
-		ResSize:       response.GetRPCContext(true).BodySize,
-		BizTime:       response.GetProcessTime(),             //ms
-		TotalTime:     time.Since(start).Nanoseconds() / 1e6, //ms
+		ReqSize:       reqCtx.BodySize,
+		ResSize:       resCtx.BodySize,
+		BizTime:       response.GetProcessTime(), //ms
+		TotalTime:     totalTime,                 //ms
+		ResponseCode:  responseCode,
 		Success:       exception == nil,
 		Exception:     string(exceptionData)})
 }
