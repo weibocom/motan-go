@@ -315,6 +315,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			return resp
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
+		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 		updateUpstreamStatusCode(resp, httpRes.StatusCode())
 		return resp
 	}

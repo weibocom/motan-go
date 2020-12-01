@@ -358,10 +358,12 @@ func (s *Stream) Send() error {
 	ready := sendReady{data: buf.Bytes()}
 	select {
 	case s.channel.sendCh <- ready:
-		if s.rc != nil && s.rc.Tc != nil {
+		if s.rc != nil {
 			sendTime := time.Now()
 			s.rc.RequestSendTime = sendTime
-			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
+			if s.rc.Tc != nil {
+				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
+			}
 		}
 		return nil
 	case <-timer.C:
