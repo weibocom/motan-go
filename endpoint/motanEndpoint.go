@@ -192,7 +192,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		// reset errorCount
 		m.resetErr()
 	}
-
 	if !m.proxy {
 		if err = response.ProcessDeserializable(rc.Reply); err != nil {
 			return m.defaultErrMotanResponse(request, err.Error())
@@ -359,8 +358,12 @@ func (s *Stream) Send() error {
 	ready := sendReady{data: buf.Bytes()}
 	select {
 	case s.channel.sendCh <- ready:
-		if s.rc != nil && s.rc.Tc != nil {
-			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: time.Now()})
+		if s.rc != nil {
+			sendTime := time.Now()
+			s.rc.RequestSendTime = sendTime
+			if s.rc.Tc != nil {
+				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
+			}
 		}
 		return nil
 	case <-timer.C:
@@ -396,6 +399,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 		s.Close()
 	}()
 	if s.rc != nil {
+		s.rc.ResponseReceiveTime = t
 		if s.rc.Tc != nil {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Receive, Addr: s.channel.address, Time: t})
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})

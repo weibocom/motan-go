@@ -79,6 +79,11 @@ const (
 	DefaultWriteTimeout = 5 * time.Second
 )
 
+// meta keys
+const (
+	MetaUpstreamCode = "upstreamCode"
+)
+
 // errorCodes
 const (
 	ENoEndpoints = 1001

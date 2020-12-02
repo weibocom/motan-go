@@ -49,6 +49,7 @@ type AccessLogEntity struct {
 	BizTime       int64  `json:"bizTime"`
 	TotalTime     int64  `json:"totalTime"`
 	Success       bool   `json:"success"`
+	ResponseCode  string `json:"responseCode"`
 	Exception     string `json:"exception"`
 }
 
@@ -361,6 +362,7 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.Int64("bizTime", logObject.BizTime),
 			zap.Int64("totalTime", logObject.TotalTime),
 			zap.Bool("success", logObject.Success),
+			zap.String("responseCode", logObject.ResponseCode),
 			zap.String("exception", logObject.Exception))
 	} else {
 		var buffer bytes.Buffer
@@ -387,6 +389,8 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString(strconv.FormatInt(logObject.TotalTime, 10))
 		buffer.WriteString("|")
 		buffer.WriteString(strconv.FormatBool(logObject.Success))
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.ResponseCode)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Exception)
 		d.accessLogger.Info(buffer.String())
