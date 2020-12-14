@@ -192,7 +192,7 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 				tc.PutReqSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 				req.GetRPCContext(true).Tc = tc
 			}
-			start := time.Now()
+
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
@@ -200,9 +200,6 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 			}
 			if mres != nil {
 				mres.GetRPCContext(true).Proxy = m.proxy
-				if mres.GetAttachment(mpro.MProcessTime) == "" {
-					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(start)/1e6), 10))
-				}
 				res, err = mpro.ConvertToResMessage(mres, serialization)
 				if tc != nil {
 					tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
