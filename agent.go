@@ -379,7 +379,7 @@ func (a *Agent) initCluster(url *motan.URL) {
 			cluster: c,
 		})
 	} else {
-		serviceMapItemArr := &[]*serviceMapItem{&serviceMapItem{
+		serviceMapItemArr := &[]*serviceMapItem{{
 			url:     url,
 			cluster: c,
 		}}
@@ -611,7 +611,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		err = fmt.Errorf("cluster not found. cluster:" + service)
 		return
 	}
-	serviceItemArr := serviceItemArrI.(*[]serviceMapItem)
+	serviceItemArr := serviceItemArrI.(*[]*serviceMapItem)
 
 	if len(*serviceItemArr) == 1 {
 		c = (*serviceItemArr)[0].cluster
@@ -625,7 +625,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 
 	// group search
 	key = service + "_" + group
-	foundClusters := []*cluster.MotanCluster{}
+	var foundClusters []*cluster.MotanCluster
 	for _, item := range *serviceItemArr {
 		if item.url.Group == group {
 			foundClusters = append(foundClusters, item.cluster)
