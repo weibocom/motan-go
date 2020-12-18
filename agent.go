@@ -571,7 +571,7 @@ func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
 		version = request.GetAttachment(mpro.MVersion)
 	}
 
-	if c,key, err := a.findCluster(request); err == nil {
+	if c, key, err := a.findCluster(request); err == nil {
 		return a.clusterCall(request, key, c)
 	}
 
@@ -611,71 +611,71 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		err = fmt.Errorf("cluster not found. cluster:" + service)
 		return
 	}
-	serviceItemArr := serviceItemArrI.(*[]*serviceMapItem)
+	foundClustersStep0 := serviceItemArrI.(*[]*serviceMapItem)
 
-	if len(*serviceItemArr) == 1 {
-		c = (*serviceItemArr)[0].cluster
+	if len(*foundClustersStep0) == 1 {
+		c = (*foundClustersStep0)[0].cluster
 		return
 	}
 
-	if len(*serviceItemArr) == 0 {
+	if len(*foundClustersStep0) == 0 {
 		err = fmt.Errorf("cluster not found. cluster:%s", key)
 		return
 	}
 
-	// group search
+	// service + group search
 	key = service + "_" + group
-	var foundClusters []*cluster.MotanCluster
-	for _, item := range *serviceItemArr {
+	var foundClustersStep1 []*serviceMapItem
+	for _, item := range *foundClustersStep0 {
 		if item.url.Group == group {
-			foundClusters = append(foundClusters, item.cluster)
+			foundClustersStep1 = append(foundClustersStep1, item)
 		}
 	}
 
-	if len(foundClusters) == 1 {
-		c = foundClusters[0]
+	if len(foundClustersStep1) == 1 {
+		c = foundClustersStep1[0].cluster
 		return
 	}
 
-	if len(foundClusters) == 0 {
+	if len(foundClustersStep1) == 0 {
 		err = fmt.Errorf("cluster not found. cluster:%s", key)
 		return
 	}
 
-	// protocol search
+	// service + group + protocol search
 	key = service + "_" + group + "_" + protocol
-	foundClusters = []*cluster.MotanCluster{}
-	for _, item := range *serviceItemArr {
-		if item.url.Group == group && item.url.Protocol == protocol {
-			foundClusters = append(foundClusters, item.cluster)
+	var foundClustersStep2 []*serviceMapItem
+	for _, item := range foundClustersStep1 {
+		if item.url.Protocol == protocol {
+			foundClustersStep2 = append(foundClustersStep2, item)
 		}
 	}
 
-	if len(foundClusters) == 1 {
-		c = foundClusters[0]
+	if len(foundClustersStep2) == 1 {
+		c = foundClustersStep2[0].cluster
 		return
 	}
 
-	if len(foundClusters) == 0 {
+	if len(foundClustersStep2) == 0 {
 		err = fmt.Errorf("cluster not found. cluster:%s", key)
 		return
 	}
 
-	// version search
+	// service + group + protocol + version search
 	key = service + "_" + group + "_" + protocol + "_" + version
-	foundClusters = []*cluster.MotanCluster{}
-	for _, item := range *serviceItemArr {
-		if item.url.Group == group && item.url.Protocol == protocol && item.url.GetParam(mpro.MVersion, "") == version {
-			foundClusters = append(foundClusters, item.cluster)
+	var foundClustersStep3 []*serviceMapItem
+	for _, item := range foundClustersStep2 {
+		if item.url.GetParam(mpro.MVersion, "") == version {
+			foundClustersStep3 = append(foundClustersStep3, item)
 		}
 	}
 
-	if len(foundClusters) == 1 {
-		c = foundClusters[0]
+	if len(foundClustersStep3) == 1 {
+		c = foundClustersStep3[0].cluster
 		return
 	}
 
-	if len(foundClusters) == 0 {
+	if len(foundClustersStep3) == 0 {
 		err = fmt.Errorf("cluster not found. cluster:%s", key)
 		return
 	}
