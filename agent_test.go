@@ -171,12 +171,13 @@ func TestAgent_InitCall(t *testing.T) {
 	request := &core.MotanRequest{Attachment: core.NewStringMap(10)}
 	request.SetAttachment(mpro.MGroup, "test1")
 	ret := agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
+	t.Log(ret.GetException().ErrMsg)
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
 
 	//test agentHandler call without group
 	request.SetAttachment(mpro.MGroup, "")
 	ret = agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
 
 	//init cluster with one path and two groups in clusterMapWithoutGroup
 	urlTest.Group = "test2"
@@ -187,7 +188,7 @@ func TestAgent_InitCall(t *testing.T) {
 	//test agentHandler call without group
 	request.SetAttachment(mpro.MGroup, "")
 	ret = agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "empty group is not supported"))
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
 }
 
 type LocalTestServiceProvider struct {

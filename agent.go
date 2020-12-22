@@ -588,7 +588,13 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
 
+
+
 	// service search
+	if service == "" {
+		err = fmt.Errorf("empty service is not supported")
+		return
+	}
 	key = service
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
@@ -608,6 +614,10 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 
 	// service + group search
+	if group == "" {
+		err = fmt.Errorf("empty group is not supported")
+		return
+	}
 	key = service + "_" + group
 	var foundClustersStep1 []*serviceMapItem
 	for _, item := range *foundClustersStep0 {
@@ -627,6 +637,10 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 
 	// service + group + protocol search
+	if protocol == "" {
+		err = fmt.Errorf("empty protocol is not supported")
+		return
+	}
 	key = service + "_" + group + "_" + protocol
 	var foundClustersStep2 []*serviceMapItem
 	for _, item := range foundClustersStep1 {
@@ -646,6 +660,10 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 
 	// service + group + protocol + version search
+	if version == "" {
+		err = fmt.Errorf("empty version is not supported")
+		return
+	}
 	key = service + "_" + group + "_" + protocol + "_" + version
 	var foundClustersStep3 []*serviceMapItem
 	for _, item := range foundClustersStep2 {
