@@ -566,33 +566,17 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 }
 
 func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
-	version := "0.1"
-	if request.GetAttachment(mpro.MVersion) != "" {
-		version = request.GetAttachment(mpro.MVersion)
-	}
-
-	if c, key, err := a.findCluster(request); err == nil {
-		return a.clusterCall(request, key, c)
-	}
-
-	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
-	if motanCluster, ok := a.agent.clusterMap.Load(ck); ok {
-		return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
-	}
-	if motanCluster, ok := a.agent.clusterMapWithoutGroup.Load(ck); ok {
-		if motanCluster != nil {
-			return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
-		}
-		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d", ck, request.GetRequestID())
-		return getDefaultResponse(request.GetRequestID(), "empty group is not supported, maybe this service belongs to multiple groups, cluster:"+ck)
+	c, ck, err := a.findCluster(request)
+	if err == nil {
+		return a.clusterCall(request, ck, c)
 	}
 
 	// if normal cluster not found we try http cluster, here service of request represent domain
 	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
 		return a.httpCall(request, ck, httpCluster.(*cluster.HTTPCluster))
 	}
-	vlog.Warningf("cluster not found. cluster: %s, request id:%d", ck, request.GetRequestID())
-	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
+	vlog.Warningf("cluster not found. cluster: %s, request id:%d", err.Error(), request.GetRequestID())
+	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster: "+err.Error())
 }
 
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
@@ -608,7 +592,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	key = service
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:" + service)
+		err = fmt.Errorf("cluster not found. cluster:" + key)
 		return
 	}
 	foundClustersStep0 := serviceItemArrI.(*[]*serviceMapItem)
