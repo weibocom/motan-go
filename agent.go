@@ -45,17 +45,17 @@ type Agent struct {
 
 	agentServer motan.Server
 
-	clusterMap             *motan.CopyOnWriteMap
-	httpClusterMap         *motan.CopyOnWriteMap
-	status                 int
-	agentURL               *motan.URL
-	logdir                 string
-	port                   int
-	mport                  int
-	eport                  int
-	hport                  int
-	pidfile                string
-	runtimedir             string
+	clusterMap     *motan.CopyOnWriteMap
+	httpClusterMap *motan.CopyOnWriteMap
+	status         int
+	agentURL       *motan.URL
+	logdir         string
+	port           int
+	mport          int
+	eport          int
+	hport          int
+	pidfile        string
+	runtimedir     string
 
 	serviceExporters  *motan.CopyOnWriteMap
 	serviceMap        *motan.CopyOnWriteMap
@@ -568,106 +568,56 @@ func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
 	vlog.Warningf("cluster not found. cluster: %s, request id:%d", err.Error(), request.GetRequestID())
 	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster: "+err.Error())
 }
-
+func (a *agentMessageHandler) matchRule(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string) (foundClusters []serviceMapItem, err error) {
+	if cond == "" {
+		err = fmt.Errorf("empty %s is not supported", typ)
+		return
+	}
+	for _, item := range data {
+		if f(item.url) == cond {
+			foundClusters = append(foundClusters, item)
+		}
+	}
+	if len(foundClusters) == 0 {
+		err = fmt.Errorf("cluster not found. cluster:%s", key)
+		return
+	}
+	return
+}
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
 	group := request.GetAttachment(mpro.MGroup)
-	version := "0.1"
-	if request.GetAttachment(mpro.MVersion) != "" {
-		version = request.GetAttachment(mpro.MVersion)
-	}
+	version := request.GetAttachment(mpro.MVersion)
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
-
-	// service search
-	if service == "" {
-		err = fmt.Errorf("empty service is not supported")
-		return
-	}
-	key = service
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:" + key)
+		err = fmt.Errorf("cluster not found. cluster:" + service)
 		return
 	}
-	foundClustersStep0 := serviceItemArrI.([]serviceMapItem)
-
-	if len(foundClustersStep0) == 1 {
-		c = (foundClustersStep0)[0].cluster
-		return
+	search := []interface{}{
+		"service", service, func(u *motan.URL) string { return u.Path },
+		"group", group, func(u *motan.URL) string { return u.Group },
+		"protocol", protocol, func(u *motan.URL) string { return u.Protocol },
+		"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") },
 	}
-
-	if len(foundClustersStep0) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
-	}
-
-	// service + group search
-	if group == "" {
-		err = fmt.Errorf("empty group is not supported")
-		return
-	}
-	key = service + "_" + group
-	var foundClustersStep1 []serviceMapItem
-	for _, item := range foundClustersStep0 {
-		if item.url.Group == group {
-			foundClustersStep1 = append(foundClustersStep1, item)
+	foundClusters := serviceItemArrI.([]serviceMapItem)
+	for i := 0; i < len(search); i = i + 3 {
+		tip := search[i].(string)
+		cond := search[i+1].(string)
+		condFn := search[i+2].(func(u *motan.URL) string)
+		if i == 0 {
+			key = cond
+		} else {
+			key += "_" + cond
 		}
-	}
-
-	if len(foundClustersStep1) == 1 {
-		c = foundClustersStep1[0].cluster
-		return
-	}
-
-	if len(foundClustersStep1) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
-	}
-
-	// service + group + protocol search
-	if protocol == "" {
-		err = fmt.Errorf("empty protocol is not supported")
-		return
-	}
-	key = service + "_" + group + "_" + protocol
-	var foundClustersStep2 []serviceMapItem
-	for _, item := range foundClustersStep1 {
-		if item.url.Protocol == protocol {
-			foundClustersStep2 = append(foundClustersStep2, item)
+		foundClusters, err = a.matchRule(tip, cond, key, foundClusters, condFn)
+		if err != nil {
+			return
 		}
-	}
-
-	if len(foundClustersStep2) == 1 {
-		c = foundClustersStep2[0].cluster
-		return
-	}
-
-	if len(foundClustersStep2) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
-	}
-
-	// service + group + protocol + version search
-	if version == "" {
-		err = fmt.Errorf("empty version is not supported")
-		return
-	}
-	key = service + "_" + group + "_" + protocol + "_" + version
-	var foundClustersStep3 []serviceMapItem
-	for _, item := range foundClustersStep2 {
-		if item.url.GetParam(mpro.MVersion, "") == version {
-			foundClustersStep3 = append(foundClustersStep3, item)
+		if len(foundClusters) == 1 {
+			c = foundClusters[0].cluster
+			return
 		}
-	}
-
-	if len(foundClustersStep3) == 1 {
-		c = foundClustersStep3[0].cluster
-		return
-	}
-
-	if len(foundClustersStep3) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
 	}
 	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s", key)
 	return
