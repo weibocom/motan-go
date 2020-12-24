@@ -163,10 +163,6 @@ func TestAgent_InitCall(t *testing.T) {
 	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
 
-	//init cluster with one path and one group in clusterMapWithoutGroup
-	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
-	assert.NotNil(t, "init cluster with one path and one group in clusterMapWithoutGroup fail")
-
 	//test agentHandler call with group
 	request := &core.MotanRequest{Attachment: core.NewStringMap(10)}
 	request.SetAttachment(mpro.MGroup, "test1")
@@ -178,12 +174,6 @@ func TestAgent_InitCall(t *testing.T) {
 	request.SetAttachment(mpro.MGroup, "")
 	ret = agentHandler.Call(request)
 	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
-
-	//init cluster with one path and two groups in clusterMapWithoutGroup
-	urlTest.Group = "test2"
-	agent.initCluster(urlTest)
-	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
-	assert.Nil(t, temp, "init cluster with one path and two groups in clusterMapWithoutGroup fail")
 
 	//test agentHandler call without group
 	request.SetAttachment(mpro.MGroup, "")

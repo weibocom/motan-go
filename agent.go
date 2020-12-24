@@ -46,7 +46,6 @@ type Agent struct {
 	agentServer motan.Server
 
 	clusterMap             *motan.CopyOnWriteMap
-	clusterMapWithoutGroup *motan.CopyOnWriteMap
 	httpClusterMap         *motan.CopyOnWriteMap
 	status                 int
 	agentURL               *motan.URL
@@ -86,7 +85,6 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 		agent = &Agent{extFactory: extfactory}
 	}
 	agent.clusterMap = motan.NewCopyOnWriteMap()
-	agent.clusterMapWithoutGroup = motan.NewCopyOnWriteMap()
 	agent.httpClusterMap = motan.NewCopyOnWriteMap()
 	agent.serviceExporters = motan.NewCopyOnWriteMap()
 	agent.agentPortServer = make(map[int]motan.Server)
@@ -371,30 +369,22 @@ func (a *Agent) initCluster(url *motan.URL) {
 	}
 
 	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
-
-	if v, exists := a.serviceMap.Load(url.Path); exists {
-		serviceMapItemArr := v.(*[]*serviceMapItem)
-		*serviceMapItemArr = append(*serviceMapItemArr, &serviceMapItem{
-			url:     url,
-			cluster: c,
-		})
-	} else {
-		serviceMapItemArr := &[]*serviceMapItem{{
-			url:     url,
-			cluster: c,
-		}}
-		a.serviceMap.Store(url.Path, serviceMapItemArr)
+	item := serviceMapItem{
+		url:     url,
+		cluster: c,
 	}
+	service := url.Path
+	var serviceMapItemArr []serviceMapItem
+	if v, exists := a.serviceMap.Load(service); exists {
+		serviceMapItemArr = v.([]serviceMapItem)
+		serviceMapItemArr = append(serviceMapItemArr, item)
+	} else {
+		serviceMapItemArr = []serviceMapItem{item}
+	}
+	a.serviceMap.Store(url.Path, serviceMapItemArr)
 
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	a.clusterMap.Store(mapKey, c)
-
-	mapKeyWithoutGroup := getClusterKey("", url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-	if _, ok := a.clusterMapWithoutGroup.Load(mapKeyWithoutGroup); ok {
-		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, nil)
-	} else {
-		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, c)
-	}
 }
 
 func (a *Agent) SetSanpshotConf() {
@@ -588,8 +578,6 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
 
-
-
 	// service search
 	if service == "" {
 		err = fmt.Errorf("empty service is not supported")
@@ -601,14 +589,14 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		err = fmt.Errorf("cluster not found. cluster:" + key)
 		return
 	}
-	foundClustersStep0 := serviceItemArrI.(*[]*serviceMapItem)
+	foundClustersStep0 := serviceItemArrI.([]serviceMapItem)
 
-	if len(*foundClustersStep0) == 1 {
-		c = (*foundClustersStep0)[0].cluster
+	if len(foundClustersStep0) == 1 {
+		c = (foundClustersStep0)[0].cluster
 		return
 	}
 
-	if len(*foundClustersStep0) == 0 {
+	if len(foundClustersStep0) == 0 {
 		err = fmt.Errorf("cluster not found. cluster:%s", key)
 		return
 	}
@@ -619,8 +607,8 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		return
 	}
 	key = service + "_" + group
-	var foundClustersStep1 []*serviceMapItem
-	for _, item := range *foundClustersStep0 {
+	var foundClustersStep1 []serviceMapItem
+	for _, item := range foundClustersStep0 {
 		if item.url.Group == group {
 			foundClustersStep1 = append(foundClustersStep1, item)
 		}
@@ -642,7 +630,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		return
 	}
 	key = service + "_" + group + "_" + protocol
-	var foundClustersStep2 []*serviceMapItem
+	var foundClustersStep2 []serviceMapItem
 	for _, item := range foundClustersStep1 {
 		if item.url.Protocol == protocol {
 			foundClustersStep2 = append(foundClustersStep2, item)
@@ -665,7 +653,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		return
 	}
 	key = service + "_" + group + "_" + protocol + "_" + version
-	var foundClustersStep3 []*serviceMapItem
+	var foundClustersStep3 []serviceMapItem
 	for _, item := range foundClustersStep2 {
 		if item.url.GetParam(mpro.MVersion, "") == version {
 			foundClustersStep3 = append(foundClustersStep3, item)
