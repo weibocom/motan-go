@@ -159,35 +159,65 @@ func TestAgent_InitCall(t *testing.T) {
 	agent.initCluster(urlTest)
 	agentHandler := &agentMessageHandler{agent: agent}
 
+	for _, v := range []*core.URL{
+		{Parameters: map[string]string{core.VersionKey: ""}, Path: "test3", Group: "", Protocol: ""},
+		{Parameters: map[string]string{core.VersionKey: ""}, Path: "test3", Group: "", Protocol: ""},
+		{Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test", Group: "g1", Protocol: "motan2"},
+		{Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test", Group: "g1", Protocol: "motan"},
+		{Parameters: map[string]string{core.VersionKey: "1.1"}, Path: "test", Group: "g2", Protocol: "motan"},
+		{Parameters: map[string]string{core.VersionKey: "1.2"}, Path: "test", Group: "g1", Protocol: "motan"},
+		{Parameters: map[string]string{core.VersionKey: "1.2"}, Path: "test", Group: "g1", Protocol: "http"},
+		{Parameters: map[string]string{core.VersionKey: "1.2"}, Path: "test", Group: "g1", Protocol: "http"},
+		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test", Group: "g1", Protocol: "http"},
+		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test0", Group: "g0", Protocol: "http"},
+	} {
+		agent.initCluster(v)
+	}
+
 	//test init cluster with one path and one groups in clusterMap
 	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
-
-	//init cluster with one path and one group in clusterMapWithoutGroup
-	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
-	assert.NotNil(t, "init cluster with one path and one group in clusterMapWithoutGroup fail")
 
 	//test agentHandler call with group
 	request := &core.MotanRequest{Attachment: core.NewStringMap(10)}
 	request.SetAttachment(mpro.MGroup, "test1")
 	ret := agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
 
 	//test agentHandler call without group
 	request.SetAttachment(mpro.MGroup, "")
 	ret = agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "No refers for request"))
-
-	//init cluster with one path and two groups in clusterMapWithoutGroup
-	urlTest.Group = "test2"
-	agent.initCluster(urlTest)
-	temp = agent.clusterMapWithoutGroup.LoadOrNil(getClusterKey("", "0.1", "", ""))
-	assert.Nil(t, temp, "init cluster with one path and two groups in clusterMapWithoutGroup fail")
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
 
 	//test agentHandler call without group
 	request.SetAttachment(mpro.MGroup, "")
 	ret = agentHandler.Call(request)
-	assert.True(t, strings.HasPrefix(ret.GetException().ErrMsg, "empty group is not supported"))
+	assert.True(t, strings.Contains(ret.GetException().ErrMsg, "empty service is not supported"))
+
+	for _, v := range []struct {
+		service  string
+		group    string
+		protocol string
+		version  string
+		except   string
+	}{
+		{"test0", "", "", "", "No refers for request"},
+		{"test-1", "111", "222", "333", "cluster not found. cluster:test-1"},
+		{"test3", "", "", "", "empty group is not supported"},
+		{"test", "g2", "", "", "No refers for request"},
+		{"test", "g1", "", "", "empty protocol is not supported"},
+		{"test", "g1", "motan2", "", "No refers for request"},
+		{"test", "g1", "motan", "", "empty version is not supported"},
+		{"test", "g1", "http", "1.3", "No refers for request"},
+		{"test", "g1", "http", "1.2", "less condition to select cluster"},
+	} {
+		request.ServiceName = v.service
+		request.SetAttachment(mpro.MGroup, v.group)
+		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
+		request.SetAttachment(mpro.MVersion, v.version)
+		ret = agentHandler.Call(request)
+		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
+	}
 }
 
 type LocalTestServiceProvider struct {
