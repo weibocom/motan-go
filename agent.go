@@ -589,12 +589,18 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	group := request.GetAttachment(mpro.MGroup)
 	version := request.GetAttachment(mpro.MVersion)
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
+	reqInfo := fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
+		service, group, protocol, version)
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:" + service)
+		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, reqInfo)
 		return
 	}
-	search := [][]interface{}{
+	search := []struct {
+		tip    string
+		cond   string
+		condFn func(u *motan.URL) string
+	}{
 		{"service", service, func(u *motan.URL) string { return u.Path }},
 		{"group", group, func(u *motan.URL) string { return u.Group }},
 		{"protocol", protocol, func(u *motan.URL) string { return u.Protocol }},
@@ -602,15 +608,12 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	}
 	foundClusters := serviceItemArrI.([]serviceMapItem)
 	for i, rule := range search {
-		tip := rule[0].(string)
-		cond := rule[1].(string)
-		condFn := rule[2].(func(u *motan.URL) string)
 		if i == 0 {
-			key = cond
+			key = rule.cond
 		} else {
-			key += "_" + cond
+			key += "_" + rule.cond
 		}
-		foundClusters, err = a.matchRule(tip, cond, key, foundClusters, condFn)
+		foundClusters, err = a.matchRule(rule.tip, rule.cond, key, foundClusters, rule.condFn)
 		if err != nil {
 			return
 		}
@@ -619,7 +622,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 			return
 		}
 	}
-	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s", key)
+	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, reqInfo)
 	return
 }
 
