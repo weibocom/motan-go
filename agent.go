@@ -601,7 +601,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		{"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") }},
 	}
 	foundClusters := serviceItemArrI.([]serviceMapItem)
-	for i,rule:=range search{
+	for i, rule := range search {
 		tip := rule[0].(string)
 		cond := rule[1].(string)
 		condFn := rule[2].(func(u *motan.URL) string)
