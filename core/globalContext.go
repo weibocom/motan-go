@@ -166,6 +166,16 @@ func NewContext(configFile string, application string, pool string) *Context {
 	return &context
 }
 
+func NewContextFromConfig(conf *cfg.Config, application string, pool string) *Context {
+	context := Context{
+		Config:      conf,
+		application: application,
+		pool:        pool,
+	}
+	context.Initialize()
+	return &context
+}
+
 func (c *Context) Initialize() {
 	if c.pool == "" {
 		c.pool = *Pool
@@ -173,49 +183,54 @@ func (c *Context) Initialize() {
 	if c.application == "" {
 		c.application = *Application
 	}
-	if c.ConfigFile == "" {
-		c.ConfigFile = *CfgFile
-	}
 
 	c.RegistryURLs = make(map[string]*URL)
 	c.RefersURLs = make(map[string]*URL)
 	c.BasicReferURLs = make(map[string]*URL)
 	c.ServiceURLs = make(map[string]*URL)
 	c.BasicServiceURLs = make(map[string]*URL)
-	var config *cfg.Config
-	if c.ConfigFile == "" {
-		if c.pool != "" {
-			c.ConfigFile = defaultConfigPath
-		} else {
-			c.ConfigFile = defaultConfigFile
-		}
-	}
 
-	configFileInfo, err := os.Stat(c.ConfigFile)
-	if err != nil {
-		vlog.Errorf("get configuration [%s] information failed. err:%s\n", c.ConfigFile, err.Error())
-		return
-	}
-	if configFileInfo.IsDir() {
-		// if configuration file is a directory we treat is as pool
-		if c.application == "" && c.pool == "" {
-			vlog.Errorf("when configuration [%s] is a directory you should specify the application or pool", c.ConfigFile)
+	if c.Config == nil {
+		// init config from config file
+		var config *cfg.Config
+
+		if c.ConfigFile == "" {
+			c.ConfigFile = *CfgFile
+		}
+		if c.ConfigFile == "" {
+			if c.pool != "" {
+				c.ConfigFile = defaultConfigPath
+			} else {
+				c.ConfigFile = defaultConfigFile
+			}
+		}
+
+		configFileInfo, err := os.Stat(c.ConfigFile)
+		if err != nil {
+			vlog.Errorf("get configuration [%s] information failed. err:%s\n", c.ConfigFile, err.Error())
 			return
 		}
-		if !strings.HasSuffix(c.ConfigFile, "/") {
-			c.ConfigFile = c.ConfigFile + "/"
+		if configFileInfo.IsDir() {
+			// if configuration file is a directory we treat is as pool
+			if c.application == "" && c.pool == "" {
+				vlog.Errorf("when configuration [%s] is a directory you should specify the application or pool", c.ConfigFile)
+				return
+			}
+			if !strings.HasSuffix(c.ConfigFile, "/") {
+				c.ConfigFile = c.ConfigFile + "/"
+			}
+			config, err = c.parsePoolConfiguration()
+		} else {
+			config, err = c.parseSingleConfiguration()
 		}
-		config, err = c.parsePoolConfiguration()
-	} else {
-		config, err = c.parseSingleConfiguration()
+
+		if err != nil {
+			vlog.Errorf("parse configs fail. err:%s", err.Error())
+			return
+		}
+		c.Config = config
 	}
 
-	if err != nil {
-		vlog.Errorf("parse configs fail. err:%s", err.Error())
-		return
-	}
-
-	c.Config = config
 	c.parseRegistrys()
 	c.parseBasicRefers()
 	c.parseRefers()
