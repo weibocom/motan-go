@@ -42,6 +42,7 @@ var (
 func NewMotanServerContextFromConfig(conf *config.Config) (ms *MSContext) {
 	ms = &MSContext{config: conf}
 	motan.Initialize(ms)
+
 	section, err := ms.context.Config.GetSection("motan-server")
 	if err != nil {
 		fmt.Println("get config of \"motan-server\" fail! err " + err.Error())
@@ -72,6 +73,7 @@ func NewMotanServerContextFromConfig(conf *config.Config) (ms *MSContext) {
 	}
 	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
 	registerSwitchers(ms.context)
+
 	return ms
 }
 
@@ -88,42 +90,17 @@ func GetMotanServerContextWithFlagParse(confFile string, parseFlag bool) *MSCont
 	}
 	serverContextMutex.Lock()
 	defer serverContextMutex.Unlock()
+
+	conf, err := config.NewConfigFromFile(confFile)
+	if err != nil {
+		vlog.Errorf("parse config file fail, error: %s, file: %s", err, confFile)
+		return nil
+	}
+
 	ms := serverContextMap[confFile]
 	if ms == nil {
-
-		ms = &MSContext{confFile: confFile}
+		ms = NewMotanServerContextFromConfig(conf)
 		serverContextMap[confFile] = ms
-		motan.Initialize(ms)
-		section, err := ms.context.Config.GetSection("motan-server")
-		if err != nil {
-			fmt.Println("get config of \"motan-server\" fail! err " + err.Error())
-		}
-
-		logDir := ""
-		if section != nil && section["log_dir"] != nil {
-			logDir = section["log_dir"].(string)
-		}
-		if logDir == "" {
-			logDir = "."
-		}
-		logAsync := ""
-		if section != nil && section["log_async"] != nil {
-			logAsync = strconv.FormatBool(section["log_async"].(bool))
-		}
-		logStructured := ""
-		if section != nil && section["log_structured"] != nil {
-			logStructured = strconv.FormatBool(section["log_structured"].(bool))
-		}
-		rotatePerHour := ""
-		if section != nil && section["rotate_per_hour"] != nil {
-			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-		}
-		logLevel := ""
-		if section != nil && section["log_level"] != nil {
-			logLevel = section["log_level"].(string)
-		}
-		initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
-		registerSwitchers(ms.context)
 	}
 	return ms
 }
@@ -213,11 +190,7 @@ func (m *MSContext) Initialize() {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	if !m.inited {
-		if m.config != nil {
-			m.context = motan.NewContextFromConfig(m.config, "", "")
-		} else {
-			m.context = motan.NewContext(m.confFile, "", "")
-		}
+		m.context = motan.NewContextFromConfig(m.config, "", "")
 		m.portService = make(map[int]motan.Exporter, 32)
 		m.portServer = make(map[int]motan.Server, 32)
 		m.serviceImpls = make(map[string]interface{}, 32)
