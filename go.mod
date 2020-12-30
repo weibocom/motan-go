@@ -3,7 +3,6 @@ module github.com/weibocom/motan-go
 go 1.11
 
 require (
-	git.intra.weibo.com/openapi_rd/weibo-motan-go v0.1.11
 	github.com/StackExchange/wmi v0.0.0-20181212234831-e0a55b97c705 // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
 	github.com/beberlei/fastcgi-serve v0.0.0-20151230120321-4676005f65b7
