@@ -16,7 +16,6 @@ import (
 
 // MSContext is Motan Server Context
 type MSContext struct {
-	confFile     string
 	config       *config.Config
 	context      *motan.Context
 	extFactory   motan.ExtensionFactory
