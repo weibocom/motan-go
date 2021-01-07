@@ -190,15 +190,13 @@ func Escape(s string) string {
 }
 
 func EscapeSegment(s string) string {
-	newStr := ""
-	for _, char := range s {
+	return strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
-			newStr += string(char)
+			return char
 		} else {
-			newStr += "_"
+			return '_'
 		}
-	}
-	return newStr
+	}, s)
 }
 
 func AddCounter(group string, service string, key string, value int64) {
