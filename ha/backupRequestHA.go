@@ -166,5 +166,5 @@ func getKey(request motan.Request) string {
 	}
 	return metrics.Escape(role) +
 		":" + metrics.Escape(request.GetAttachment(protocol.MSource)) +
-		":" + metrics.EscapeSegment(request.GetMethod())
+		":" + metrics.Escape(request.GetMethod())
 }

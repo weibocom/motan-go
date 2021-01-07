@@ -43,10 +43,6 @@ const (
 var (
 	// NewStatItem is the factory func for StatItem
 	NewStatItem = NewDefaultStatItem
-	// escape chars for metrics key
-	escapeChars = map[rune]bool{
-		'.': true,
-		'/': true}
 	items     = make(map[string]StatItem, 64)
 	itemsLock sync.RWMutex
 	start     sync.Once
@@ -181,15 +177,6 @@ func StatItemSize() int {
 }
 
 func Escape(s string) string {
-	return strings.Map(func(r rune) rune {
-		if escapeChars[r] {
-			return '_'
-		}
-		return r
-	}, s)
-}
-
-func EscapeSegment(s string) string {
 	return strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
 			return char
