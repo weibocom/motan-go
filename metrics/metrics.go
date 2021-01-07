@@ -47,7 +47,6 @@ var (
 	escapeChars = map[rune]bool{
 		'.': true,
 		'/': true}
-
 	items     = make(map[string]StatItem, 64)
 	itemsLock sync.RWMutex
 	start     sync.Once
@@ -188,6 +187,18 @@ func Escape(s string) string {
 		}
 		return r
 	}, s)
+}
+
+func EscapeSegment(s string) string {
+	newStr := ""
+	for _, char := range s {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
+			newStr += string(char)
+		} else {
+			newStr += "_"
+		}
+	}
+	return newStr
 }
 
 func AddCounter(group string, service string, key string, value int64) {

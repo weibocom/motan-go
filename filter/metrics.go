@@ -86,10 +86,12 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	if provider {
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
-	key := role + ":" + application + ":" + request.GetMethod()
+	key := metrics.EscapeSegment(role) +
+		":" + metrics.EscapeSegment(application) +
+		":" + metrics.EscapeSegment(request.GetMethod())
 	addMetric(metrics.Escape(request.GetAttachment(protocol.MGroup)),
 		metrics.Escape(request.GetAttachment(protocol.MPath)),
-		metrics.Escape(key), time.Since(start).Nanoseconds()/1e6, response)
+		key, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
 
