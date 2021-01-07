@@ -164,5 +164,7 @@ func getKey(request motan.Request) string {
 	if ctx != nil && ctx.Proxy {
 		role = "motan-client-agent"
 	}
-	return metrics.Escape(role + ":" + request.GetAttachment(protocol.MSource) + ":" + request.GetMethod())
+	return metrics.Escape(role) +
+		":" + metrics.Escape(request.GetAttachment(protocol.MSource)) +
+		":" + metrics.Escape(request.GetMethod())
 }

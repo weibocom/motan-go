@@ -43,17 +43,17 @@ func TestMetricsFilter(t *testing.T) {
 		request motan.Request
 		key     string
 	}{
-		{name: "proxyClient", caller: ep, request: request, key: "motan-client-agent:" + application + ":" + testMethod},
-		{name: "proxyServer", caller: provider, request: request, key: "motan-server-agent:" + application + ":" + testMethod},
-		{name: "Client", caller: ep, request: request2, key: "motan-client:" + application + ":" + testMethod},
-		{name: "Server", caller: provider, request: request2, key: "motan-server:" + application + ":" + testMethod},
+		{name: "proxyClient", caller: ep, request: request, key: "motan-client-agent:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "proxyServer", caller: provider, request: request, key: "motan-server-agent:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "Client", caller: ep, request: request2, key: "motan-client:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "Server", caller: provider, request: request2, key: "motan-server:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mf.Filter(test.caller, test.request)
 			time.Sleep(10 * time.Millisecond)
 			// The metrics filter has do escape
-			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(metrics.Escape(test.key)+MetricsTotalCountSuffix)), "metric count")
+			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(test.key+MetricsTotalCountSuffix)), "metric count")
 		})
 	}
 }
