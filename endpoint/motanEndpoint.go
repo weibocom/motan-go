@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,18 +32,20 @@ var (
 )
 
 type MotanEndpoint struct {
-	url                       *motan.URL
-	lock                      sync.Mutex
-	channels                  *ChannelPool
-	destroyed                 bool
-	destroyCh                 chan struct{}
-	available                 bool
-	errorCount                uint32
-	proxy                     bool
-	errorCountThreshold       int64
-	keepaliveInterval         time.Duration
-	requestTimeoutMillisecond int64
-	clientConnection          int
+	url                          *motan.URL
+	lock                         sync.Mutex
+	channels                     *ChannelPool
+	destroyed                    bool
+	destroyCh                    chan struct{}
+	available                    bool
+	errorCount                   uint32
+	proxy                        bool
+	errorCountThreshold          int64
+	keepaliveInterval            time.Duration
+	requestTimeoutMillisecond    int64
+	minRequestTimeoutMillisecond int64
+	maxRequestTimeoutMillisecond int64
+	clientConnection             int
 
 	// for heartbeat requestID
 	keepaliveID      uint64
@@ -69,6 +72,8 @@ func (m *MotanEndpoint) Initialize() {
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
 	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
 	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
+	m.minRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MinTimeOutKey)
+	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
@@ -120,8 +125,20 @@ func (m *MotanEndpoint) Destroy() {
 }
 
 func (m *MotanEndpoint) GetRequestTimeout(request motan.Request) time.Duration {
-	// TODO: may be we need a more generic way to deal with requestTimeout, retries and etc
-	return time.Duration(m.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.TimeOutKey, m.requestTimeoutMillisecond)) * time.Millisecond
+	timeout := m.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.TimeOutKey, m.requestTimeoutMillisecond)
+	minTimeout := m.minRequestTimeoutMillisecond
+	maxTimeout := m.maxRequestTimeoutMillisecond
+	if minTimeout == 0 {
+		minTimeout = timeout / 2
+	}
+	if maxTimeout == 0 {
+		maxTimeout = timeout * 2
+	}
+	reqTimeout, _ := strconv.ParseInt(request.GetAttachment(mpro.MTimeout), 10, 64)
+	if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
+		timeout = reqTimeout
+	}
+	return time.Duration(timeout) * time.Millisecond
 }
 
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
