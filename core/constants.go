@@ -26,6 +26,8 @@ const (
 	Hakey                   = "haStrategy"
 	Lbkey                   = "loadbalance"
 	TimeOutKey              = "requestTimeout"
+	MinTimeOutKey           = "minRequestTimeout"
+	MaxTimeOutKey           = "maxRequestTimeout"
 	SessionTimeOutKey       = "registrySessionTimeout"
 	RetriesKey              = "retries"
 	ApplicationKey          = "application"
