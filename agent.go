@@ -3,6 +3,7 @@ package motan
 import (
 	"flag"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -23,7 +24,6 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -104,6 +104,11 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 		url.PutParam(motan.ApplicationKey, application)
 	}
 	url.ClearCachedInfo()
+}
+
+// RuntimeDir acquires the agent runtime working directory
+func (a *Agent) RuntimeDir() string {
+	return a.runtimedir
 }
 
 // get Agent server

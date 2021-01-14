@@ -150,6 +150,17 @@ func TestLocalEndpoint(t *testing.T) {
 	assert.Equal(t, "hello service", reply)
 }
 
+func TestAgent_RuntimeDir(t *testing.T) {
+	cfgFile := filepath.Join("testdata", "agent.yaml")
+	agent := NewAgent(nil)
+	agent.ConfigFile = cfgFile
+	go func() {
+		agent.StartMotanAgent()
+	}()
+	time.Sleep(time.Second * 2)
+	assert.NotEmpty(t, agent.RuntimeDir())
+}
+
 func TestAgent_InitCall(t *testing.T) {
 	//init
 	agent := NewAgent(nil)
