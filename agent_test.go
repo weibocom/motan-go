@@ -26,6 +26,7 @@ const (
 
 var proxyClient *http.Client
 var meshClient *MeshClient
+var agent *Agent
 
 func TestMain(m *testing.M) {
 	cfgFile := filepath.Join("testdata", "agent.yaml")
@@ -39,7 +40,7 @@ func TestMain(m *testing.M) {
 		http.ListenAndServe(addr, handler)
 	}()
 	go func() {
-		agent := NewAgent(nil)
+		agent = NewAgent(nil)
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
@@ -148,6 +149,10 @@ func TestLocalEndpoint(t *testing.T) {
 	var reply string
 	meshClient.Call("LocalTestService", "hello", []interface{}{"service"}, &reply)
 	assert.Equal(t, "hello service", reply)
+}
+
+func TestAgent_RuntimeDir(t *testing.T) {
+	assert.NotEmpty(t, agent.RuntimeDir())
 }
 
 func TestAgent_InitCall(t *testing.T) {
