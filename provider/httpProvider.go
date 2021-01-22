@@ -105,11 +105,12 @@ func (h *HTTPProvider) Initialize() {
 			}
 			return c, nil
 		},
-		MaxConnDuration:     keepaliveTimeout,
-		MaxIdleConnDuration: idleConnectionTimeout,
-		MaxConns:            h.maxConnections,
-		ReadTimeout:         timeout,
-		WriteTimeout:        timeout,
+		MaxConnDuration:           keepaliveTimeout,
+		MaxIdleConnDuration:       idleConnectionTimeout,
+		MaxIdemponentCallAttempts: 1, // do not retry for any type of request, by default fasthttp will retry idemponent type request
+		MaxConns:                  h.maxConnections,
+		ReadTimeout:               timeout,
+		WriteTimeout:              timeout,
 	}
 }
 
