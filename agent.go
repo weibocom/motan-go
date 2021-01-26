@@ -8,10 +8,12 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/process"
@@ -128,6 +130,23 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.saveStatus()
 }
 
+func (a *Agent) sigReload() {
+	fmt.Println("registry sig usr1 reload config.")
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGUSR1)
+
+	for {
+		<-c
+		fmt.Println("reload config.")
+
+		ctx := &motan.Context{ConfigFile: a.ConfigFile}
+		ctx.Initialize()
+
+		a.Context = ctx
+		a.initClusters()
+	}
+}
+
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
@@ -152,6 +171,7 @@ func (a *Agent) StartMotanAgent() {
 	a.initHTTPClusters()
 	a.startHTTPAgent()
 	a.configurer = NewDynamicConfigurer(a)
+	go a.sigReload()
 	go a.startMServer()
 	go a.registerAgent()
 	f, err := os.Create(a.pidfile)
@@ -360,12 +380,22 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 }
 
 func (a *Agent) initClusters() {
+	paths := make(map[string] bool)
 	for _, url := range a.Context.RefersURLs {
+		paths[url.Path] = true
 		a.initCluster(url)
 	}
+
+	a.serviceMap.Range(func(k, v interface{}) bool {
+		key := k.(string)
+		if _, ok := paths[key]; !ok {
+			a.serviceMap.Delete(key)
+		}
+		return true
+	})
 }
 
-func (a *Agent) initCluster(url *motan.URL) {
+func (a *Agent) initCluster(url *motan.URL) bool {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
@@ -381,8 +411,21 @@ func (a *Agent) initCluster(url *motan.URL) {
 	service := url.Path
 	var serviceMapItemArr []serviceMapItem
 	if v, exists := a.serviceMap.Load(service); exists {
-		serviceMapItemArr = v.([]serviceMapItem)
-		serviceMapItemArr = append(serviceMapItemArr, item)
+		vItems := v.([]serviceMapItem)
+
+		same := false
+		for _, vItem := range vItems {
+			if vItem.url.GetIdentity() == url.GetIdentity() {
+				serviceMapItemArr = vItems
+				same = true
+				break
+			}
+		}
+
+		if !same{
+			serviceMapItemArr = vItems
+			serviceMapItemArr = append(serviceMapItemArr, item)
+		}
 	} else {
 		serviceMapItemArr = []serviceMapItem{item}
 	}
@@ -390,6 +433,7 @@ func (a *Agent) initCluster(url *motan.URL) {
 
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	a.clusterMap.Store(mapKey, c)
+	return true
 }
 
 func (a *Agent) SetSanpshotConf() {
