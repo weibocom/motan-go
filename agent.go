@@ -142,7 +142,7 @@ func (a *Agent) sigReload() {
 		ctx := &motan.Context{ConfigFile: a.ConfigFile}
 		ctx.Initialize()
 
-		a.Context = ctx
+		a.Context.RefersURLs = ctx.RefersURLs
 		a.initClusters()
 	}
 }
