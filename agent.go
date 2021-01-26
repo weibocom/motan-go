@@ -395,7 +395,7 @@ func (a *Agent) initClusters() {
 	})
 }
 
-func (a *Agent) initCluster(url *motan.URL) bool {
+func (a *Agent) initCluster(url *motan.URL) {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
@@ -433,7 +433,6 @@ func (a *Agent) initCluster(url *motan.URL) bool {
 
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	a.clusterMap.Store(mapKey, c)
-	return true
 }
 
 func (a *Agent) SetSanpshotConf() {
