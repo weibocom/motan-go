@@ -131,7 +131,6 @@ func (a *Agent) SetAllServicesUnavailable() {
 }
 
 func (a *Agent) sigReload() {
-	fmt.Println("registry sig usr1 reload config.")
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGUSR1)
 
