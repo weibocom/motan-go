@@ -12,11 +12,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
@@ -654,6 +656,35 @@ func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
 		vlog.Warningln("set "+logType+" status failed. err:", err.Error())
 	}
 }
+
+type HotReload struct {
+	agent *Agent
+}
+
+func (h *HotReload) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGUSR1)
+
+	switch r.URL.Path {
+	case "/reload/clusters":
+		ctx := &motan.Context{ConfigFile: h.agent.ConfigFile}
+		ctx.Initialize()
+
+		h.agent.Context.RefersURLs = ctx.RefersURLs
+		h.agent.initClusters()
+
+		jsonEncoder := json.NewEncoder(w)
+		_ = jsonEncoder.Encode(logResponse{
+			Code: 200,
+		})
+	}
+
+}
+
 
 //------------ below code is copied from net/http/pprof -------------
 

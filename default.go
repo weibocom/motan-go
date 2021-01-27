@@ -74,6 +74,9 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/registry/subscribe"] = dynamicConfigurer
 		defaultManageHandlers["/registry/list"] = dynamicConfigurer
 		defaultManageHandlers["/registry/info"] = dynamicConfigurer
+
+		hotReload := &HotReload{}
+		defaultManageHandlers["/reload/clusters"] = hotReload
 	})
 	return defaultManageHandlers
 }

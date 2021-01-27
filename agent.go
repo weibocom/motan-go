@@ -8,12 +8,10 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/process"
@@ -130,21 +128,6 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.saveStatus()
 }
 
-func (a *Agent) sigReload() {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGUSR1)
-
-	for {
-		<-c
-		fmt.Println("reload config.")
-
-		ctx := &motan.Context{ConfigFile: a.ConfigFile}
-		ctx.Initialize()
-
-		a.Context.RefersURLs = ctx.RefersURLs
-		a.initClusters()
-	}
-}
 
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
@@ -170,7 +153,6 @@ func (a *Agent) StartMotanAgent() {
 	a.initHTTPClusters()
 	a.startHTTPAgent()
 	a.configurer = NewDynamicConfigurer(a)
-	go a.sigReload()
 	go a.startMServer()
 	go a.registerAgent()
 	f, err := os.Create(a.pidfile)
