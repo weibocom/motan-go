@@ -148,7 +148,7 @@ func (a *Agent) StartMotanAgent() {
 	metrics.StartReporter(a.Context)
 	a.registerStatusSampler()
 	a.initStatus()
-	a.initClusters()
+	a.initClusters(true)
 	a.startServerAgent()
 	a.initHTTPClusters()
 	a.startHTTPAgent()
@@ -360,11 +360,11 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 	return nil
 }
 
-func (a *Agent) initClusters() {
+func (a *Agent) initClusters(forceAppend bool) {
 	paths := make(map[string] bool)
 	for _, url := range a.Context.RefersURLs {
 		paths[url.Path] = true
-		a.initCluster(url)
+		a.initCluster(url, forceAppend)
 	}
 
 	a.serviceMap.Range(func(k, v interface{}) bool {
@@ -380,7 +380,7 @@ func (a *Agent) initClusters() {
 	})
 }
 
-func (a *Agent) initCluster(url *motan.URL) {
+func (a *Agent) initCluster(url *motan.URL, forceAppend bool) {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
@@ -388,31 +388,36 @@ func (a *Agent) initCluster(url *motan.URL) {
 		url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 	}
 
-	same := false
 	service := url.Path
 	var serviceMapItemArr []serviceMapItem
 	if v, exists := a.serviceMap.Load(service); exists {
 		vItems := v.([]serviceMapItem)
 
-		for _, vItem := range vItems {
-			if vItem.url.GetIdentity() == url.GetIdentity() {
-				same = true
-				break
+		if forceAppend == false {
+			forceAppend = true
+			for _, vItem := range vItems {
+				if vItem.url.GetIdentity() == url.GetIdentity() {
+					forceAppend = false
+					fmt.Println(vItem.url.GetIdentity())
+					break
+				}
 			}
 		}
 
-		if !same{
+		if forceAppend {
 			serviceMapItemArr = vItems
 		}
+	} else {
+		forceAppend = true
 	}
 
-	if !same {
+	if forceAppend {
 		c := cluster.NewCluster(a.Context, a.extFactory, url, true)
 		item := serviceMapItem{
 			url:     url,
 			cluster: c,
 		}
-		serviceMapItemArr = []serviceMapItem{item}
+		serviceMapItemArr = append(serviceMapItemArr, item)
 
 		a.serviceMap.Store(url.Path, serviceMapItemArr)
 		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
@@ -962,7 +967,7 @@ func (a *Agent) SubscribeService(url *motan.URL) error {
 	if urlExist(url, a.Context.RefersURLs) {
 		return nil
 	}
-	a.initCluster(url)
+	a.initCluster(url, true)
 	return nil
 }
 

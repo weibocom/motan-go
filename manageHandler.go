@@ -675,7 +675,7 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx.Initialize()
 
 		h.agent.Context.RefersURLs = ctx.RefersURLs
-		h.agent.initClusters()
+		h.agent.initClusters(false)
 
 		jsonEncoder := json.NewEncoder(w)
 		_ = jsonEncoder.Encode(logResponse{
