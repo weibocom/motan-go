@@ -21,7 +21,6 @@ var (
 
 type MCContext struct {
 	config     *config.Config
-	confFile   string
 	context    *motan.Context
 	extFactory motan.ExtensionFactory
 	clients    map[string]*Client
