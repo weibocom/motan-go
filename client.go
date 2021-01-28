@@ -163,8 +163,6 @@ func (m *MCContext) Initialize() {
 	defer m.csync.Unlock()
 	if !m.inited {
 		m.context = motan.NewContextFromConfig(m.config, "", "")
-		m.context.Initialize()
-
 		m.clients = make(map[string]*Client, 32)
 		m.inited = true
 	}
