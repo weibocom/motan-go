@@ -370,6 +370,10 @@ func (a *Agent) initClusters() {
 	a.serviceMap.Range(func(k, v interface{}) bool {
 		key := k.(string)
 		if _, ok := paths[key]; !ok {
+			vItems := v.([]serviceMapItem)
+			for _, item := range vItems {
+				item.cluster.Destroy()
+			}
 			a.serviceMap.Delete(key)
 		}
 		return true
@@ -384,20 +388,14 @@ func (a *Agent) initCluster(url *motan.URL) {
 		url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 	}
 
-	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
-	item := serviceMapItem{
-		url:     url,
-		cluster: c,
-	}
+	same := false
 	service := url.Path
 	var serviceMapItemArr []serviceMapItem
 	if v, exists := a.serviceMap.Load(service); exists {
 		vItems := v.([]serviceMapItem)
 
-		same := false
 		for _, vItem := range vItems {
 			if vItem.url.GetIdentity() == url.GetIdentity() {
-				serviceMapItemArr = vItems
 				same = true
 				break
 			}
@@ -405,15 +403,21 @@ func (a *Agent) initCluster(url *motan.URL) {
 
 		if !same{
 			serviceMapItemArr = vItems
-			serviceMapItemArr = append(serviceMapItemArr, item)
 		}
-	} else {
-		serviceMapItemArr = []serviceMapItem{item}
 	}
-	a.serviceMap.Store(url.Path, serviceMapItemArr)
 
-	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-	a.clusterMap.Store(mapKey, c)
+	if !same {
+		c := cluster.NewCluster(a.Context, a.extFactory, url, true)
+		item := serviceMapItem{
+			url:     url,
+			cluster: c,
+		}
+		serviceMapItemArr = []serviceMapItem{item}
+
+		a.serviceMap.Store(url.Path, serviceMapItemArr)
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+		a.clusterMap.Store(mapKey, c)
+	}
 }
 
 func (a *Agent) SetSanpshotConf() {
