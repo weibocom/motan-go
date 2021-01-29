@@ -16,7 +16,6 @@ func TestNewClientContextFromConfig(t *testing.T) {
 motan-client:
   log_dir: "stdout"
   application: "app-golang"
-
 motan-registry:
   direct:
     protocol: direct
