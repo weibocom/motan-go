@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -221,6 +222,38 @@ func TestAgent_InitCall(t *testing.T) {
 		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
 		request.SetAttachment(mpro.MVersion, v.version)
 		ret = agentHandler.Call(request)
+		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
+	}
+
+	// test hot reload clusters
+	reloadUrls := map[string]*core.URL{
+		"test4-0" : {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
+		"test4-1" : {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
+		"test5": {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
+	}
+	agent.reloadClusters(reloadUrls)
+
+	var reply string
+	meshClient.Call("LocalTestService", "hello", []interface{}{"service"}, &reply)
+	assert.Equal(t, "hello service", reply)
+
+	for _, v := range []struct {
+		service  string
+		group    string
+		protocol string
+		version  string
+		except   string
+	}{
+		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
+		{"test4", "", "", "", "empty group is not supported"},
+		{"test5", "", "", "", "No refers for request"},
+	} {
+		request.ServiceName = v.service
+		request.SetAttachment(mpro.MGroup, v.group)
+		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
+		request.SetAttachment(mpro.MVersion, v.version)
+		ret = agentHandler.Call(request)
+		fmt.Println(ret.GetException())
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
 }

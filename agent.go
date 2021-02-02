@@ -364,11 +364,12 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
-	a.Context.RefersURLs = refersUrls
+	if a.Context != nil {
+		a.Context.RefersURLs = refersUrls
+	}
 
 	serviceItemKeep := make(map[string] bool)
-
-	for _, url := range a.Context.RefersURLs {
+	for _, url := range refersUrls {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 		}

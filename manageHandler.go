@@ -677,12 +677,14 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.agent.Context.RefersURLs = ctx.RefersURLs
 		h.agent.reloadClusters(ctx.RefersURLs)
 
+		refersURLs, _ := json.Marshal(ctx.RefersURLs)
+
 		jsonEncoder := json.NewEncoder(w)
 		_ = jsonEncoder.Encode(logResponse{
 			Code: 200,
+			Body: string(refersURLs),
 		})
 	}
-
 }
 
 
