@@ -161,7 +161,7 @@ func TestAgent_InitCall(t *testing.T) {
 	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
 	urlTest := &core.URL{Parameters: make(map[string]string)}
 	urlTest.Group = "test1"
-	agent.initCluster(urlTest, true)
+	agent.initCluster(urlTest)
 	agentHandler := &agentMessageHandler{agent: agent}
 
 	for _, v := range []*core.URL{
@@ -176,7 +176,7 @@ func TestAgent_InitCall(t *testing.T) {
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test", Group: "g1", Protocol: "http"},
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test0", Group: "g0", Protocol: "http"},
 	} {
-		agent.initCluster(v, true)
+		agent.initCluster(v)
 	}
 
 	//test init cluster with one path and one groups in clusterMap

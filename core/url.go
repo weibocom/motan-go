@@ -143,11 +143,17 @@ func (u *URL) ToExtInfo() string {
 	buf.WriteString("group=")
 	buf.WriteString(u.Group)
 
-	for k, v := range u.Parameters {
+	var keys []string
+	for k := range u.Parameters {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		buf.WriteString("&")
 		buf.WriteString(k)
 		buf.WriteString("=")
-		buf.WriteString(v)
+		buf.WriteString(u.Parameters[k])
 	}
 	return buf.String()
 
