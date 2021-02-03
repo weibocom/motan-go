@@ -2,8 +2,9 @@ package motan
 
 import (
 	"bytes"
-	"fmt"
+	"github.com/weibocom/motan-go/config"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -225,17 +226,67 @@ func TestAgent_InitCall(t *testing.T) {
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
 
-	// test hot reload clusters
+	// test hot reload clusters normal
+	cfgText := `
+motan-server:
+  log_dir: "stdout"
+  application: "app-golang" # server identify.
+
+motan-registry:
+  direct:
+    protocol: direct
+
+#conf of services
+motan-service:
+  mytest-motan2:
+    path: helloService2
+    group: bj
+    protocol: motan2
+    registry: direct
+    serialization: simple
+    ref : "serviceID"
+    export: "motan2:64531"
+`
+	assert2 := assert.New(t)
+	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
+	assert2.Nil(err)
+	ext := GetDefaultExtFactory()
+	mscontext := NewMotanServerContextFromConfig(conf)
+	err = mscontext.RegisterService(&HelloService{}, "serviceID")
+	assert2.Nil(err)
+	mscontext.Start(ext)
+	mscontext.ServicesAvailable()
+
+	helloService := core.FromExtInfo("motan2://127.0.0.1:64531/helloService2?serialization=simple")
+	assert2.NotNil(helloService)
+
+	ctx := &core.Context{ConfigFile: filepath.Join("testdata", "agent-reload.yaml")}
+	ctx.Initialize()
+	assert2.NotNil(ctx)
+
+	agent.Context = ctx
+	agent.reloadClusters(ctx.RefersURLs)
+
+	request = &core.MotanRequest{}
+	request.SetAttachment(mpro.MProxyProtocol, "motan2")
+	request.RequestID = rand.Uint64()
+	request.ServiceName = "helloService2"
+	request.Method = "hello"
+	request.Attachment = core.NewStringMap(core.DefaultAttachmentSize)
+	request.Arguments = []interface{}{"Ray"}
+	motanResponse := agentHandler.Call(request)
+	var responseBody []byte
+	err = motanResponse.ProcessDeserializable(&responseBody)
+	assert2.Nil(err)
+	assert2.Equal("Hello Ray from motan server", string(responseBody))
+
+	// test hot reload clusters except
 	reloadUrls := map[string]*core.URL{
-		"test4-0" : {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
-		"test4-1" : {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
-		"test5": {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
+		"test4-0":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
+		"test4-1":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
+		"test5":        {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
 	agent.reloadClusters(reloadUrls)
-
-	var reply string
-	meshClient.Call("LocalTestService", "hello", []interface{}{"service"}, &reply)
-	assert.Equal(t, "hello service", reply)
 
 	for _, v := range []struct {
 		service  string
@@ -247,13 +298,13 @@ func TestAgent_InitCall(t *testing.T) {
 		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
 		{"test4", "", "", "", "empty group is not supported"},
 		{"test5", "", "", "", "No refers for request"},
+		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
 	} {
 		request.ServiceName = v.service
 		request.SetAttachment(mpro.MGroup, v.group)
 		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
 		request.SetAttachment(mpro.MVersion, v.version)
 		ret = agentHandler.Call(request)
-		fmt.Println(ret.GetException())
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
 }
