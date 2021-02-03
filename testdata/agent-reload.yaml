@@ -6,7 +6,7 @@ motan-registry:
   direct-registry:
     protocol: direct
     host: 127.0.0.1
-    port: 64531
+    port: 64533
 
 #conf of services
 motan-basicRefer:

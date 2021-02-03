@@ -226,9 +226,9 @@ func TestAgent_InitCall(t *testing.T) {
 	}
 
 	// test hot reload clusters normal
-	startServer(t, "helloService2", 64531)
+	startServer(t, "helloService2", 64533)
 
-	helloService := core.FromExtInfo("motan2://127.0.0.1:64531/helloService2?serialization=simple")
+	helloService := core.FromExtInfo("motan2://127.0.0.1:64533/helloService2?serialization=simple")
 	assert.NotNil(t, helloService, "hello hot-reload service start fail")
 
 	ctx := &core.Context{ConfigFile: filepath.Join("testdata", "agent-reload.yaml")}
