@@ -2,7 +2,6 @@ package motan
 
 import (
 	"bytes"
-	"github.com/weibocom/motan-go/config"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -227,42 +226,14 @@ func TestAgent_InitCall(t *testing.T) {
 	}
 
 	// test hot reload clusters normal
-	cfgText := `
-motan-server:
-  log_dir: "stdout"
-  application: "app-golang" # server identify.
-
-motan-registry:
-  direct:
-    protocol: direct
-
-#conf of services
-motan-service:
-  mytest-motan2:
-    path: helloService2
-    group: bj
-    protocol: motan2
-    registry: direct
-    serialization: simple
-    ref : "serviceID"
-    export: "motan2:64531"
-`
-	assert2 := assert.New(t)
-	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
-	assert2.Nil(err)
-	ext := GetDefaultExtFactory()
-	mscontext := NewMotanServerContextFromConfig(conf)
-	err = mscontext.RegisterService(&HelloService{}, "serviceID")
-	assert2.Nil(err)
-	mscontext.Start(ext)
-	mscontext.ServicesAvailable()
+	startServer(t, "helloService2", 64531)
 
 	helloService := core.FromExtInfo("motan2://127.0.0.1:64531/helloService2?serialization=simple")
-	assert2.NotNil(helloService)
+	assert.NotNil(t, helloService, "hello hot-reload service start fail")
 
 	ctx := &core.Context{ConfigFile: filepath.Join("testdata", "agent-reload.yaml")}
 	ctx.Initialize()
-	assert2.NotNil(ctx)
+	assert.NotNil(t, ctx, "hot-reload config file context initialize fail")
 
 	agent.Context = ctx
 	agent.reloadClusters(ctx.RefersURLs)
@@ -276,9 +247,9 @@ motan-service:
 	request.Arguments = []interface{}{"Ray"}
 	motanResponse := agentHandler.Call(request)
 	var responseBody []byte
-	err = motanResponse.ProcessDeserializable(&responseBody)
-	assert2.Nil(err)
-	assert2.Equal("Hello Ray from motan server", string(responseBody))
+	err := motanResponse.ProcessDeserializable(&responseBody)
+	assert.Nil(t, err, err)
+	assert.Equal(t, "Hello Ray from motan server", string(responseBody), "hot-reload service response error")
 
 	// test hot reload clusters except
 	reloadUrls := map[string]*core.URL{
