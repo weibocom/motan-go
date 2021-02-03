@@ -235,6 +235,9 @@ func TestAgent_InitCall(t *testing.T) {
 	ctx.Initialize()
 	assert.NotNil(t, ctx, "hot-reload config file context initialize fail")
 
+	// wait ha
+	time.Sleep(time.Second * 1)
+
 	agent.Context = ctx
 	agent.reloadClusters(ctx.RefersURLs)
 
