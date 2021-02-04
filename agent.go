@@ -410,6 +410,7 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 	}
 
 	// diff and destroy service
+	clusterMapKeep := make(map[string] bool)
 	serviceMap := motan.NewCopyOnWriteMap()
 	a.serviceMap.Range(func(k, v interface{}) bool {
 		key := k.(string)
@@ -419,8 +420,10 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 		for _, item := range vItems {
 			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; ok {
 				keepItems = append(keepItems, item)
+				mapKey := getClusterKey(item.url.Group, item.url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), item.url.Protocol, item.url.Path)
+				clusterMapKeep[mapKey] = true
 			} else {
-				fmt.Println("[[[[Destroy]]]]" + item.url.ToExtInfo())
+				vlog.Infoln("destroy service:" + item.url.ToExtInfo())
 				item.cluster.Destroy()
 			}
 		}
@@ -433,6 +436,17 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 		return true
 	})
 	a.serviceMap = serviceMap
+
+	// clear clusterMap
+	a.clusterMap.Range(func(k, v interface{}) bool {
+		key := k.(string)
+		if _, ok := clusterMapKeep[key]; !ok {
+			vlog.Infoln("delete clustser:" + key)
+			a.clusterMap.Delete(key)
+		}
+
+		return true
+	})
 }
 
 func (a *Agent) initClusters() {

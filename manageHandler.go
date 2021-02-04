@@ -12,13 +12,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"os/signal"
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/cpu"
@@ -666,9 +664,6 @@ func (h *HotReload) SetAgent(agent *Agent) {
 }
 
 func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, syscall.SIGUSR1)
-
 	switch r.URL.Path {
 	case "/reload/clusters":
 		ctx := &motan.Context{ConfigFile: h.agent.ConfigFile}
