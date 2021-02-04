@@ -396,6 +396,7 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 
 		// new serviceMap & cluster
 		if serviceMapValue.url == nil {
+			vlog.Infoln("hot create service:" + url.ToExtInfo())
 			c := cluster.NewCluster(a.Context, a.extFactory, url, true)
 			serviceMapValue = serviceMapItem{
 				url:     url,
@@ -413,20 +414,21 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 		serviceMap.Store(url.Path, serviceMapItemArr)
 	}
 
+	oldServiceMap := a.serviceMap
+	a.serviceMap = serviceMap
+	a.clusterMap = clusterMap
+
 	// diff and destroy service
-	a.serviceMap.Range(func(k, v interface{}) bool {
+	oldServiceMap.Range(func(k, v interface{}) bool {
 		vItems := v.([]serviceMapItem)
 		for _, item := range vItems {
 			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; !ok {
-				vlog.Infoln("destroy service:" + item.url.ToExtInfo())
+				vlog.Infoln("hot destroy service:" + item.url.ToExtInfo())
 				item.cluster.Destroy()
 			}
 		}
 		return true
 	})
-
-	a.serviceMap = serviceMap
-	a.clusterMap = clusterMap
 }
 
 func (a *Agent) initClusters() {

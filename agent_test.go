@@ -240,6 +240,7 @@ func TestAgent_InitCall(t *testing.T) {
 
 	agent.Context = ctx
 	agent.reloadClusters(ctx.RefersURLs)
+	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
 
 	request = &core.MotanRequest{}
 	request.SetAttachment(mpro.MProxyProtocol, "motan2")
@@ -261,6 +262,7 @@ func TestAgent_InitCall(t *testing.T) {
 		"test5":        {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
 	agent.reloadClusters(reloadUrls)
+	assert.Equal(t, agent.serviceMap.Len(), 2, "hot-load serviceMap except length error")
 
 	for _, v := range []struct {
 		service  string

@@ -149,3 +149,7 @@ func (m *CopyOnWriteMap) Delete(key interface{}) (pv interface{}) {
 	m.innerMap.Store(copiedMap)
 	return pv
 }
+
+func (m *CopyOnWriteMap) Len() int {
+	return len(m.data())
+}
