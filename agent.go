@@ -369,84 +369,64 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 	}
 
 	serviceItemKeep := make(map[string] bool)
+	clusterMap := motan.NewCopyOnWriteMap()
+	serviceMap := motan.NewCopyOnWriteMap()
 	for _, url := range refersUrls {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 		}
 
-		urlExtInfo := url.ToExtInfo()
-		serviceItemKeep[urlExtInfo] = true
-
-		same := false
 		service := url.Path
-		var serviceMapItemArr []serviceMapItem
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+
+		// find exists old serviceMap
+		var serviceMapValue serviceMapItem
 		if v, exists := a.serviceMap.Load(service); exists {
 			vItems := v.([]serviceMapItem)
 
 			for _, vItem := range vItems {
+				urlExtInfo := url.ToExtInfo()
 				if urlExtInfo == vItem.url.ToExtInfo() {
-					same = true
+					serviceItemKeep[urlExtInfo] = true
+					serviceMapValue = vItem
 					break
 				}
 			}
-
-			if !same{
-				serviceMapItemArr = vItems
-			}
 		}
 
-		if !same {
+		// new serviceMap & cluster
+		if serviceMapValue.url == nil {
 			c := cluster.NewCluster(a.Context, a.extFactory, url, true)
-			item := serviceMapItem{
+			serviceMapValue = serviceMapItem{
 				url:     url,
 				cluster: c,
 			}
-			serviceMapItemArr = append(serviceMapItemArr, item)
 
-			a.serviceMap.Store(url.Path, serviceMapItemArr)
-			mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-			a.clusterMap.Store(mapKey, c)
+			clusterMap.Store(mapKey, c)
 		}
+
+		var serviceMapItemArr []serviceMapItem
+		if v, exists := serviceMap.Load(service); exists {
+			serviceMapItemArr = v.([]serviceMapItem)
+		}
+		serviceMapItemArr = append(serviceMapItemArr, serviceMapValue)
+		serviceMap.Store(url.Path, serviceMapItemArr)
 	}
 
 	// diff and destroy service
-	clusterMapKeep := make(map[string] bool)
-	serviceMap := motan.NewCopyOnWriteMap()
 	a.serviceMap.Range(func(k, v interface{}) bool {
-		key := k.(string)
-
-		var keepItems []serviceMapItem
 		vItems := v.([]serviceMapItem)
 		for _, item := range vItems {
-			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; ok {
-				keepItems = append(keepItems, item)
-				mapKey := getClusterKey(item.url.Group, item.url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), item.url.Protocol, item.url.Path)
-				clusterMapKeep[mapKey] = true
-			} else {
+			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; !ok {
 				vlog.Infoln("destroy service:" + item.url.ToExtInfo())
 				item.cluster.Destroy()
 			}
 		}
-
-		if len(keepItems) > 0 {
-			serviceMap.Store(keepItems[0].url.Path, keepItems)
-		} else {
-			a.serviceMap.Delete(key)
-		}
 		return true
 	})
+
 	a.serviceMap = serviceMap
-
-	// clear clusterMap
-	a.clusterMap.Range(func(k, v interface{}) bool {
-		key := k.(string)
-		if _, ok := clusterMapKeep[key]; !ok {
-			vlog.Infoln("delete clustser:" + key)
-			a.clusterMap.Delete(key)
-		}
-
-		return true
-	})
+	a.clusterMap = clusterMap
 }
 
 func (a *Agent) initClusters() {
