@@ -44,7 +44,7 @@ func TestMain(m *testing.M) {
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
-
+	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	proxyURL, _ := url.Parse("http://localhost:9983")
 	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	time.Sleep(1 * time.Second)
@@ -146,7 +146,6 @@ func TestRpcToHTTPProxy(t *testing.T) {
 }
 
 func TestLocalEndpoint(t *testing.T) {
-	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	var reply string
 	meshClient.Call("LocalTestService", "hello", []interface{}{"service"}, &reply)
 	assert.Equal(t, "hello service", reply)
