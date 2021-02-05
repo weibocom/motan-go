@@ -29,6 +29,7 @@ var meshClient *MeshClient
 var agent *Agent
 
 func TestMain(m *testing.M) {
+	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	cfgFile := filepath.Join("testdata", "agent.yaml")
 	go func() {
 		var addr = ":9090"
@@ -44,7 +45,6 @@ func TestMain(m *testing.M) {
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
-	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	proxyURL, _ := url.Parse("http://localhost:9983")
 	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	time.Sleep(1 * time.Second)
