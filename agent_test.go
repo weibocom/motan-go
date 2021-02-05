@@ -242,13 +242,7 @@ func TestAgent_InitCall(t *testing.T) {
 	agent.reloadClusters(ctx.RefersURLs)
 	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
 
-	request = &core.MotanRequest{}
-	request.SetAttachment(mpro.MProxyProtocol, "motan2")
-	request.RequestID = rand.Uint64()
-	request.ServiceName = "helloService2"
-	request.Method = "hello"
-	request.Attachment = core.NewStringMap(core.DefaultAttachmentSize)
-	request.Arguments = []interface{}{"Ray"}
+	request = newRequest("helloService2", "hello", "Ray")
 	motanResponse := agentHandler.Call(request)
 	var responseBody []byte
 	err := motanResponse.ProcessDeserializable(&responseBody)
@@ -276,13 +270,24 @@ func TestAgent_InitCall(t *testing.T) {
 		{"test5", "", "", "", "No refers for request"},
 		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
 	} {
-		request.ServiceName = v.service
+		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)
 		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
 		request.SetAttachment(mpro.MVersion, v.version)
 		ret = agentHandler.Call(request)
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
+}
+
+func newRequest(serviceName string, method string, argments ...interface{}) *core.MotanRequest {
+	request := &core.MotanRequest{
+		RequestID:   rand.Uint64(),
+		ServiceName: serviceName,
+		Method:      method,
+		Attachment:  core.NewStringMap(core.DefaultAttachmentSize),
+	}
+	request.Arguments = argments
+	return request
 }
 
 type LocalTestServiceProvider struct {

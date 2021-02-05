@@ -6,7 +6,6 @@ import (
 	assert2 "github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
-	"math/rand"
 	"testing"
 	"time"
 )
@@ -24,12 +23,8 @@ func TestNewMotanServerContextFromConfig(t *testing.T) {
 	motan.Initialize(ep)
 	// wait ha
 	time.Sleep(time.Second * 1)
-	request := &motan.MotanRequest{}
-	request.RequestID = rand.Uint64()
-	request.ServiceName = "helloService"
-	request.Method = "hello"
+	request := newRequest("helloService", "hello", "Ray")
 	request.Attachment = motan.NewStringMap(motan.DefaultAttachmentSize)
-	request.Arguments = []interface{}{"Ray"}
 
 	resp := ep.Call(request)
 	assert.Nil(resp.GetException())

@@ -360,18 +360,18 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 	return nil
 }
 
-func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
+func (a *Agent) reloadClusters(refersURLs map[string]*motan.URL) {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
 	if a.Context != nil {
-		a.Context.RefersURLs = refersUrls
+		a.Context.RefersURLs = refersURLs
 	}
 
 	serviceItemKeep := make(map[string] bool)
-	clusterMap := motan.NewCopyOnWriteMap()
-	serviceMap := motan.NewCopyOnWriteMap()
-	for _, url := range refersUrls {
+	clusterMap := make(map[interface{}] interface{})
+	serviceMap := make(map[interface{}] interface{})
+	for _, url := range refersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 		}
@@ -403,23 +403,22 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 				cluster: c,
 			}
 
-			clusterMap.Store(mapKey, c)
+			clusterMap[mapKey] = c
 		}
 
 		var serviceMapItemArr []serviceMapItem
-		if v, exists := serviceMap.Load(service); exists {
+		if v, exists := serviceMap[service]; exists {
 			serviceMapItemArr = v.([]serviceMapItem)
 		}
 		serviceMapItemArr = append(serviceMapItemArr, serviceMapValue)
-		serviceMap.Store(url.Path, serviceMapItemArr)
+		serviceMap[url.Path] = serviceMapItemArr
 	}
 
-	oldServiceMap := a.serviceMap
-	a.serviceMap = serviceMap
-	a.clusterMap = clusterMap
+	oldServiceMap := a.serviceMap.Swap(serviceMap)
+	a.clusterMap.Swap(clusterMap)
 
 	// diff and destroy service
-	oldServiceMap.Range(func(k, v interface{}) bool {
+	for _, v := range oldServiceMap {
 		vItems := v.([]serviceMapItem)
 		for _, item := range vItems {
 			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; !ok {
@@ -427,8 +426,7 @@ func (a *Agent) reloadClusters(refersUrls map[string]*motan.URL) {
 				item.cluster.Destroy()
 			}
 		}
-		return true
-	})
+	}
 }
 
 func (a *Agent) initClusters() {
