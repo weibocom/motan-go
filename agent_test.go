@@ -238,7 +238,6 @@ func TestAgent_InitCall(t *testing.T) {
 	// wait ha
 	time.Sleep(time.Second * 1)
 
-	agent.Context = ctx
 	agent.reloadClusters(ctx)
 	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
 
