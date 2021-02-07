@@ -6,13 +6,32 @@ import (
 	assert2 "github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
-	"math/rand"
 	"testing"
 	"time"
 )
 
 func TestNewMotanServerContextFromConfig(t *testing.T) {
 	assert := assert2.New(t)
+
+	ext := startServer(t, "helloService", 64532)
+	clientExt := GetDefaultExtFactory()
+	u := motan.FromExtInfo("motan2://127.0.0.1:64532/helloService?serialization=simple")
+	assert.NotNil(u)
+	ep := clientExt.GetEndPoint(u)
+	assert.NotNil(ep)
+	ep.SetSerialization(motan.GetSerialization(u, ext))
+	motan.Initialize(ep)
+	// wait ha
+	time.Sleep(time.Second * 1)
+	request := newRequest("helloService", "hello", "Ray")
+	request.Attachment = motan.NewStringMap(motan.DefaultAttachmentSize)
+
+	resp := ep.Call(request)
+	assert.Nil(resp.GetException())
+	assert.Equal("Hello Ray from motan server", resp.GetValue())
+}
+
+func startServer(t *testing.T, path string, port int) motan.ExtensionFactory {
 	cfgText := `
 motan-server:
   log_dir: "stdout"
@@ -25,14 +44,16 @@ motan-registry:
 #conf of services
 motan-service:
   mytest-motan2:
-    path: helloService
+    path: %s
     group: bj
     protocol: motan2
     registry: direct
     serialization: simple
     ref : "serviceID"
-    export: "motan2:64532"
+    export: "motan2:%d"
 `
+	cfgText = fmt.Sprintf(cfgText, path, port)
+	assert := assert2.New(t)
 	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
 	assert.Nil(err)
 	ext := GetDefaultExtFactory()
@@ -42,25 +63,10 @@ motan-service:
 	mscontext.Start(ext)
 	mscontext.ServicesAvailable()
 
-	clientExt := GetDefaultExtFactory()
-	u := motan.FromExtInfo("motan2://127.0.0.1:64532/helloService?serialization=simple")
-	assert.NotNil(u)
-	ep := clientExt.GetEndPoint(u)
-	assert.NotNil(ep)
-	ep.SetSerialization(motan.GetSerialization(u, ext))
-	motan.Initialize(ep)
-	// wait ha
-	time.Sleep(time.Second * 1)
-	request := &motan.MotanRequest{}
-	request.RequestID = rand.Uint64()
-	request.ServiceName = "helloService"
-	request.Method = "hello"
-	request.Attachment = motan.NewStringMap(motan.DefaultAttachmentSize)
-	request.Arguments = []interface{}{"Ray"}
+	service := motan.FromExtInfo(fmt.Sprintf("motan2://127.0.0.1:%d/%s?serialization=simple", port, path))
+	assert.NotNil(service)
 
-	resp := ep.Call(request)
-	assert.Nil(resp.GetException())
-	assert.Equal("Hello Ray from motan server", resp.GetValue())
+	return ext
 }
 
 type HelloService struct{}

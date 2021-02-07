@@ -3,6 +3,7 @@ package motan
 import (
 	"bytes"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -223,6 +224,70 @@ func TestAgent_InitCall(t *testing.T) {
 		ret = agentHandler.Call(request)
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
+
+	// test hot reload clusters normal
+	startServer(t, "helloService2", 64533)
+
+	helloService := core.FromExtInfo("motan2://127.0.0.1:64533/helloService2?serialization=simple")
+	assert.NotNil(t, helloService, "hello hot-reload service start fail")
+
+	ctx := &core.Context{ConfigFile: filepath.Join("testdata", "agent-reload.yaml")}
+	ctx.Initialize()
+	assert.NotNil(t, ctx, "hot-reload config file context initialize fail")
+
+	// wait ha
+	time.Sleep(time.Second * 1)
+
+	agent.reloadClusters(ctx)
+	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
+
+	request = newRequest("helloService2", "hello", "Ray")
+	motanResponse := agentHandler.Call(request)
+	var responseBody []byte
+	err := motanResponse.ProcessDeserializable(&responseBody)
+	assert.Nil(t, err, err)
+	assert.Equal(t, "Hello Ray from motan server", string(responseBody), "hot-reload service response error")
+
+	// test hot reload clusters except
+	reloadUrls := map[string]*core.URL{
+		"test4-0":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
+		"test4-1":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
+		"test5":        {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
+	}
+	ctx.RefersURLs = reloadUrls
+	agent.reloadClusters(ctx)
+	assert.Equal(t, agent.serviceMap.Len(), 2, "hot-load serviceMap except length error")
+
+	for _, v := range []struct {
+		service  string
+		group    string
+		protocol string
+		version  string
+		except   string
+	}{
+		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
+		{"test4", "", "", "", "empty group is not supported"},
+		{"test5", "", "", "", "No refers for request"},
+		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
+	} {
+		request = newRequest(v.service, "")
+		request.SetAttachment(mpro.MGroup, v.group)
+		request.SetAttachment(mpro.MProxyProtocol, v.protocol)
+		request.SetAttachment(mpro.MVersion, v.version)
+		ret = agentHandler.Call(request)
+		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
+	}
+}
+
+func newRequest(serviceName string, method string, argments ...interface{}) *core.MotanRequest {
+	request := &core.MotanRequest{
+		RequestID:   rand.Uint64(),
+		ServiceName: serviceName,
+		Method:      method,
+		Attachment:  core.NewStringMap(core.DefaultAttachmentSize),
+	}
+	request.Arguments = argments
+	return request
 }
 
 type LocalTestServiceProvider struct {

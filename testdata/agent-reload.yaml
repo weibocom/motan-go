@@ -1,0 +1,25 @@
+motan-server:
+  log_dir: "stdout"
+  application: "app-golang" # server identify.
+
+motan-registry:
+  direct-registry:
+    protocol: direct
+    host: 127.0.0.1
+    port: 64533
+
+#conf of services
+motan-basicRefer:
+  mytest-motan2:
+    group: bj
+    protocol: motan2
+    registry: direct
+    serialization: simple
+
+#conf of refers
+motan-refer:
+  mytest-motan2:
+    path: helloService2
+    registry: direct-registry
+    serialization: simple
+    basicRefer: mytest-motan2

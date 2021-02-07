@@ -128,6 +128,7 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.saveStatus()
 }
 
+
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
 		flag.Parse()
@@ -357,6 +358,72 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 		return c.(*cluster.HTTPCluster)
 	}
 	return nil
+}
+
+func (a *Agent) reloadClusters(ctx *motan.Context) {
+	a.clsLock.Lock()
+	defer a.clsLock.Unlock()
+
+	a.Context = ctx
+
+	serviceItemKeep := make(map[string] bool)
+	clusterMap := make(map[interface{}] interface{})
+	serviceMap := make(map[interface{}] interface{})
+	for _, url := range a.Context.RefersURLs {
+		if url.Parameters[motan.ApplicationKey] == "" {
+			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
+		}
+
+		service := url.Path
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+
+		// find exists old serviceMap
+		var serviceMapValue serviceMapItem
+		if v, exists := a.serviceMap.Load(service); exists {
+			vItems := v.([]serviceMapItem)
+
+			for _, vItem := range vItems {
+				urlExtInfo := url.ToExtInfo()
+				if urlExtInfo == vItem.url.ToExtInfo() {
+					serviceItemKeep[urlExtInfo] = true
+					serviceMapValue = vItem
+					break
+				}
+			}
+		}
+
+		// new serviceMap & cluster
+		if serviceMapValue.url == nil {
+			vlog.Infoln("hot create service:" + url.ToExtInfo())
+			c := cluster.NewCluster(a.Context, a.extFactory, url, true)
+			serviceMapValue = serviceMapItem{
+				url:     url,
+				cluster: c,
+			}
+		}
+		clusterMap[mapKey] = serviceMapValue.cluster
+
+		var serviceMapItemArr []serviceMapItem
+		if v, exists := serviceMap[service]; exists {
+			serviceMapItemArr = v.([]serviceMapItem)
+		}
+		serviceMapItemArr = append(serviceMapItemArr, serviceMapValue)
+		serviceMap[url.Path] = serviceMapItemArr
+	}
+
+	oldServiceMap := a.serviceMap.Swap(serviceMap)
+	a.clusterMap.Swap(clusterMap)
+
+	// diff and destroy service
+	for _, v := range oldServiceMap {
+		vItems := v.([]serviceMapItem)
+		for _, item := range vItems {
+			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; !ok {
+				vlog.Infoln("hot destroy service:" + item.url.ToExtInfo())
+				item.cluster.Destroy()
+			}
+		}
+	}
 }
 
 func (a *Agent) initClusters() {
