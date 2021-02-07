@@ -239,7 +239,7 @@ func TestAgent_InitCall(t *testing.T) {
 	time.Sleep(time.Second * 1)
 
 	agent.Context = ctx
-	agent.reloadClusters(ctx.RefersURLs)
+	agent.reloadClusters(ctx)
 	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
 
 	request = newRequest("helloService2", "hello", "Ray")
@@ -255,7 +255,8 @@ func TestAgent_InitCall(t *testing.T) {
 		"test4-1":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
 		"test5":        {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
-	agent.reloadClusters(reloadUrls)
+	ctx.RefersURLs = reloadUrls
+	agent.reloadClusters(ctx)
 	assert.Equal(t, agent.serviceMap.Len(), 2, "hot-load serviceMap except length error")
 
 	for _, v := range []struct {

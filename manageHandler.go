@@ -669,7 +669,7 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx := &motan.Context{ConfigFile: h.agent.ConfigFile}
 		ctx.Initialize()
 
-		h.agent.reloadClusters(ctx.RefersURLs)
+		h.agent.reloadClusters(ctx)
 
 		refersURLs, _ := json.Marshal(ctx.RefersURLs)
 

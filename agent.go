@@ -360,18 +360,16 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 	return nil
 }
 
-func (a *Agent) reloadClusters(refersURLs map[string]*motan.URL) {
+func (a *Agent) reloadClusters(ctx *motan.Context) {
 	a.clsLock.Lock()
 	defer a.clsLock.Unlock()
 
-	if a.Context != nil {
-		a.Context.RefersURLs = refersURLs
-	}
+	a.Context = ctx
 
 	serviceItemKeep := make(map[string] bool)
 	clusterMap := make(map[interface{}] interface{})
 	serviceMap := make(map[interface{}] interface{})
-	for _, url := range refersURLs {
+	for _, url := range a.Context.RefersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 		}
@@ -402,9 +400,8 @@ func (a *Agent) reloadClusters(refersURLs map[string]*motan.URL) {
 				url:     url,
 				cluster: c,
 			}
-
-			clusterMap[mapKey] = c
 		}
+		clusterMap[mapKey] = serviceMapValue.cluster
 
 		var serviceMapItemArr []serviceMapItem
 		if v, exists := serviceMap[service]; exists {
