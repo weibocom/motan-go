@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/weibocom/motan-go/config"
 	"reflect"
 	"strconv"
 	"sync"
@@ -15,7 +16,7 @@ import (
 
 // MSContext is Motan Server Context
 type MSContext struct {
-	confFile     string
+	config       *config.Config
 	context      *motan.Context
 	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
@@ -37,6 +38,44 @@ var (
 	serverContextMutex sync.Mutex
 )
 
+func NewMotanServerContextFromConfig(conf *config.Config) (ms *MSContext) {
+	ms = &MSContext{config: conf}
+	motan.Initialize(ms)
+
+	section, err := ms.context.Config.GetSection("motan-server")
+	if err != nil {
+		fmt.Println("get config of \"motan-server\" fail! err " + err.Error())
+	}
+
+	logDir := ""
+	if section != nil && section["log_dir"] != nil {
+		logDir = section["log_dir"].(string)
+	}
+	if logDir == "" {
+		logDir = "."
+	}
+	logAsync := ""
+	if section != nil && section["log_async"] != nil {
+		logAsync = strconv.FormatBool(section["log_async"].(bool))
+	}
+	logStructured := ""
+	if section != nil && section["log_structured"] != nil {
+		logStructured = strconv.FormatBool(section["log_structured"].(bool))
+	}
+	rotatePerHour := ""
+	if section != nil && section["rotate_per_hour"] != nil {
+		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
+	}
+	logLevel := ""
+	if section != nil && section["log_level"] != nil {
+		logLevel = section["log_level"].(string)
+	}
+	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
+	registerSwitchers(ms.context)
+
+	return ms
+}
+
 // GetMotanServerContext start a motan server context by config
 // a motan server context can listen multi ports and provide many services. so a single motan server context is suggested
 // default context will be used if confFile is empty
@@ -50,42 +89,17 @@ func GetMotanServerContextWithFlagParse(confFile string, parseFlag bool) *MSCont
 	}
 	serverContextMutex.Lock()
 	defer serverContextMutex.Unlock()
+
+	conf, err := config.NewConfigFromFile(confFile)
+	if err != nil {
+		vlog.Errorf("parse config file fail, error: %s, file: %s", err, confFile)
+		return nil
+	}
+
 	ms := serverContextMap[confFile]
 	if ms == nil {
-
-		ms = &MSContext{confFile: confFile}
+		ms = NewMotanServerContextFromConfig(conf)
 		serverContextMap[confFile] = ms
-		motan.Initialize(ms)
-		section, err := ms.context.Config.GetSection("motan-server")
-		if err != nil {
-			fmt.Println("get config of \"motan-server\" fail! err " + err.Error())
-		}
-
-		logDir := ""
-		if section != nil && section["log_dir"] != nil {
-			logDir = section["log_dir"].(string)
-		}
-		if logDir == "" {
-			logDir = "."
-		}
-		logAsync := ""
-		if section != nil && section["log_async"] != nil {
-			logAsync = strconv.FormatBool(section["log_async"].(bool))
-		}
-		logStructured := ""
-		if section != nil && section["log_structured"] != nil {
-			logStructured = strconv.FormatBool(section["log_structured"].(bool))
-		}
-		rotatePerHour := ""
-		if section != nil && section["rotate_per_hour"] != nil {
-			rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-		}
-		logLevel := ""
-		if section != nil && section["log_level"] != nil {
-			logLevel = section["log_level"].(string)
-		}
-		initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
-		registerSwitchers(ms.context)
 	}
 	return ms
 }
@@ -175,9 +189,7 @@ func (m *MSContext) Initialize() {
 	m.csync.Lock()
 	defer m.csync.Unlock()
 	if !m.inited {
-		m.context = &motan.Context{ConfigFile: m.confFile}
-		m.context.Initialize()
-
+		m.context = motan.NewContextFromConfig(m.config, "", "")
 		m.portService = make(map[int]motan.Exporter, 32)
 		m.portServer = make(map[int]motan.Server, 32)
 		m.serviceImpls = make(map[string]interface{}, 32)

@@ -105,11 +105,12 @@ func (h *HTTPProvider) Initialize() {
 			}
 			return c, nil
 		},
-		MaxConnDuration:     keepaliveTimeout,
-		MaxIdleConnDuration: idleConnectionTimeout,
-		MaxConns:            h.maxConnections,
-		ReadTimeout:         timeout,
-		WriteTimeout:        timeout,
+		MaxConnDuration:           keepaliveTimeout,
+		MaxIdleConnDuration:       idleConnectionTimeout,
+		MaxIdemponentCallAttempts: 1, // do not retry for any type of request, by default fasthttp will retry idemponent type request
+		MaxConns:                  h.maxConnections,
+		ReadTimeout:               timeout,
+		WriteTimeout:              timeout,
 	}
 }
 
@@ -241,7 +242,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			// Do not check upstream for compatibility
 			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
 			if !ok {
-				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				fillExceptionWithCode(resp, http.StatusNotFound, t, errors.New("service not found"))
 				return resp
 			}
 			rewritePath = path
@@ -279,6 +280,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		responseBodyBytes := make([]byte, len(body))
 		copy(responseBodyBytes, body)
 		resp.Value = []interface{}{headerBuffer.Bytes(), responseBodyBytes}
+		updateUpstreamStatusCode(resp, httpRes.StatusCode())
 		return resp
 	}
 
@@ -288,7 +290,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		if h.enableRewrite {
 			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
 			if !ok {
-				fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, errors.New("service not found"))
+				fillExceptionWithCode(resp, http.StatusNotFound, t, errors.New("service not found"))
 				return resp
 			}
 			rewritePath = path
@@ -315,6 +317,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
 		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
+		updateUpstreamStatusCode(resp, httpRes.StatusCode())
 		return resp
 	}
 
@@ -398,6 +401,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		resp.SetAttachment(k, v[0])
 	}
 	resp.Value = string(body)
+	updateUpstreamStatusCode(resp, httpResp.StatusCode)
 	return resp
 }
 
@@ -448,4 +452,9 @@ func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err
 
 func fillException(resp *motan.MotanResponse, start int64, err error) {
 	fillExceptionWithCode(resp, http.StatusServiceUnavailable, start, err)
+}
+
+func updateUpstreamStatusCode(resp *motan.MotanResponse, statusCode int) {
+	resCtx := resp.GetRPCContext(true)
+	resCtx.Meta.Store(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
 }

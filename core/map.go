@@ -149,3 +149,15 @@ func (m *CopyOnWriteMap) Delete(key interface{}) (pv interface{}) {
 	m.innerMap.Store(copiedMap)
 	return pv
 }
+
+func (m *CopyOnWriteMap) Len() int {
+	return len(m.data())
+}
+
+func (m *CopyOnWriteMap) Swap(newMap map[interface{}]interface{}) map[interface{}]interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	lastMap := m.data()
+	m.innerMap.Store(newMap)
+	return lastMap
+}

@@ -167,39 +167,47 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				trace.PutReqSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 			}
 		}
-		go m.processReq(request, trace, conn)
+		go m.processReq(t, request, trace, conn)
 	}
 }
 
-func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, conn net.Conn) {
+func (m *MotanServer) processReq(start time.Time, request *mpro.Message, tc *motan.TraceContext, conn net.Conn) {
 	defer motan.HandlePanic(nil)
 	request.Header.SetProxy(m.proxy)
 	// TODO request , response reuse
+	var mres motan.Response
+	var mreq motan.Request
 	var res *mpro.Message
 	lastRequestID := request.Header.RequestID
 	if request.Header.IsHeartbeat() {
 		res = mpro.BuildHeartbeat(request.Header.RequestID, mpro.Res)
 	} else {
-		var mres motan.Response
 		serialization := m.extFactory.GetSerialization("", request.Header.GetSerialize())
 		req, err := mpro.ConvertToRequest(request, serialization)
 		if err != nil {
 			vlog.Errorf("motan server convert to motan request fail. rid :%d, service: %s, method:%s,err:%s\n", request.Header.RequestID, request.Metadata.LoadOrEmpty(mpro.MPath), request.Metadata.LoadOrEmpty(mpro.MMethod), err.Error())
 			res = mpro.BuildExceptionResponse(request.Header.RequestID, mpro.ExceptionToJSON(&motan.Exception{ErrCode: 500, ErrMsg: "deserialize fail. err:" + err.Error() + " method:" + request.Metadata.LoadOrEmpty(mpro.MMethod), ErrType: motan.ServiceException}))
 		} else {
-			req.GetRPCContext(true).ExtFactory = m.extFactory
+			mreq = req
+			reqCtx := req.GetRPCContext(true)
+			reqCtx.ExtFactory = m.extFactory
+			reqCtx.RequestReceiveTime = start
 			if tc != nil {
 				tc.PutReqSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 				req.GetRPCContext(true).Tc = tc
 			}
-
+			callStart := time.Now()
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
 				tc.PutResSpan(&motan.Span{Name: motan.ClFilter, Time: time.Now()})
 			}
 			if mres != nil {
-				mres.GetRPCContext(true).Proxy = m.proxy
+				resCtx := mres.GetRPCContext(true)
+				resCtx.Proxy = m.proxy
+				if mres.GetAttachment(mpro.MProcessTime) == "" {
+					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(callStart)/1e6), 10))
+				}
 				res, err = mpro.ConvertToResMessage(mres, serialization)
 				if tc != nil {
 					tc.PutResSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
@@ -226,8 +234,17 @@ func (m *MotanServer) processReq(request *mpro.Message, tc *motan.TraceContext, 
 		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
 	}
+	resSendTime := time.Now()
+	if mreq != nil {
+		reqCtx := mreq.GetRPCContext(true)
+		reqCtx.ResponseSendTime = resSendTime
+	}
+	if mres != nil {
+		resCtx := mres.GetRPCContext(true)
+		resCtx.OnFinish()
+	}
 	if tc != nil {
-		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: time.Now()})
+		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: resSendTime})
 	}
 }
 

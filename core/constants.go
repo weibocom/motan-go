@@ -26,6 +26,8 @@ const (
 	Hakey                   = "haStrategy"
 	Lbkey                   = "loadbalance"
 	TimeOutKey              = "requestTimeout"
+	MinTimeOutKey           = "minRequestTimeout"
+	MaxTimeOutKey           = "maxRequestTimeout"
 	SessionTimeOutKey       = "registrySessionTimeout"
 	RetriesKey              = "retries"
 	ApplicationKey          = "application"
@@ -47,6 +49,7 @@ const (
 	ProxyRegistryKey        = "proxyRegistry"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
+	ClientConnectionKey     = "clientConnection"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"
@@ -76,6 +79,11 @@ const (
 
 const (
 	DefaultWriteTimeout = 5 * time.Second
+)
+
+// meta keys
+const (
+	MetaUpstreamCode = "upstreamCode"
 )
 
 // errorCodes

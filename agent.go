@@ -3,6 +3,7 @@ package motan
 import (
 	"flag"
 	"fmt"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -23,7 +24,6 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
-	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -45,20 +45,20 @@ type Agent struct {
 
 	agentServer motan.Server
 
-	clusterMap             *motan.CopyOnWriteMap
-	clusterMapWithoutGroup *motan.CopyOnWriteMap
-	httpClusterMap         *motan.CopyOnWriteMap
-	status                 int
-	agentURL               *motan.URL
-	logdir                 string
-	port                   int
-	mport                  int
-	eport                  int
-	hport                  int
-	pidfile                string
-	runtimedir             string
+	clusterMap     *motan.CopyOnWriteMap
+	httpClusterMap *motan.CopyOnWriteMap
+	status         int
+	agentURL       *motan.URL
+	logdir         string
+	port           int
+	mport          int
+	eport          int
+	hport          int
+	pidfile        string
+	runtimedir     string
 
 	serviceExporters  *motan.CopyOnWriteMap
+	serviceMap        *motan.CopyOnWriteMap
 	agentPortServer   map[int]motan.Server
 	serviceRegistries *motan.CopyOnWriteMap
 	httpProxyServer   *mserver.HTTPProxyServer
@@ -71,6 +71,11 @@ type Agent struct {
 	configurer *DynamicConfigurer
 }
 
+type serviceMapItem struct {
+	url     *motan.URL
+	cluster *cluster.MotanCluster
+}
+
 func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	var agent *Agent
 	if extfactory == nil {
@@ -80,12 +85,12 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 		agent = &Agent{extFactory: extfactory}
 	}
 	agent.clusterMap = motan.NewCopyOnWriteMap()
-	agent.clusterMapWithoutGroup = motan.NewCopyOnWriteMap()
 	agent.httpClusterMap = motan.NewCopyOnWriteMap()
 	agent.serviceExporters = motan.NewCopyOnWriteMap()
 	agent.agentPortServer = make(map[int]motan.Server)
 	agent.serviceRegistries = motan.NewCopyOnWriteMap()
 	agent.manageHandlers = make(map[string]http.Handler)
+	agent.serviceMap = motan.NewCopyOnWriteMap()
 	return agent
 }
 
@@ -99,6 +104,11 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 		url.PutParam(motan.ApplicationKey, application)
 	}
 	url.ClearCachedInfo()
+}
+
+// RuntimeDir acquires the agent runtime working directory
+func (a *Agent) RuntimeDir() string {
+	return a.runtimedir
 }
 
 // get Agent server
@@ -117,6 +127,7 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.status = http.StatusServiceUnavailable
 	a.saveStatus()
 }
+
 
 func (a *Agent) StartMotanAgent() {
 	if !flag.Parsed() {
@@ -349,6 +360,72 @@ func (h *httpClusterGetter) GetHTTPCluster(host string) *cluster.HTTPCluster {
 	return nil
 }
 
+func (a *Agent) reloadClusters(ctx *motan.Context) {
+	a.clsLock.Lock()
+	defer a.clsLock.Unlock()
+
+	a.Context = ctx
+
+	serviceItemKeep := make(map[string] bool)
+	clusterMap := make(map[interface{}] interface{})
+	serviceMap := make(map[interface{}] interface{})
+	for _, url := range a.Context.RefersURLs {
+		if url.Parameters[motan.ApplicationKey] == "" {
+			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
+		}
+
+		service := url.Path
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+
+		// find exists old serviceMap
+		var serviceMapValue serviceMapItem
+		if v, exists := a.serviceMap.Load(service); exists {
+			vItems := v.([]serviceMapItem)
+
+			for _, vItem := range vItems {
+				urlExtInfo := url.ToExtInfo()
+				if urlExtInfo == vItem.url.ToExtInfo() {
+					serviceItemKeep[urlExtInfo] = true
+					serviceMapValue = vItem
+					break
+				}
+			}
+		}
+
+		// new serviceMap & cluster
+		if serviceMapValue.url == nil {
+			vlog.Infoln("hot create service:" + url.ToExtInfo())
+			c := cluster.NewCluster(a.Context, a.extFactory, url, true)
+			serviceMapValue = serviceMapItem{
+				url:     url,
+				cluster: c,
+			}
+		}
+		clusterMap[mapKey] = serviceMapValue.cluster
+
+		var serviceMapItemArr []serviceMapItem
+		if v, exists := serviceMap[service]; exists {
+			serviceMapItemArr = v.([]serviceMapItem)
+		}
+		serviceMapItemArr = append(serviceMapItemArr, serviceMapValue)
+		serviceMap[url.Path] = serviceMapItemArr
+	}
+
+	oldServiceMap := a.serviceMap.Swap(serviceMap)
+	a.clusterMap.Swap(clusterMap)
+
+	// diff and destroy service
+	for _, v := range oldServiceMap {
+		vItems := v.([]serviceMapItem)
+		for _, item := range vItems {
+			if _, ok := serviceItemKeep[item.url.ToExtInfo()]; !ok {
+				vlog.Infoln("hot destroy service:" + item.url.ToExtInfo())
+				item.cluster.Destroy()
+			}
+		}
+	}
+}
+
 func (a *Agent) initClusters() {
 	for _, url := range a.Context.RefersURLs {
 		a.initCluster(url)
@@ -362,16 +439,24 @@ func (a *Agent) initCluster(url *motan.URL) {
 	if url.Parameters[motan.ApplicationKey] == "" {
 		url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 	}
-	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
-	a.clusterMap.Store(mapKey, c)
 
-	mapKeyWithoutGroup := getClusterKey("", url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
-	if _, ok := a.clusterMapWithoutGroup.Load(mapKeyWithoutGroup); ok {
-		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, nil)
-	} else {
-		a.clusterMapWithoutGroup.Store(mapKeyWithoutGroup, c)
+	c := cluster.NewCluster(a.Context, a.extFactory, url, true)
+	item := serviceMapItem{
+		url:     url,
+		cluster: c,
 	}
+	service := url.Path
+	var serviceMapItemArr []serviceMapItem
+	if v, exists := a.serviceMap.Load(service); exists {
+		serviceMapItemArr = v.([]serviceMapItem)
+		serviceMapItemArr = append(serviceMapItemArr, item)
+	} else {
+		serviceMapItemArr = []serviceMapItem{item}
+	}
+	a.serviceMap.Store(url.Path, serviceMapItemArr)
+
+	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	a.clusterMap.Store(mapKey, c)
 }
 
 func (a *Agent) SetSanpshotConf() {
@@ -543,27 +628,74 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 }
 
 func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
-	version := "0.1"
-	if request.GetAttachment(mpro.MVersion) != "" {
-		version = request.GetAttachment(mpro.MVersion)
+	c, ck, err := a.findCluster(request)
+	if err == nil {
+		return a.clusterCall(request, ck, c)
 	}
-	ck := getClusterKey(request.GetAttachment(mpro.MGroup), version, request.GetAttachment(mpro.MProxyProtocol), request.GetAttachment(mpro.MPath))
-	if motanCluster, ok := a.agent.clusterMap.Load(ck); ok {
-		return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
-	}
-	if motanCluster, ok := a.agent.clusterMapWithoutGroup.Load(ck); ok {
-		if motanCluster != nil {
-			return a.clusterCall(request, ck, motanCluster.(*cluster.MotanCluster))
-		}
-		vlog.Warningf("empty group is not supported, maybe this service belongs to multiple groups, cluster:%s, request id:%d", ck, request.GetRequestID())
-		return getDefaultResponse(request.GetRequestID(), "empty group is not supported, maybe this service belongs to multiple groups, cluster:"+ck)
-	}
+
 	// if normal cluster not found we try http cluster, here service of request represent domain
 	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
 		return a.httpCall(request, ck, httpCluster.(*cluster.HTTPCluster))
 	}
-	vlog.Warningf("cluster not found. cluster: %s, request id:%d", ck, request.GetRequestID())
-	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster:"+ck)
+	vlog.Warningf("cluster not found. cluster: %s, request id:%d", err.Error(), request.GetRequestID())
+	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster: "+err.Error())
+}
+func (a *agentMessageHandler) matchRule(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string) (foundClusters []serviceMapItem, err error) {
+	if cond == "" {
+		err = fmt.Errorf("empty %s is not supported", typ)
+		return
+	}
+	for _, item := range data {
+		if f(item.url) == cond {
+			foundClusters = append(foundClusters, item)
+		}
+	}
+	if len(foundClusters) == 0 {
+		err = fmt.Errorf("cluster not found. cluster:%s", key)
+		return
+	}
+	return
+}
+func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
+	service := request.GetServiceName()
+	group := request.GetAttachment(mpro.MGroup)
+	version := request.GetAttachment(mpro.MVersion)
+	protocol := request.GetAttachment(mpro.MProxyProtocol)
+	reqInfo := fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
+		service, group, protocol, version)
+	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
+	if !exists {
+		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, reqInfo)
+		return
+	}
+	search := []struct {
+		tip    string
+		cond   string
+		condFn func(u *motan.URL) string
+	}{
+		{"service", service, func(u *motan.URL) string { return u.Path }},
+		{"group", group, func(u *motan.URL) string { return u.Group }},
+		{"protocol", protocol, func(u *motan.URL) string { return u.Protocol }},
+		{"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") }},
+	}
+	foundClusters := serviceItemArrI.([]serviceMapItem)
+	for i, rule := range search {
+		if i == 0 {
+			key = rule.cond
+		} else {
+			key += "_" + rule.cond
+		}
+		foundClusters, err = a.matchRule(rule.tip, rule.cond, key, foundClusters, rule.condFn)
+		if err != nil {
+			return
+		}
+		if len(foundClusters) == 1 {
+			c = foundClusters[0].cluster
+			return
+		}
+	}
+	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, reqInfo)
+	return
 }
 
 func (a *agentMessageHandler) AddProvider(p motan.Provider) error {

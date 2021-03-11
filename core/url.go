@@ -143,11 +143,17 @@ func (u *URL) ToExtInfo() string {
 	buf.WriteString("group=")
 	buf.WriteString(u.Group)
 
-	for k, v := range u.Parameters {
+	var keys []string
+	for k := range u.Parameters {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
 		buf.WriteString("&")
 		buf.WriteString(k)
 		buf.WriteString("=")
-		buf.WriteString(v)
+		buf.WriteString(u.Parameters[k])
 	}
 	return buf.String()
 
@@ -212,7 +218,7 @@ func (u *URL) MergeParams(params map[string]string) {
 }
 
 func (u *URL) CanServe(other *URL) bool {
-	if u.Protocol != other.Protocol {
+	if u.Protocol != other.Protocol && u.Protocol != ProtocolLocal {
 		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s", u.Protocol, other.Protocol)
 		return false
 	}

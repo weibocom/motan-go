@@ -655,6 +655,33 @@ func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
 	}
 }
 
+type HotReload struct {
+	agent *Agent
+}
+
+func (h *HotReload) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/reload/clusters":
+		ctx := &motan.Context{ConfigFile: h.agent.ConfigFile}
+		ctx.Initialize()
+
+		h.agent.reloadClusters(ctx)
+
+		refersURLs, _ := json.Marshal(ctx.RefersURLs)
+
+		jsonEncoder := json.NewEncoder(w)
+		_ = jsonEncoder.Encode(logResponse{
+			Code: 200,
+			Body: string(refersURLs),
+		})
+	}
+}
+
+
 //------------ below code is copied from net/http/pprof -------------
 
 // Cmdline responds with the running program's

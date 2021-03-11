@@ -27,6 +27,13 @@ func TestExtFactory(t *testing.T) {
 	ext.RegistryExtSerialization("test", 0, newSerial)
 }
 
+func TestRegistLocalProvider(t *testing.T) {
+	service := "testService"
+	tp := &TestProvider{}
+	RegistLocalProvider(service, tp)
+	assert.Equal(t, tp, GetLocalProvider(service))
+}
+
 func TestMotanRequest_Clone(t *testing.T) {
 	request := &MotanRequest{}
 	for i := 0; i < 20; i++ {

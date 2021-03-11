@@ -23,6 +23,7 @@ const (
 //ext name
 const (
 	Direct = "direct"
+	Local  = "local"
 	Consul = "consul"
 	ZK     = "zookeeper"
 	Mesh   = "mesh"
@@ -97,6 +98,10 @@ func GetSnapshotConf() *motan.SnapshotConf {
 func RegistDefaultRegistry(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtRegistry(Direct, func(url *motan.URL) motan.Registry {
 		return &DirectRegistry{url: url}
+	})
+
+	extFactory.RegistExtRegistry(Local, func(url *motan.URL) motan.Registry {
+		return &LocalRegistry{url: url}
 	})
 
 	extFactory.RegistExtRegistry(ZK, func(url *motan.URL) motan.Registry {

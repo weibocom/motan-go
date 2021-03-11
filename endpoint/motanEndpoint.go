@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -31,17 +32,20 @@ var (
 )
 
 type MotanEndpoint struct {
-	url                       *motan.URL
-	lock                      sync.Mutex
-	channels                  *ChannelPool
-	destroyed                 bool
-	destroyCh                 chan struct{}
-	available                 bool
-	errorCount                uint32
-	proxy                     bool
-	errorCountThreshold       int64
-	keepaliveInterval         time.Duration
-	requestTimeoutMillisecond int64
+	url                          *motan.URL
+	lock                         sync.Mutex
+	channels                     *ChannelPool
+	destroyed                    bool
+	destroyCh                    chan struct{}
+	available                    bool
+	errorCount                   uint32
+	proxy                        bool
+	errorCountThreshold          int64
+	keepaliveInterval            time.Duration
+	requestTimeoutMillisecond    int64
+	minRequestTimeoutMillisecond int64
+	maxRequestTimeoutMillisecond int64
+	clientConnection             int
 
 	// for heartbeat requestID
 	keepaliveID      uint64
@@ -68,11 +72,13 @@ func (m *MotanEndpoint) Initialize() {
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
 	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
 	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
-
+	m.minRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MinTimeOutKey)
+	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
+	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
 	}
-	channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
+	channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 	if err != nil {
 		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
 		// retry connect
@@ -84,7 +90,7 @@ func (m *MotanEndpoint) Initialize() {
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewChannelPool(defaultChannelPoolSize, factory, nil, m.serialization)
+					channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
@@ -119,8 +125,20 @@ func (m *MotanEndpoint) Destroy() {
 }
 
 func (m *MotanEndpoint) GetRequestTimeout(request motan.Request) time.Duration {
-	// TODO: may be we need a more generic way to deal with requestTimeout, retries and etc
-	return time.Duration(m.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.TimeOutKey, m.requestTimeoutMillisecond)) * time.Millisecond
+	timeout := m.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.TimeOutKey, m.requestTimeoutMillisecond)
+	minTimeout := m.minRequestTimeoutMillisecond
+	maxTimeout := m.maxRequestTimeoutMillisecond
+	if minTimeout == 0 {
+		minTimeout = timeout / 2
+	}
+	if maxTimeout == 0 {
+		maxTimeout = timeout * 2
+	}
+	reqTimeout, _ := strconv.ParseInt(request.GetAttachment(mpro.MTimeout), 10, 64)
+	if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
+		timeout = reqTimeout
+	}
+	return time.Duration(timeout) * time.Millisecond
 }
 
 func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
@@ -191,7 +209,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		// reset errorCount
 		m.resetErr()
 	}
-
 	if !m.proxy {
 		if err = response.ProcessDeserializable(rc.Reply); err != nil {
 			return m.defaultErrMotanResponse(request, err.Error())
@@ -358,8 +375,12 @@ func (s *Stream) Send() error {
 	ready := sendReady{data: buf.Bytes()}
 	select {
 	case s.channel.sendCh <- ready:
-		if s.rc != nil && s.rc.Tc != nil {
-			s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: time.Now()})
+		if s.rc != nil {
+			sendTime := time.Now()
+			s.rc.RequestSendTime = sendTime
+			if s.rc.Tc != nil {
+				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
+			}
 		}
 		return nil
 	case <-timer.C:
@@ -395,6 +416,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 		s.Close()
 	}()
 	if s.rc != nil {
+		s.rc.ResponseReceiveTime = t
 		if s.rc.Tc != nil {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Receive, Addr: s.channel.address, Time: t})
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})

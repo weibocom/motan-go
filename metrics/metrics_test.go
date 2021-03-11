@@ -109,12 +109,6 @@ func TestDefaultStatItem(t *testing.T) {
 	assert.True(t, item.IsReport(), "isReport")
 	item.SetReport(false)
 	assert.False(t, item.IsReport(), "isReport")
-	snap.Clear()
-	count = 0
-	snap.RangeKey(func(k string) {
-		count++
-	})
-	assert.Equal(t, 0, count, "key size")
 }
 
 func TestAddWriter(t *testing.T) {
@@ -238,4 +232,104 @@ func (m *mockWriter) GetSnapshot() []Snapshot {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 	return m.snapshots
+}
+
+func TestReadonlyStatItem(t *testing.T) {
+	assert := assert.New(t)
+	item := NewDefaultStatItem(group, service)
+	item.SetService(service)
+	item.SetGroup(group)
+	roItem := item.SnapshotAndClear()
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.SetGroup("")
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.SetReport(false)
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.SetService("")
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.Snapshot()
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.Clear()
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.AddCounter("test", 1)
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.AddGauge("test", 1)
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.AddHistograms("test", 1)
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.SnapshotAndClear()
+	})
+	assert.PanicsWithValue("action not supported", func() {
+		roItem.Remove("test")
+	})
+
+	assert.Equal(service, roItem.GetService())
+	assert.Equal(group, roItem.GetGroup())
+	assert.Equal(item.IsReport(), roItem.IsReport())
+	assert.Equal(item.LastSnapshot(), roItem)
+	assert.False(roItem.IsGauge("test"))
+	assert.False(roItem.IsHistogram("test"))
+	assert.False(roItem.IsCounter("test"))
+}
+
+func TestDefaultStatItem_1(t *testing.T) {
+	item := NewDefaultStatItem(group, service)
+	assert.Equal(t,"str",Escape("str"))
+	assert.NotNil(t, item, "GetOrRegisterStatItem")
+	assert.Equal(t, group, item.GetGroup(), "StatItem group")
+	assert.Equal(t, service, item.GetService(), "StatItem service")
+	item.AddCounter("c1", 123)
+	item.AddHistograms("h1", 200)
+	item.AddCounter("c2", 22)
+	item.Remove("c2")
+	snap := item.(*DefaultStatItem).SnapshotAndClearV0()
+	lastSnap := item.LastSnapshot()
+	snap.Mean("h3")
+	snap.P90("h3")
+	snap.P95("h3")
+	snap.P99("h3")
+	snap.P999("h3")
+	assert.True(t, snap == lastSnap, "last snapshot")
+	c1 := snap.Count("c1")
+	assert.Equal(t, int64(123), c1, "count")
+	h1 := snap.P99("h1")
+	assert.Equal(t, float64(200), h1, "histogram")
+	count := 0
+	snap.RangeKey(func(k string) {
+		if k == "c2" {
+			t.Error("should not has key:'c2'")
+		}
+		count++
+	})
+	assert.Equal(t, 2, count, "key size")
+	item.SetReport(true)
+	assert.True(t, item.IsReport(), "isReport")
+	item.SetReport(false)
+	assert.False(t, item.IsReport(), "isReport")
+	snap.Clear()
+	count = 0
+	snap.RangeKey(func(k string) {
+		count++
+	})
+	assert.Equal(t, 0, count, "key size")
+
+	assert.EqualValues(t, 0, snap.Min("test"))
+	assert.EqualValues(t, 0, snap.Max("test1"))
+	assert.EqualValues(t, 0, snap.Sum("test"))
+	assert.Equal(t, snap, item.Snapshot())
+
+	assert.Equal(t,elapseLess50ms,ElapseTimeSuffix(49))
+	assert.Equal(t,elapseLess100ms,ElapseTimeSuffix(99))
+	assert.Equal(t,elapseLess200ms,ElapseTimeSuffix(199))
+	assert.Equal(t,elapseLess500ms,ElapseTimeSuffix(499))
+	assert.Equal(t,elapseMore500ms,ElapseTimeSuffix(599))
+	sampleStatus("app")
 }

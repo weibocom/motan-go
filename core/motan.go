@@ -28,7 +28,10 @@ func init() {
 }
 
 const (
-	DefaultAttachmentSize = 16
+	DefaultAttachmentSize     = 16
+	DefaultRPCContextMetaSize = 8
+
+	ProtocolLocal = "local"
 )
 
 var (
@@ -90,6 +93,16 @@ type Request interface {
 	GetRequestID() uint64
 	GetRPCContext(canCreate bool) *RPCContext
 	ProcessDeserializable(toTypes []interface{}) error
+}
+
+type FinishHandler interface {
+	Handle()
+}
+
+type FinishHandleFunc func()
+
+func (f FinishHandleFunc) Handle() {
+	f()
 }
 
 // Response : motan response
@@ -348,8 +361,27 @@ type RPCContext struct {
 	Result    *AsyncResult
 	Reply     interface{}
 
+	Meta *StringMap
+	// various time, it's owned by motan request context
+	RequestSendTime     time.Time
+	RequestReceiveTime  time.Time
+	ResponseSendTime    time.Time
+	ResponseReceiveTime time.Time
+
+	FinishHandlers []FinishHandler
+
 	// trace context
 	Tc *TraceContext
+}
+
+func (c *RPCContext) AddFinishHandler(handler FinishHandler) {
+	c.FinishHandlers = append(c.FinishHandlers, handler)
+}
+
+func (c *RPCContext) OnFinish() {
+	for _, h := range c.FinishHandlers {
+		h.Handle()
+	}
 }
 
 // AsyncResult : async call result
@@ -451,7 +483,9 @@ func (m *MotanRequest) GetAttachments() *StringMap {
 
 func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
 	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{}
+		m.RPCContext = &RPCContext{
+			Meta: NewStringMap(DefaultRPCContextMetaSize),
+		}
 	}
 	return m.RPCContext
 }
@@ -469,16 +503,22 @@ func (m *MotanRequest) Clone() interface{} {
 	}
 	if m.RPCContext != nil {
 		newRequest.RPCContext = &RPCContext{
-			ExtFactory:   m.RPCContext.ExtFactory,
-			Oneway:       m.RPCContext.Oneway,
-			Proxy:        m.RPCContext.Proxy,
-			GzipSize:     m.RPCContext.GzipSize,
-			SerializeNum: m.RPCContext.SerializeNum,
-			Serialized:   m.RPCContext.Serialized,
-			AsyncCall:    m.RPCContext.AsyncCall,
-			Result:       m.RPCContext.Result,
-			Reply:        m.RPCContext.Reply,
-			Tc:           m.RPCContext.Tc,
+			ExtFactory:          m.RPCContext.ExtFactory,
+			Oneway:              m.RPCContext.Oneway,
+			Proxy:               m.RPCContext.Proxy,
+			GzipSize:            m.RPCContext.GzipSize,
+			SerializeNum:        m.RPCContext.SerializeNum,
+			Serialized:          m.RPCContext.Serialized,
+			AsyncCall:           m.RPCContext.AsyncCall,
+			Result:              m.RPCContext.Result,
+			Reply:               m.RPCContext.Reply,
+			Meta:                m.RPCContext.Meta,
+			RequestSendTime:     m.RPCContext.RequestSendTime,
+			RequestReceiveTime:  m.RPCContext.RequestReceiveTime,
+			ResponseSendTime:    m.RPCContext.ResponseSendTime,
+			ResponseReceiveTime: m.RPCContext.ResponseReceiveTime,
+			FinishHandlers:      m.RPCContext.FinishHandlers,
+			Tc:                  m.RPCContext.Tc,
 		}
 		if m.RPCContext.OriginalMessage != nil {
 			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
@@ -561,7 +601,9 @@ func (m *MotanResponse) GetAttachments() *StringMap {
 
 func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
 	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{}
+		m.RPCContext = &RPCContext{
+			Meta: NewStringMap(DefaultRPCContextMetaSize),
+		}
 	}
 	return m.RPCContext
 }
@@ -645,14 +687,12 @@ func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
 
 func (d *DefaultExtensionFactory) GetRegistry(url *URL) Registry {
 	key := url.GetIdentity()
-	if registry, exist := d.registries[key]; exist {
-		return registry
-	}
 	d.newRegistryLock.Lock()
 	defer d.newRegistryLock.Unlock()
 	if registry, exist := d.registries[key]; exist {
 		return registry
-	} else if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
+	}
+	if newRegistry, ok := d.registryFactories[url.Protocol]; ok {
 		registry := newRegistry(url)
 		Initialize(registry)
 		d.registries[key] = registry
@@ -777,21 +817,15 @@ func (d *DefaultExtensionFactory) Initialize() {
 }
 
 var (
-	lef *lastEndPointFilter
-	lcf *lastClusterFilter
+	lef = new(lastEndPointFilter)
+	lcf = new(lastClusterFilter)
 )
 
 func GetLastEndPointFilter() EndPointFilter {
-	if lef == nil {
-		lef = new(lastEndPointFilter)
-	}
 	return lef
 }
 
 func GetLastClusterFilter() ClusterFilter {
-	if lcf == nil {
-		lcf = new(lastClusterFilter)
-	}
 	return lcf
 }
 
@@ -1045,4 +1079,17 @@ func ServiceInGroup(sr ServiceDiscoverableRegistry, group string, service string
 		return true
 	}
 	return false
+}
+
+var localProviders = NewCopyOnWriteMap()
+
+func RegistLocalProvider(service string, provider Provider) {
+	localProviders.Store(service, provider)
+}
+
+func GetLocalProvider(service string) Provider {
+	if p, ok := localProviders.Load(service); ok {
+		return p.(Provider)
+	}
+	return nil
 }
