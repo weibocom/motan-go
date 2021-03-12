@@ -50,7 +50,7 @@ const (
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"
-	EnableChannelPoolKey    = "enableChannelPool"
+	ShareConnectionKey      = "shareConnection"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"

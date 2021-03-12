@@ -23,7 +23,7 @@ var (
 	defaultKeepaliveInterval    = 1000 * time.Millisecond
 	defaultConnectRetryInterval = 60 * time.Second
 	defaultErrorCountThreshold  = 10
-	defaultEnableChannelPool    = "true"
+	defaultShareConnection      = "false"
 
 	ErrChannelShutdown    = fmt.Errorf("The channel has been shutdown")
 	ErrSendRequestTimeout = fmt.Errorf("Timeout err: send request timeout")
@@ -69,7 +69,7 @@ func (c *channelItem) Channel(u *motan.URL) (channel *Channel, err error) {
 	return
 }
 
-func newChannelItem(u *motan.URL) *channelItem {
+func newChannelItem() *channelItem {
 	return &channelItem{
 		refCount: new(int64),
 		lock:     new(sync.Mutex),
@@ -96,7 +96,7 @@ func (s *ChannelManager) addRefCount(u *motan.URL, cnt int64) {
 	key := channelManager.channelKey(u)
 	s.locker.Lock()
 	defer s.locker.Unlock()
-	item, exists := s.channelsMap.LoadOrStore(key, newChannelItem(u))
+	item, exists := s.channelsMap.LoadOrStore(key, newChannelItem())
 	if !exists {
 		atomic.AddInt64(s.channelsMapLen, 1)
 	}
@@ -115,7 +115,7 @@ func (s *ChannelManager) registerStatusSample() {
 func (s *ChannelManager) getChannel(u *motan.URL) (c *Channel, err error) {
 	key := s.channelKey(u)
 	s.locker.Lock()
-	item, exists := s.channelsMap.LoadOrStore(key, newChannelItem(u))
+	item, exists := s.channelsMap.LoadOrStore(key, newChannelItem())
 	if !exists {
 		atomic.AddInt64(s.channelsMapLen, 1)
 	}
@@ -143,13 +143,10 @@ type MotanEndpoint struct {
 	requestTimeoutMillisecond    int64
 	minRequestTimeoutMillisecond int64
 	maxRequestTimeoutMillisecond int64
-	clientConnection             int
-	enableChannelPool            bool
 	// for heartbeat requestID
 	keepaliveID      uint64
 	keepaliveRunning bool
 	serialization    motan.Serialization
-	connFactory      ConnFactory
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
@@ -163,68 +160,23 @@ func (m *MotanEndpoint) SetSerialization(s motan.Serialization) {
 func (m *MotanEndpoint) SetProxy(proxy bool) {
 	m.proxy = proxy
 }
-
-func (m *MotanEndpoint) Initialize() {
-	m.destroyCh = make(chan struct{}, 1)
-	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
+func (m *MotanEndpoint) initChannelPool() {
 	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
-	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
-	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
-	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
-	m.minRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MinTimeOutKey)
-	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
-	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
-	m.enableChannelPool = m.url.GetParam(motan.EnableChannelPoolKey, defaultEnableChannelPool) == "true"
-	m.connFactory = func() (net.Conn, error) {
-		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
-	}
-	if !m.enableChannelPool {
-		// disable connection pool mode
-		_, err := channelManager.getChannel(m.url)
-		channelManager.addRefCount(m.url, 1)
-		if err != nil {
-			vlog.Errorf("channel %s init failed. err:%s", m.url.GetAddressStr(), err.Error())
-			go func() {
-				defer motan.HandlePanic(nil)
-				ticker := time.NewTicker(connectRetryInterval)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-ticker.C:
-						_, err := channelManager.getChannel(m.url)
-						if err == nil {
-							m.setAvailable(true)
-							vlog.Infof("channel %s init success.", m.url.GetAddressStr())
-							return
-						}
-					case <-m.destroyCh:
-						return
-					}
-				}
-			}()
-		} else {
-			m.setAvailable(true)
-			vlog.Infof("channel %s init success.", m.url.GetAddressStr())
-		}
-		return
-	}
-	channels, err := NewChannelPool(m.clientConnection, m.url)
+	channels, err := NewChannelPool(m.url)
 	if err != nil {
-		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
-		// retry connect
+		vlog.Errorf("channel pool init failed. url: %s, err: %s", m.url, err.Error())
 		go func() {
 			defer motan.HandlePanic(nil)
-			// TODO: retry after 2^n * timeUnit
 			ticker := time.NewTicker(connectRetryInterval)
 			defer ticker.Stop()
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewChannelPool(m.clientConnection, m.url)
+					channels, err := NewChannelPool(m.url)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
-						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+						vlog.Infof("channel pool init success. url: %s", m.url.ToExtInfo())
 						return
 					}
 				case <-m.destroyCh:
@@ -232,11 +184,20 @@ func (m *MotanEndpoint) Initialize() {
 				}
 			}
 		}()
-	} else {
-		m.channels = channels
-		m.setAvailable(true)
-		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+		return
 	}
+	m.channels = channels
+	m.setAvailable(true)
+	vlog.Infof("channel pool init success. url: %s", m.url.ToExtInfo())
+}
+func (m *MotanEndpoint) Initialize() {
+	m.destroyCh = make(chan struct{}, 1)
+	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
+	m.keepaliveInterval = m.url.GetTimeDuration(motan.KeepaliveIntervalKey, time.Millisecond, defaultKeepaliveInterval)
+	m.requestTimeoutMillisecond = m.url.GetPositiveIntValue(motan.TimeOutKey, int64(defaultRequestTimeout/time.Millisecond))
+	m.minRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MinTimeOutKey)
+	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
+	m.initChannelPool()
 }
 
 func (m *MotanEndpoint) Destroy() {
@@ -251,9 +212,6 @@ func (m *MotanEndpoint) Destroy() {
 	if m.channels != nil {
 		vlog.Infof("motan2 endpoint %s will destroyed", m.url.GetAddressStr())
 		m.channels.Close()
-	}
-	if !m.enableChannelPool {
-		channelManager.addRefCount(m.url, -1)
 	}
 }
 
@@ -279,7 +237,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 	rc.Proxy = m.proxy
 	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
 
-	if m.enableChannelPool && m.channels == nil {
+	if m.channels == nil {
 		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
@@ -289,13 +247,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		rc.Result.StartTime = startTime
 	}
 	// get a channel
-	var channel *Channel
-	var err error
-	if m.enableChannelPool {
-		channel, err = m.channels.Get()
-	} else {
-		channel, err = channelManager.getChannel(m.url)
-	}
+	channel, err := m.channels.Get()
 	if err != nil {
 		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s", m.url.GetAddressStr(), err.Error())
 		m.recordErrAndKeepalive()
@@ -397,13 +349,7 @@ func (m *MotanEndpoint) keepalive() {
 		select {
 		case <-ticker.C:
 			m.keepaliveID++
-			var channel *Channel
-			var err error
-			if m.enableChannelPool {
-				channel, err = m.channels.Get()
-			} else {
-				channel, err = channelManager.getChannel(m.url)
-			}
+			channel, err := m.channels.Get()
 			if err != nil {
 				vlog.Infof("[keepalive] failed. url:%s, requestID=%d, err:%s", m.url.GetIdentity(), m.keepaliveID, err.Error())
 			} else {
@@ -772,18 +718,24 @@ func (c *Channel) Close() error {
 type ConnFactory func() (net.Conn, error)
 
 type ChannelPool struct {
-	channels      chan *Channel
-	channelsLock  sync.Mutex
-	serialization motan.Serialization
-	url           *motan.URL
+	channels        chan *Channel
+	channelsLock    sync.Mutex
+	serialization   motan.Serialization
+	url             *motan.URL
+	shareConnection bool
 }
 
 func (c *ChannelPool) getChannels() chan *Channel {
 	channels := c.channels
 	return channels
 }
-
 func (c *ChannelPool) Get() (*Channel, error) {
+	if c.shareConnection {
+		return channelManager.getChannel(c.url)
+	}
+	return c.get()
+}
+func (c *ChannelPool) get() (*Channel, error) {
 	channels := c.getChannels()
 	if channels == nil {
 		return nil, errors.New("channels is nil")
@@ -820,6 +772,9 @@ func retChannelPool(channels chan *Channel, channel *Channel) (error error) {
 
 func (c *ChannelPool) Close() error {
 	c.channelsLock.Lock() // to prevent channels closed many times
+	if c.shareConnection {
+		channelManager.addRefCount(c.url, -1)
+	}
 	channels := c.channels
 	c.channels = nil
 	c.channelsLock.Unlock()
@@ -835,21 +790,32 @@ func (c *ChannelPool) Close() error {
 	return nil
 }
 
-func NewChannelPool(poolCap int, url *motan.URL) (*ChannelPool, error) {
+func NewChannelPool(u *motan.URL) (*ChannelPool, error) {
+	poolCap := int(u.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	if poolCap <= 0 {
 		return nil, errors.New("invalid capacity settings")
 	}
+	shareConnection := u.GetParam(motan.ShareConnectionKey, defaultShareConnection) == "true"
 	channelPool := &ChannelPool{
-		channels: make(chan *Channel, poolCap),
-		url:      url,
+		shareConnection: shareConnection,
+		url:             u,
 	}
-	for i := 0; i < poolCap; i++ {
-		channel, err := newChannel(url)
+	if shareConnection {
+		_, err := channelManager.getChannel(u)
 		if err != nil {
-			channelPool.Close()
 			return nil, err
 		}
-		channelPool.channels <- channel
+		channelManager.addRefCount(u, 1)
+	} else {
+		channelPool.channels = make(chan *Channel, poolCap)
+		for i := 0; i < poolCap; i++ {
+			channel, err := newChannel(u)
+			if err != nil {
+				channelPool.Close()
+				return nil, err
+			}
+			channelPool.channels <- channel
+		}
 	}
 	return channelPool, nil
 }
