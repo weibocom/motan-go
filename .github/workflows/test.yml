@@ -33,29 +33,31 @@ jobs:
 
       - name: Run tests
         run: go test -v -race $(go list ./... | grep -v main)
-#  codecov:
-#    name: codecov
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: Set up Go 1.15
-#        uses: actions/setup-go@v1
-#        with:
-#          go-version: 1.15.x
-#        id: go
-#      - name: Checkout code
-#        uses: actions/checkout@v2
-#      - name: Get dependencies
-#        run: |
-#          go get -d -v -t $(go list ./... | grep -v main)
-#
-#      - name: Generate coverage report
-#        run: |
-#          go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
-#
-#      - name: Upload coverage report
-#        uses: codecov/codecov-action@v1.0.2
-#        with:
-#          token: ""
-#          file: ./coverage.txt
-#          flags: unittests
-#          name: codecov-umbrella
+  codecov:
+    name: codecov
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go 1.15
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.15.x
+        id: go
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Get dependencies
+        run: |
+          go get -d -v -t $(go list ./... | grep -v main)
+
+      - name: Generate coverage report
+        run: |
+          go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1.0.2
+        with:
+          token: "282c293b-ab38-4ea6-8518-b44f78df02eb"
+          file: ./coverage.txt
+          flags: unittests
+          name: codecov-umbrella
