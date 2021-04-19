@@ -80,7 +80,7 @@ func (m *MotanEndpoint) Initialize() {
 	}
 	channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 	if err != nil {
-		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
+		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
 		// retry connect
 		go func() {
 			defer motan.HandlePanic(nil)
