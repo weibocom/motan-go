@@ -36,6 +36,9 @@ func (u *URL) GetIdentity() string {
 		return u.identity
 	}
 	u.identity = u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
+	if u.Protocol == "direct" {
+		u.identity += "&address=" + u.GetParam("address", "")
+	}
 	return u.identity
 }
 
