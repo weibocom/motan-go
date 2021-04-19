@@ -18,13 +18,16 @@ jobs:
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
       - name: Install Go
         if: success()
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Get Go dependencies
+      - name: Install Go Dependencies
         run: |
           go get -d -v -t $(go list ./... | grep -v main)
 
@@ -39,7 +42,8 @@ jobs:
 #        with:
 #          go-version: 1.15.x
 #        id: go
-#
+#      - name: Checkout code
+#        uses: actions/checkout@v2
 #      - name: Get dependencies
 #        run: |
 #          go get -d -v -t $(go list ./... | grep -v main)
