@@ -3,6 +3,7 @@ package motan
 import (
 	"flag"
 	"fmt"
+	cfg "github.com/weibocom/motan-go/config"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
@@ -128,14 +129,24 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.saveStatus()
 }
 
-
 func (a *Agent) StartMotanAgent() {
+	a.StartMotanAgentFromConfig(nil)
+}
+
+func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
 	a.recover = *motan.Recover
-	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
+
+	if config != nil {
+		a.Context = &motan.Context{Config: config}
+	} else {
+		a.Context = &motan.Context{ConfigFile: a.ConfigFile}
+	}
+
 	a.Context.Initialize()
+
 	if a.Context.Config == nil {
 		fmt.Println("init agent context fail. ConfigFile:", a.Context.ConfigFile)
 		return
@@ -366,9 +377,9 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 
 	a.Context = ctx
 
-	serviceItemKeep := make(map[string] bool)
-	clusterMap := make(map[interface{}] interface{})
-	serviceMap := make(map[interface{}] interface{})
+	serviceItemKeep := make(map[string]bool)
+	clusterMap := make(map[interface{}]interface{})
+	serviceMap := make(map[interface{}]interface{})
 	for _, url := range a.Context.RefersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
