@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	"github.com/weibocom/motan-go"
 	"github.com/weibocom/motan-go/config"
 	motancore "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/protocol"
 	"math/rand"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 )
@@ -46,51 +46,57 @@ motan-service:
     requestTimeout: 2000
 `
 
-func TestRequestResponse(t *testing.T) {
-	arguments := map[string]string{
-		"source": "3206318534",
-		"count":  "3000",
-		"uid":    "3608383407",
-	}
-	resp, err := callTimeOut("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{arguments})
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-	attachments := map[string]string{
-		"HTTP_QueryString": "lalala",
-		"Host":             "127.0.0.1",
-		"HTTP_Method":      "POST",
-	}
-	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{arguments}, attachments)
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-	// other type of arguments
-	argumentString := "argument"
-	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentString}, attachments)
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-	argumentByte := []byte{123}
-	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentByte}, attachments)
-	assert.Nil(t, err)
-	assert.NotNil(t, resp)
-	argumentInt := 12345
-	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentInt}, attachments)
-	assert.NotNil(t, err)
-	assert.Nil(t, resp)
-	// wrong number of argument
-	resp, err = callTimeOutWrongArgumentCount("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentString}, attachments)
-	assert.NotNil(t, err)
-	assert.Nil(t, resp)
+type APITestSuite struct {
+	suite.Suite
 }
 
-func TestMain(m *testing.M) {
+func (s *APITestSuite) SetupTest() {
 	go fastHttpServer()
 	time.Sleep(time.Second * 1)
 	serverAgent := motan.NewAgent(motan.GetDefaultExtFactory())
 	serverConfig, _ := config.NewConfigFromReader(bytes.NewReader([]byte(serverConf)))
 	go serverAgent.StartMotanAgentFromConfig(serverConfig)
 	time.Sleep(time.Second * 3)
-	code := m.Run()
-	os.Exit(code)
+}
+
+func TestAPITestSuite(t *testing.T) {
+	suite.Run(t, new(APITestSuite))
+}
+
+func (s *APITestSuite) TestRequestResponse() {
+	arguments := map[string]string{
+		"source": "3206318534",
+		"count":  "3000",
+		"uid":    "3608383407",
+	}
+	resp, err := callTimeOut("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{arguments})
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), resp)
+	attachments := map[string]string{
+		"HTTP_QueryString": "lalala",
+		"Host":             "127.0.0.1",
+		"HTTP_Method":      "POST",
+	}
+	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{arguments}, attachments)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), resp)
+	// other type of arguments
+	argumentString := "argument"
+	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentString}, attachments)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), resp)
+	argumentByte := []byte{123}
+	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentByte}, attachments)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), resp)
+	argumentInt := 12345
+	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentInt}, attachments)
+	assert.NotNil(s.T(), err)
+	assert.Nil(s.T(), resp)
+	// wrong number of argument
+	resp, err = callTimeOutWrongArgumentCount("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentString}, attachments)
+	assert.NotNil(s.T(), err)
+	assert.Nil(s.T(), resp)
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {

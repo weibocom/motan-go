@@ -3,12 +3,21 @@ package http
 import (
 	"bytes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/core"
 	"testing"
 )
 
-func TestNewLocationMatcher(t *testing.T) {
+type APITestSuite struct {
+	suite.Suite
+}
+
+func TestAPITestSuite(t *testing.T) {
+	suite.Run(t, new(APITestSuite))
+}
+
+func (s *APITestSuite) TestNewLocationMatcher() {
 	const locationTestData = `
 http-locations:
   test.domain:
@@ -53,44 +62,44 @@ http-locations:
 	service := ""
 	rewritePath := ""
 	service, rewritePath, _ = matcher.Pick("/Test3/1", true)
-	assert.Equal(t, "test3", service)
-	assert.Equal(t, "/test/Test3/1", rewritePath)
+	assert.Equal(s.T(), "test3", service)
+	assert.Equal(s.T(), "/test/Test3/1", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/test3/1", true)
-	assert.Equal(t, "test3", service)
+	assert.Equal(s.T(), "test3", service)
 	service, rewritePath, _ = matcher.Pick("/test2/1/1", true)
-	assert.Equal(t, "test2", service)
-	assert.Equal(t, "/test2/1/1", rewritePath)
+	assert.Equal(s.T(), "test2", service)
+	assert.Equal(s.T(), "/test2/1/1", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/test2/2/1", true)
-	assert.Equal(t, "test2", service)
-	assert.Equal(t, "/test/2/1", rewritePath)
+	assert.Equal(s.T(), "test2", service)
+	assert.Equal(s.T(), "/test/2/1", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/Test2/1", true)
-	assert.Equal(t, "test1", service)
-	assert.Equal(t, "/test", rewritePath)
+	assert.Equal(s.T(), "test1", service)
+	assert.Equal(s.T(), "/test", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/p1/test", true)
-	assert.Equal(t, "test4", service)
-	assert.Equal(t, "/2/p1/test", rewritePath)
+	assert.Equal(s.T(), "test4", service)
+	assert.Equal(s.T(), "/2/p1/test", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/p2/test", true)
-	assert.Equal(t, "test4", service)
-	assert.Equal(t, "/2/p2/test", rewritePath)
+	assert.Equal(s.T(), "test4", service)
+	assert.Equal(s.T(), "/2/p2/test", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/2/p1/test", true)
-	assert.Equal(t, "test4", service)
-	assert.Equal(t, "/2/p1/test", rewritePath)
+	assert.Equal(s.T(), "test4", service)
+	assert.Equal(s.T(), "/2/p1/test", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/2/p2/test", true)
-	assert.Equal(t, "test4", service)
-	assert.Equal(t, "/2/p2/test", rewritePath)
+	assert.Equal(s.T(), "test4", service)
+	assert.Equal(s.T(), "/2/p2/test", rewritePath)
 	service, rewritePath, _ = matcher.Pick("/test/mytest", true)
-	assert.Equal(t, "test5", service)
+	assert.Equal(s.T(), "test5", service)
 	service, rewritePath, _ = matcher.Pick("/test/mytest", false)
-	assert.Equal(t, "test5", service)
+	assert.Equal(s.T(), "test5", service)
 	serviceName := matcher.URIToServiceName("/test/mytest")
-	assert.Equal(t, "test5", serviceName)
+	assert.Equal(s.T(), "test5", serviceName)
 	service, rewritePath, b := matcher.Pick("abcde", false)
-	assert.Equal(t, false, b)
+	assert.Equal(s.T(), false, b)
 	serviceName = matcher.URIToServiceName("abcde")
-	assert.Equal(t, "", serviceName)
+	assert.Equal(s.T(), "", serviceName)
 }
 
-func TestNewLocationMatcherError(t *testing.T) {
+func (s *APITestSuite) TestNewLocationMatcherError() {
 	locationTestErrorData := []string{`
 `,
 		`
@@ -159,11 +168,11 @@ http-locations:
 		context := &core.Context{}
 		context.Config, _ = config.NewConfigFromReader(bytes.NewReader([]byte(j)))
 		matcher := NewLocationMatcherFromContext("test.domain", context)
-		assert.Equal(t, 0, len(matcher.exactLocations))
+		assert.Equal(s.T(), 0, len(matcher.exactLocations))
 	}
 }
 
-func TestNewRewriteRuleError(t *testing.T) {
+func (s *APITestSuite) TestNewRewriteRuleError() {
 	wrongRules := []string{
 		`exact /Test2/1 /(.*) /test /test`,
 		`abcd /Test2/1 /(.*) /test`,
@@ -173,20 +182,20 @@ func TestNewRewriteRuleError(t *testing.T) {
 	}
 	for _, j := range wrongRules {
 		r, err := newRewriteRule(j)
-		assert.Nil(t, r)
-		assert.NotNil(t, err)
+		assert.Nil(s.T(), r)
+		assert.NotNil(s.T(), err)
 	}
 }
 
-func TestString(t *testing.T) {
+func (a *APITestSuite) TestString() {
 	var r ProxyMatchType = 1
-	assert.Equal(t, r.String(), "regexp")
+	assert.Equal(a.T(), r.String(), "regexp")
 	var i ProxyMatchType = 2
-	assert.Equal(t, i.String(), "iregexp")
+	assert.Equal(a.T(), i.String(), "iregexp")
 	var s ProxyMatchType = 3
-	assert.Equal(t, s.String(), "start")
+	assert.Equal(a.T(), s.String(), "start")
 	var e ProxyMatchType = 4
-	assert.Equal(t, e.String(), "exact")
+	assert.Equal(a.T(), e.String(), "exact")
 	var u ProxyMatchType = 5
-	assert.Equal(t, u.String(), "unknown")
+	assert.Equal(a.T(), u.String(), "unknown")
 }
