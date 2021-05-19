@@ -54,6 +54,12 @@ http-locations:
     upstream: test5
     rewriteRules:
     - 'regexp / ^/(p1|p2)/(.*) /2/$1/$2'
+
+  - match: ^/p3.*
+    type: regexp
+    upstream: test6
+    rewriteRules:
+    - 'regexpVar / ^/p3/(.*) /p3/{a}/$1'
 `
 
 	context := &core.Context{}
@@ -61,42 +67,45 @@ http-locations:
 	matcher := NewLocationMatcherFromContext("test.domain", context)
 	service := ""
 	rewritePath := ""
-	service, rewritePath, _ = matcher.Pick("/Test3/1", true)
+	service, rewritePath, _ = matcher.Pick("/Test3/1",nil, true)
 	assert.Equal(s.T(), "test3", service)
 	assert.Equal(s.T(), "/test/Test3/1", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/test3/1", true)
+	service, rewritePath, _ = matcher.Pick("/test3/1", nil, true)
 	assert.Equal(s.T(), "test3", service)
-	service, rewritePath, _ = matcher.Pick("/test2/1/1", true)
+	service, rewritePath, _ = matcher.Pick("/test2/1/1", nil, true)
 	assert.Equal(s.T(), "test2", service)
 	assert.Equal(s.T(), "/test2/1/1", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/test2/2/1", true)
+	service, rewritePath, _ = matcher.Pick("/test2/2/1",nil,  true)
 	assert.Equal(s.T(), "test2", service)
 	assert.Equal(s.T(), "/test/2/1", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/Test2/1", true)
+	service, rewritePath, _ = matcher.Pick("/Test2/1", nil, true)
 	assert.Equal(s.T(), "test1", service)
 	assert.Equal(s.T(), "/test", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/p1/test", true)
+	service, rewritePath, _ = matcher.Pick("/p1/test",nil,  true)
 	assert.Equal(s.T(), "test4", service)
 	assert.Equal(s.T(), "/2/p1/test", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/p2/test", true)
+	service, rewritePath, _ = matcher.Pick("/p2/test",nil,  true)
 	assert.Equal(s.T(), "test4", service)
 	assert.Equal(s.T(), "/2/p2/test", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/2/p1/test", true)
+	service, rewritePath, _ = matcher.Pick("/2/p1/test",nil,  true)
 	assert.Equal(s.T(), "test4", service)
 	assert.Equal(s.T(), "/2/p1/test", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/2/p2/test", true)
+	service, rewritePath, _ = matcher.Pick("/2/p2/test", nil, true)
 	assert.Equal(s.T(), "test4", service)
 	assert.Equal(s.T(), "/2/p2/test", rewritePath)
-	service, rewritePath, _ = matcher.Pick("/test/mytest", true)
+	service, rewritePath, _ = matcher.Pick("/test/mytest", nil, true)
 	assert.Equal(s.T(), "test5", service)
-	service, rewritePath, _ = matcher.Pick("/test/mytest", false)
+	service, rewritePath, _ = matcher.Pick("/test/mytest",nil,  false)
 	assert.Equal(s.T(), "test5", service)
-	serviceName := matcher.URIToServiceName("/test/mytest")
+	serviceName := matcher.URIToServiceName("/test/mytest",nil)
 	assert.Equal(s.T(), "test5", serviceName)
-	service, rewritePath, b := matcher.Pick("abcde", false)
+	service, rewritePath, b := matcher.Pick("abcde", nil, false)
 	assert.Equal(s.T(), false, b)
-	serviceName = matcher.URIToServiceName("abcde")
+	serviceName = matcher.URIToServiceName("abcde",nil)
 	assert.Equal(s.T(), "", serviceName)
+	service, rewritePath, _ = matcher.Pick("/p3/test", []byte("a=b&c=d"), true)
+	assert.Equal(s.T(), "test6", service)
+	assert.Equal(s.T(), "/p3/b/test", rewritePath)
 }
 
 func (s *APITestSuite) TestNewLocationMatcherError() {
@@ -197,5 +206,20 @@ func (a *APITestSuite) TestString() {
 	var e ProxyMatchType = 4
 	assert.Equal(a.T(), e.String(), "exact")
 	var u ProxyMatchType = 5
+	assert.Equal(a.T(), u.String(), "unknown")
+}
+
+func (a *APITestSuite) TestRewriteString() {
+	var r ProxyRewriteType = 1
+	assert.Equal(a.T(), r.String(), "regexp")
+	var i ProxyRewriteType = 2
+	assert.Equal(a.T(), i.String(), "iregexp")
+	var s ProxyRewriteType = 3
+	assert.Equal(a.T(), s.String(), "start")
+	var e ProxyRewriteType = 4
+	assert.Equal(a.T(), e.String(), "exact")
+	var ev ProxyRewriteType = 5
+	assert.Equal(a.T(), ev.String(), "regexpVar")
+	var u ProxyRewriteType = 6
 	assert.Equal(a.T(), u.String(), "unknown")
 }

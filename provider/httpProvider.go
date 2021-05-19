@@ -237,22 +237,32 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}
 	// Ok here we do transparent http proxy and return
 	if doTransparentProxy {
+		// acquires new fasthttp Request and Response object
+		httpReq := fasthttp.AcquireRequest()
+		httpRes := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseRequest(httpReq)
+		defer fasthttp.ReleaseResponse(httpRes)
+		// read http header into Request
+		httpReq.Header.Read(bufio.NewReader(bytes.NewReader(headerBytes)))
+
+		//do rewrite
 		rewritePath := request.GetMethod()
 		if h.enableRewrite {
 			// Do not check upstream for compatibility
-			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+
+			var query []byte
+			// init query string bytes if needed.
+			if h.locationMatcher.NeedURLQueryString() {
+				query = httpReq.URI().QueryString()
+			}
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), query, true)
 			if !ok {
 				fillExceptionWithCode(resp, http.StatusNotFound, t, errors.New("service not found"))
 				return resp
 			}
 			rewritePath = path
 		}
-		httpReq := fasthttp.AcquireRequest()
-		httpRes := fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseRequest(httpReq)
-		defer fasthttp.ReleaseResponse(httpRes)
-		httpReq.Header.Read(bufio.NewReader(bytes.NewReader(headerBytes)))
-
+		// sets rewrite
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
 		request.GetAttachments().Range(func(k, v string) bool {
@@ -286,24 +296,33 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 
 	if h.proxyAddr != "" {
 		// rpc client call to this server
+
+		// acquires new fasthttp Request and Response object
+		httpReq := fasthttp.AcquireRequest()
+		httpRes := fasthttp.AcquireResponse()
+		defer fasthttp.ReleaseRequest(httpReq)
+		defer fasthttp.ReleaseResponse(httpRes)
+		// convert motan request to fasthttp request
+		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)
+		if err != nil {
+			fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
+			return resp
+		}
 		rewritePath := request.GetMethod()
 		if h.enableRewrite {
-			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), true)
+			var query []byte
+			// init query string bytes if needed.
+			if h.locationMatcher.NeedURLQueryString() {
+				query = httpReq.URI().QueryString()
+			}
+			_, path, ok := h.locationMatcher.Pick(request.GetMethod(), query, true)
 			if !ok {
 				fillExceptionWithCode(resp, http.StatusNotFound, t, errors.New("service not found"))
 				return resp
 			}
 			rewritePath = path
 		}
-		httpReq := fasthttp.AcquireRequest()
-		httpRes := fasthttp.AcquireResponse()
-		defer fasthttp.ReleaseRequest(httpReq)
-		defer fasthttp.ReleaseResponse(httpRes)
-		err := mhttp.MotanRequestToFasthttpRequest(request, httpReq, h.defaultHTTPMethod)
-		if err != nil {
-			fillExceptionWithCode(resp, http.StatusBadRequest, t, err)
-			return resp
-		}
+
 		httpReq.URI().SetScheme(h.proxySchema)
 		httpReq.URI().SetPath(rewritePath)
 		if len(httpReq.Header.Host()) == 0 {
