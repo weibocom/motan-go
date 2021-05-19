@@ -39,10 +39,11 @@ const (
 )
 
 type Agent struct {
-	ConfigFile string
-	extFactory motan.ExtensionFactory
-	Context    *motan.Context
-	recover    bool
+	ConfigFile   string
+	extFactory   motan.ExtensionFactory
+	Context      *motan.Context
+	onAfterStart []func(a *Agent)
+	recover      bool
 
 	agentServer motan.Server
 
@@ -105,6 +106,18 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 		url.PutParam(motan.ApplicationKey, application)
 	}
 	url.ClearCachedInfo()
+}
+
+func (a *Agent) OnAfterStart(f func(a *Agent)) {
+	a.onAfterStart = append(a.onAfterStart, f)
+}
+
+func (a *Agent) callAfterStart() {
+	time.AfterFunc(time.Second*5, func() {
+		for _, f := range a.onAfterStart {
+			f(a)
+		}
+	})
 }
 
 // RuntimeDir acquires the agent runtime working directory
@@ -521,6 +534,7 @@ func (a *Agent) startAgent() {
 	vlog.Infof("Motan agent is started. port:%d", a.port)
 	fmt.Println("Motan agent start.")
 	a.agentServer = server
+	a.callAfterStart()
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
 		vlog.Fatalf("start agent fail. port :%d, err: %v", a.port, err)
