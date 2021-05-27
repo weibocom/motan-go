@@ -96,8 +96,8 @@ var (
 	DefaultGzipLevel = gzip.BestSpeed
 
 	defaultSerialize = Simple
-	writerPool       = &sync.Pool{} // for gzip writer
-	readBufPool      = &sync.Pool{} // for gzip read buffer
+	writerPool       = &sync.Pool{}                         // for gzip writer
+	readBufPool      = &sync.Pool{}                         // for gzip read buffer
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
 	}}
