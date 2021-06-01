@@ -612,6 +612,9 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	if response.GetException() != nil {
 		msgType = Exception
 		response.SetAttachment(MExceptionn, ExceptionToJSON(response.GetException()))
+		if rc.Proxy {
+			rc.Serialized = true
+		}
 	} else {
 		msgType = Normal
 	}

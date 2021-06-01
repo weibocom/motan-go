@@ -681,7 +681,6 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 //------------ below code is copied from net/http/pprof -------------
 
 // Cmdline responds with the running program's
