@@ -36,3 +36,4 @@ agentlogs
 main/magent*
 log/log.test*
 go.sum
+agent_runtime

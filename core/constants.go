@@ -47,6 +47,7 @@ const (
 	HostKey                 = "host"
 	RemoteIPKey             = "remoteIP"
 	ProxyRegistryKey        = "proxyRegistry"
+	ProxyRegistryUrlString  = "proxyRegistryUrlString"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"
