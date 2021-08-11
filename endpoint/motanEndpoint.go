@@ -219,10 +219,15 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(m.errorCountThreshold) {
+	// ensure trigger keepalive
+	if errCount >= uint32(m.errorCountThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
-		go m.keepalive()
+		// Add if in go m.keepalive() to determine whether to go m.keepalive() according to the state.
+		// When the concurrency is high, it can filter out most unnecessary startups of a goroutine.
+		if !m.keepaliveRunning {
+			go m.keepalive()
+		}
 	}
 }
 

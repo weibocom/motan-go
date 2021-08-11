@@ -122,8 +122,15 @@ func (m *MotanCluster) refresh() {
 			newRefers = append(newRefers, e)
 		}
 	}
+	// shuffle endpoints list avoid to call to determine server nodes when the list is not change.
+	newRefers = m.ShuffleEndpoints(newRefers)
 	m.Refers = newRefers
 	m.LoadBalance.OnRefresh(newRefers)
+}
+func (m *MotanCluster) ShuffleEndpoints(endpoints []motan.EndPoint) []motan.EndPoint {
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(endpoints), func(i, j int) { endpoints[i], endpoints[j] = endpoints[j], endpoints[i] })
+	return endpoints
 }
 func (m *MotanCluster) AddRegistry(registry motan.Registry) {
 	m.Registries = append(m.Registries, registry)
