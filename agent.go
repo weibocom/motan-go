@@ -909,6 +909,9 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		return
 	}
 	defer motan.HandlePanic(nil)
+	defer func() {
+		a.CurrentCommandInfo = commandInfo
+	}()
 	if len(a.agent.commandHandlers) > 0 {
 		canServeExists := false
 		// there are defined some command handlers
@@ -924,7 +927,6 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		}
 	}
 
-	a.CurrentCommandInfo = commandInfo
 	a.agent.clusterMap.Range(func(k, v interface{}) bool {
 		cls := v.(*cluster.MotanCluster)
 		for _, registry := range cls.Registries {
