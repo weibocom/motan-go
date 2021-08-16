@@ -908,11 +908,10 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
 		return
 	}
+	defer motan.HandlePanic(nil)
 	defer func() {
 		a.CurrentCommandInfo = commandInfo
 	}()
-
-	defer motan.HandlePanic(nil)
 	if len(a.agent.commandHandlers) > 0 {
 		canServeExists := false
 		// there are defined some command handlers
