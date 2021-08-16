@@ -908,6 +908,8 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
 		return
 	}
+	a.CurrentCommandInfo = commandInfo
+
 	defer motan.HandlePanic(nil)
 	if len(a.agent.commandHandlers) > 0 {
 		canServeExists := false
@@ -924,7 +926,6 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		}
 	}
 
-	a.CurrentCommandInfo = commandInfo
 	a.agent.clusterMap.Range(func(k, v interface{}) bool {
 		cls := v.(*cluster.MotanCluster)
 		for _, registry := range cls.Registries {
