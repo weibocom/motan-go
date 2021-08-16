@@ -77,7 +77,7 @@ type Agent struct {
 }
 
 type CommandHandler interface {
-	CanServe(a *Agent, l *AgentListener, rregistryURL *motan.URL, cmdInfo string) bool
+	CanServe(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string) bool
 	Serve(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string)
 }
 
@@ -902,8 +902,13 @@ type AgentListener struct {
 }
 
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
-	defer motan.HandlePanic(nil)
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
+	// command repeated, just ignore it.
+	if commandInfo == a.CurrentCommandInfo {
+		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
+		return
+	}
+	defer motan.HandlePanic(nil)
 	if len(a.agent.commandHandlers) > 0 {
 		canServeExists := false
 		// there are defined some command handlers
@@ -918,18 +923,17 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 			return
 		}
 	}
-	if commandInfo != a.CurrentCommandInfo {
-		a.CurrentCommandInfo = commandInfo
-		a.agent.clusterMap.Range(func(k, v interface{}) bool {
-			cls := v.(*cluster.MotanCluster)
-			for _, registry := range cls.Registries {
-				if cr, ok := registry.(motan.CommandNotifyListener); ok {
-					cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
-				}
+
+	a.CurrentCommandInfo = commandInfo
+	a.agent.clusterMap.Range(func(k, v interface{}) bool {
+		cls := v.(*cluster.MotanCluster)
+		for _, registry := range cls.Registries {
+			if cr, ok := registry.(motan.CommandNotifyListener); ok {
+				cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 			}
-			return true
-		})
-	}
+		}
+		return true
+	})
 }
 
 func (a *AgentListener) GetIdentity() string {
