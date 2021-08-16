@@ -3,8 +3,6 @@ package motan
 import (
 	"flag"
 	"fmt"
-	cfg "github.com/weibocom/motan-go/config"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -14,6 +12,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	cfg "github.com/weibocom/motan-go/config"
+	"gopkg.in/yaml.v2"
 
 	"github.com/shirou/gopsutil/process"
 	"github.com/valyala/fasthttp"
@@ -71,6 +72,13 @@ type Agent struct {
 	clsLock sync.Mutex
 
 	configurer *DynamicConfigurer
+
+	commandHandlers []CommandHandler
+}
+
+type CommandHandler interface {
+	CanServe(a *Agent, l *AgentListener, rregistryURL *motan.URL, cmdInfo string) bool
+	Serve(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string)
 }
 
 type serviceMapItem struct {
@@ -110,6 +118,10 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 
 func (a *Agent) OnAfterStart(f func(a *Agent)) {
 	a.onAfterStart = append(a.onAfterStart, f)
+}
+
+func (a *Agent) RegisterCommandHandler(f CommandHandler) {
+	a.commandHandlers = append(a.commandHandlers, f)
 }
 
 func (a *Agent) callAfterStart() {
@@ -890,8 +902,22 @@ type AgentListener struct {
 }
 
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
+	defer motan.HandlePanic(nil)
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
-	//TODO notify according cluster
+	if len(a.agent.commandHandlers) > 0 {
+		canServeExists := false
+		// there are defined some command handlers
+		for _, h := range a.agent.commandHandlers {
+			if ok := h.CanServe(a.agent, a, registryURL, commandInfo); ok {
+				canServeExists = true
+				h.Serve(a.agent, a, registryURL, commandInfo)
+			}
+		}
+		// there are handlers had processed the command, so we should return here, prevent default processing.
+		if canServeExists {
+			return
+		}
+	}
 	if commandInfo != a.CurrentCommandInfo {
 		a.CurrentCommandInfo = commandInfo
 		a.agent.clusterMap.Range(func(k, v interface{}) bool {
