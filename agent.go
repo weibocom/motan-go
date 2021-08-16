@@ -905,7 +905,7 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
 	// command repeated, just ignore it.
 	if commandInfo == a.CurrentCommandInfo {
-		vlog.Infof("agentlistener ignore repeated command: %s", commandInfo)
+		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
 		return
 	}
 	defer motan.HandlePanic(nil)
