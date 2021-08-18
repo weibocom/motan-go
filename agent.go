@@ -78,7 +78,7 @@ type Agent struct {
 
 type CommandHandler interface {
 	CanServe(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string) bool
-	Serve(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string)
+	Serve() (currentCommandInfo string)
 }
 
 type serviceMapItem struct {
@@ -904,6 +904,7 @@ type AgentListener struct {
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
 	// command repeated, just ignore it.
+
 	if commandInfo == a.CurrentCommandInfo {
 		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
 		return
@@ -918,7 +919,7 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		for _, h := range a.agent.commandHandlers {
 			if ok := h.CanServe(a.agent, a, registryURL, commandInfo); ok {
 				canServeExists = true
-				h.Serve(a.agent, a, registryURL, commandInfo)
+				commandInfo = h.Serve()
 			}
 		}
 		// there are handlers had processed the command, so we should return here, prevent default processing.
