@@ -11,6 +11,7 @@ require (
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/opentracing/opentracing-go v1.0.2
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec
 	github.com/shirou/gopsutil/v3 v3.21.9
@@ -30,6 +31,7 @@ require (
 
 replace (
 	cloud.google.com/go => github.com/GoogleCloudPlatform/google-cloud-go v0.30.0
+	github.com/stretchr/testify => github.com/stretchr/testify v1.2.2
 	go.uber.org/atomic => github.com/uber-go/atomic v1.4.0
 	go.uber.org/multierr => github.com/uber-go/multierr v1.1.1-0.20180122172545-ddea229ff1df
 	go.uber.org/zap => github.com/uber-go/zap v1.9.1
@@ -38,7 +40,6 @@ replace (
 	golang.org/x/net => github.com/golang/net v0.0.0-20181017193950-04a2e542c03f
 	golang.org/x/oauth2 => github.com/golang/oauth2 v0.0.0-20181017192945-9dcd33a902f4
 	golang.org/x/sync => github.com/golang/sync v0.0.0-20180314180146-1d60e4601c6f
-	golang.org/x/sys => github.com/golang/sys v0.0.0-20181011152604-fa43e7bc11ba
 	golang.org/x/text => github.com/golang/text v0.3.0
 	golang.org/x/time => github.com/golang/time v0.0.0-20181108054448-85acf8d2951c
 	golang.org/x/tools => github.com/golang/tools v0.0.0-20181017214349-06f26fdaaa28
