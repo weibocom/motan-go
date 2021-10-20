@@ -16,7 +16,7 @@ import (
 	cfg "github.com/weibocom/motan-go/config"
 	"gopkg.in/yaml.v2"
 
-	"github.com/shirou/gopsutil/process"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
