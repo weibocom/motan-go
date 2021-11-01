@@ -19,6 +19,7 @@ const (
 const (
 	MaxSelectArraySize = 3
 	defaultWeight      = 1
+	maxWeight          = 100
 )
 
 var (
@@ -35,29 +36,54 @@ func RegistDefaultLb(extFactory motan.ExtensionFactory) {
 	}))
 }
 
-// WeightedLbWraper support multi group weighted LB
-type WeightedLbWraper struct {
+// WeightedLbWrapper support multi group weighted LB
+type WeightedLbWrapper struct {
 	url          *motan.URL
-	weightstring string
+	weightString string
 	refers       innerRefers
 	newLb        motan.NewLbFunc
 }
 
 func NewWeightLbFunc(newLb motan.NewLbFunc) motan.NewLbFunc {
 	return func(url *motan.URL) motan.LoadBalance {
-		return &WeightedLbWraper{url: url, newLb: newLb, refers: &singleGroupRefers{lb: newLb(url)}}
+		return &WeightedLbWrapper{url: url, newLb: newLb, refers: &singleGroupRefers{lb: newLb(url)}}
 	}
 }
 
-func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
-	if w.weightstring == "" { //not weighted lb
-		if sgr, ok := w.refers.(*singleGroupRefers); ok {
-			sgr.lb.OnRefresh(endpoints)
-		} else {
-			lb := w.newLb(w.url)
-			lb.OnRefresh(endpoints)
-			w.refers = &singleGroupRefers{lb: lb}
+func (w *WeightedLbWrapper) OnRefresh(endpoints []motan.EndPoint) {
+	if w.weightString == "" { //not weighted lb
+		w.onRefreshSingleGroup(endpoints)
+		return
+	}
+
+	weights := strings.Split(w.weightString, ",")
+	mixMode := true
+	gws := make(map[string]int)
+	for _, w := range weights {
+		if w != "" {
+			groupWeight := strings.Split(w, ":")
+			if len(groupWeight) == 1 {
+				gws[groupWeight[0]] = defaultWeight
+			} else {
+				mixMode = false // not mix groups if weight is set
+				w, err := strconv.Atoi(groupWeight[1])
+				if err == nil {
+					//weight normalization
+					if w < 1 {
+						w = defaultWeight
+					} else if w > maxWeight {
+						w = maxWeight
+					}
+					gws[groupWeight[0]] = w
+				} else {
+					gws[groupWeight[0]] = defaultWeight
+				}
+			}
 		}
+	}
+
+	if mixMode {
+		w.onRefreshSingleGroup(endpoints)
 		return
 	}
 
@@ -73,23 +99,6 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 		groupEp[ep.GetURL().Group] = append(ges, ep)
 	}
 
-	weights := strings.Split(w.weightstring, ",")
-	gws := make(map[string]int)
-	for _, w := range weights {
-		if w != "" {
-			groupWeight := strings.Split(w, ":")
-			if len(groupWeight) == 1 {
-				gws[groupWeight[0]] = defaultWeight
-			} else {
-				w, err := strconv.Atoi(groupWeight[1])
-				if err == nil {
-					gws[groupWeight[0]] = w
-				} else {
-					gws[groupWeight[0]] = defaultWeight
-				}
-			}
-		}
-	}
 	weightsArray := make([]int, 0, 16)
 	wr := newWeightRefers()
 	for g, e := range groupEp {
@@ -99,9 +108,6 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 		wr.groupLb[g] = lb
 		//build real weight
 		wi := gws[g]
-		if wi < 1 || wi > 100 { //weight normalization
-			wi = defaultWeight
-		}
 		wr.groupWeight[g] = wi
 		weightsArray = append(weightsArray, wi)
 	}
@@ -109,9 +115,9 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 	gcd := findGcd(weightsArray)
 	ring := make([]string, 0, 128)
 	for k, v := range wr.groupWeight {
-		ringweight := v / gcd
-		wr.groupWeight[k] = ringweight
-		for i := 0; i < ringweight; i++ {
+		ringWeight := v / gcd
+		wr.groupWeight[k] = ringWeight
+		for i := 0; i < ringWeight; i++ {
 			ring = append(ring, k)
 		}
 	}
@@ -120,16 +126,26 @@ func (w *WeightedLbWraper) OnRefresh(endpoints []motan.EndPoint) {
 	w.refers = wr
 }
 
-func (w *WeightedLbWraper) Select(request motan.Request) motan.EndPoint {
+func (w *WeightedLbWrapper) onRefreshSingleGroup(endpoints []motan.EndPoint) {
+	if sgr, ok := w.refers.(*singleGroupRefers); ok {
+		sgr.lb.OnRefresh(endpoints)
+	} else {
+		lb := w.newLb(w.url)
+		lb.OnRefresh(endpoints)
+		w.refers = &singleGroupRefers{lb: lb}
+	}
+}
+
+func (w *WeightedLbWrapper) Select(request motan.Request) motan.EndPoint {
 	return w.refers.selectNext(request)
 }
 
-func (w *WeightedLbWraper) SelectArray(request motan.Request) []motan.EndPoint {
+func (w *WeightedLbWrapper) SelectArray(request motan.Request) []motan.EndPoint {
 	return w.refers.selectNextArray(request)
 }
 
-func (w *WeightedLbWraper) SetWeight(weight string) {
-	w.weightstring = weight
+func (w *WeightedLbWrapper) SetWeight(weight string) {
+	w.weightString = weight
 }
 
 type innerRefers interface {

@@ -57,6 +57,7 @@ const (
 	ManagementUnixSockKey   = "managementUnixSock"
 	ManagementPortRangeKey  = "managementPortRange"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
+	MixGroups               = "mixGroups"
 )
 
 // nodeType
