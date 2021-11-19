@@ -22,7 +22,7 @@ import (
 
 const (
 	goNum      = 5
-	requestNum = 10000
+	requestNum = 100
 )
 
 var proxyClient *http.Client
