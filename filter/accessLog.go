@@ -79,7 +79,10 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 	reqCtx := request.GetRPCContext(true)
 	resCtx := response.GetRPCContext(true)
 	// response code should be same as upstream
-	responseCode := resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
+	responseCode := ""
+	if resCtx.Meta != nil {
+		responseCode = resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
+	}
 	var exceptionData []byte
 	if exception != nil {
 		exceptionData, _ = json.Marshal(exception)
