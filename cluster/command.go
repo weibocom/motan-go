@@ -160,6 +160,7 @@ func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) m
 		}
 		if len(command.MergeGroups) > 1 { // has other group
 			cmdRegistry.staticTcCommand = command
+			vlog.Infof("set static command for cluster: %s, mixGroups: %s", cluster.GetIdentity(), mixGroups)
 		}
 	}
 	return cmdRegistry

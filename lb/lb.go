@@ -1,6 +1,7 @@
 package lb
 
 import (
+	vlog "github.com/weibocom/motan-go/log"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -52,6 +53,7 @@ func NewWeightLbFunc(newLb motan.NewLbFunc) motan.NewLbFunc {
 
 func (w *WeightedLbWrapper) OnRefresh(endpoints []motan.EndPoint) {
 	if w.weightString == "" { //not weighted lb
+		vlog.Infof("WeightedLbWrapper: %s - OnRefresh:not have weight", w.url.GetIdentity())
 		w.onRefreshSingleGroup(endpoints)
 		return
 	}
@@ -83,6 +85,7 @@ func (w *WeightedLbWrapper) OnRefresh(endpoints []motan.EndPoint) {
 	}
 
 	if mixMode {
+		vlog.Infof("WeightedLbWrapper: %s - OnRefresh:use mix mode. weight:%s", w.url.GetIdentity(), w.weightString)
 		w.onRefreshSingleGroup(endpoints)
 		return
 	}
@@ -124,6 +127,7 @@ func (w *WeightedLbWrapper) OnRefresh(endpoints []motan.EndPoint) {
 	wr.weightRing = motan.SliceShuffle(ring)
 	wr.ringSize = len(wr.weightRing)
 	w.refers = wr
+	vlog.Infof("WeightedLbWrapper: %s - OnRefresh: weight:%s", w.url.GetIdentity(), w.weightString)
 }
 
 func (w *WeightedLbWrapper) onRefreshSingleGroup(endpoints []motan.EndPoint) {
