@@ -94,7 +94,7 @@ func TestClusterCircuitBreakerOther(t *testing.T) {
 	defaultExtFactory.Initialize()
 	RegistDefaultFilters(defaultExtFactory)
 	f := defaultExtFactory.GetFilter(ClusterCircuitBreaker)
-	assert.Equal(f.GetType(), core.ClusterFilterType)
+	assert.Equal(int(f.GetType()), core.ClusterFilterType)
 	assert.Equal(f.GetIndex(), 20)
 	assert.Equal(f.HasNext(), false)
 	assert.Equal(f.GetName(), ClusterCircuitBreaker)
