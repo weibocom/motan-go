@@ -25,7 +25,7 @@ func TestClusterCircuitBreakerFilter(t *testing.T) {
 	RegistDefaultFilters(defaultExtFactory)
 	lb2.RegistDefaultLb(defaultExtFactory)
 	endpoint.RegistDefaultEndpoint(defaultExtFactory)
-	url := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint"}
+	url := &core.URL{Host: "127.0.0.1", Port: 8888, Protocol: "mockEndpoint"}
 	ha := new(mockHA)
 	lb := defaultExtFactory.GetLB(url)
 	lb.OnRefresh([]core.EndPoint{defaultExtFactory.GetEndPoint(url)})
@@ -33,12 +33,13 @@ func TestClusterCircuitBreakerFilter(t *testing.T) {
 
 	//Test NewFilter
 	param := map[string]string{core.TimeOutKey: "2", SleepWindowField: "300", IncludeBizException: "jia"}
-	filterURL := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
+	filterURL := &core.URL{Host: "127.0.0.1", Port: 8888, Protocol: "mockEndpoint", Parameters: param}
 	f := defaultExtFactory.GetFilter(ClusterCircuitBreaker)
 	if f == nil {
 		t.Error("Can not find circuitBreaker filter!")
+	} else {
+		f = f.NewFilter(filterURL)
 	}
-	f = f.NewFilter(filterURL)
 	ef := f.(core.ClusterFilter)
 	ef.SetNext(new(mockClusterFilter))
 
@@ -49,7 +50,7 @@ func TestClusterCircuitBreakerFilter(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) //wait until async call complete
 	clusterCountLock.RLock()
 	if clusterCount != 20 && clusterCount != 21 {
-		t.Error("Test circuitBreakerTimeout failed! count:", clusterCount)
+		t.Error("Test clusterCircuitBreakerTimeout failed! count:", clusterCount)
 	}
 	clusterCountLock.RUnlock()
 
