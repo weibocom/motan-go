@@ -66,27 +66,27 @@ func TestClusterCircuitBreakerFilter(t *testing.T) {
 	}
 	clusterCountLock.RUnlock()
 
-	//Test errorPercentThreshold
-	time.Sleep(350 * time.Millisecond) //wait until SleepWindowField
-	clusterFilterSleepTimeLock.Lock()
-	clusterFilterSleepTime = 0 * time.Millisecond
-	clusterFilterSleepTimeLock.Unlock()
-	for i := 0; i < 100; i++ {
-		ef.Filter(ha, lb, request)
-	}
-	time.Sleep(10 * time.Millisecond) //wait until async call complete
-	clusterFilterSleepTimeLock.Lock()
-	clusterFilterSleepTime = 7 * time.Millisecond
-	clusterFilterSleepTimeLock.Unlock()
-	for i := 0; i < 50; i++ {
-		ef.Filter(ha, lb, request)
-	}
-	time.Sleep(5000 * time.Millisecond) //wait until async call complete
-	clusterCountLock.RLock()
-	if clusterCount != 171 && clusterCount != 172 {
-		t.Error("Test sleepWindow failed! count: ", clusterCount)
-	}
-	clusterCountLock.RUnlock()
+	////Test errorPercentThreshold
+	//time.Sleep(350 * time.Millisecond) //wait until SleepWindowField
+	//clusterFilterSleepTimeLock.Lock()
+	//clusterFilterSleepTime = 0 * time.Millisecond
+	//clusterFilterSleepTimeLock.Unlock()
+	//for i := 0; i < 100; i++ {
+	//	ef.Filter(ha, lb, request)
+	//}
+	//time.Sleep(10 * time.Millisecond) //wait until async call complete
+	//clusterFilterSleepTimeLock.Lock()
+	//clusterFilterSleepTime = 7 * time.Millisecond
+	//clusterFilterSleepTimeLock.Unlock()
+	//for i := 0; i < 50; i++ {
+	//	ef.Filter(ha, lb, request)
+	//}
+	//time.Sleep(5000 * time.Millisecond) //wait until async call complete
+	//clusterCountLock.RLock()
+	//if clusterCount != 171 && clusterCount != 172 {
+	//	t.Error("Test sleepWindow failed! count: ", clusterCount)
+	//}
+	//clusterCountLock.RUnlock()
 }
 
 func TestClusterCircuitBreakerOther(t *testing.T) {
