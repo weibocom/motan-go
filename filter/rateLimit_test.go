@@ -31,7 +31,9 @@ func TestRateLimitFilter(t *testing.T) {
 	if f == nil {
 		t.Error("Can not find rateLimit filter!")
 	}
-	f = f.NewFilter(filterURL)
+	if f != nil {
+		f = f.NewFilter(filterURL)
+	}
 	ef := f.(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 
@@ -216,7 +218,7 @@ func TestOther(t *testing.T) {
 	assert.Equal(f.GetIndex(), 3)
 	assert.Equal(f.GetName(), RateLimit)
 	assert.Equal(f.HasNext(), false)
-	assert.Equal(f.GetType(), core.EndPointFilterType)
+	assert.Equal(int(f.GetType()), core.EndPointFilterType)
 }
 
 func getEf(param map[string]string) (core.EndPoint, core.EndPointFilter) {
