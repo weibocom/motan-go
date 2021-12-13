@@ -107,7 +107,7 @@ func (c *mockClusterFilter) GetIndex() int {
 	return 101
 }
 
-func (c *mockClusterFilter) NewFilter(url *core.URL) core.Filter {
+func (c *mockClusterFilter) NewFilter(*core.URL) core.Filter {
 	return core.GetLastClusterFilter()
 }
 
@@ -133,7 +133,7 @@ func (c *mockClusterFilter) GetType() int32 {
 	return core.ClusterFilterType
 }
 
-func (c *mockClusterFilter) SetNext(cf core.ClusterFilter) {
+func (c *mockClusterFilter) SetNext(core.ClusterFilter) {
 	return
 }
 
