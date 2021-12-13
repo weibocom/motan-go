@@ -84,7 +84,7 @@ func TestClusterCircuitBreakerFilter(t *testing.T) {
 	time.Sleep(30 * time.Millisecond) //wait until async call complete
 	clusterCountLock.RLock()
 	if clusterCount != 171 && clusterCount != 172 {
-		t.Error("Test sleepWindow failed! count:", clusterCount)
+		t.Error("Test sleepWindow failed! count: ", clusterCount)
 	}
 	clusterCountLock.RUnlock()
 }
