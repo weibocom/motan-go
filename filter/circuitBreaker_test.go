@@ -161,7 +161,7 @@ func TestOtherCB(t *testing.T) {
 	assert.Equal(f.GetIndex(), 20)
 	assert.Equal(f.HasNext(), false)
 	assert.Equal(f.GetName(), CircuitBreaker)
-	assert.Equal(f.GetType(), core.EndPointFilterType)
+	assert.Equal(int(f.GetType()), core.EndPointFilterType)
 }
 
 func TestMockException(t *testing.T) {
