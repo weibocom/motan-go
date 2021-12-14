@@ -53,6 +53,14 @@ func TestRateLimitFilter(t *testing.T) {
 		resp := ef.Filter(caller, request)
 		assert.Nil(resp.GetException())
 	}
+
+	//Test wrong param
+	param = map[string]string{"rateLimit": "1001", "conf-id": "zha"}
+	caller, ef = getEf(param)
+	for i := 0; i < int(defaultCapacity)+offset; i++ {
+		resp := ef.Filter(caller, request)
+		assert.Nil(resp.GetException())
+	}
 	//Test methodFilter
 	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"}
 	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
@@ -135,6 +143,20 @@ func TestRateLimitTimeout(t *testing.T) {
 		assert.Nil(resp.GetException())
 	}
 
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "-1"}
+	caller, ef = getEf(param)
+	for i := 0; i < int(defaultCapacity)+offset; i++ {
+		resp := ef.Filter(caller, request)
+		assert.Nil(resp.GetException())
+	}
+
+	param = map[string]string{"rateLimit.testMethod": "-1", "conf-id": "Jia", "timeout.testMethod": "jia"}
+	caller, ef = getEf(param)
+	for i := 0; i < int(defaultCapacity)+offset; i++ {
+		resp := ef.Filter(caller, request)
+		assert.Nil(resp.GetException())
+	}
+
 	//Test switcher
 	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "50"}
 	caller, ef = getEf(param)
@@ -185,6 +207,28 @@ func TestCapacity(t *testing.T) {
 
 	//Test wrong params
 	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "jia"}
+	caller, ef = getEf(param)
+	startTime = time.Now()
+	// rateLimit will use default capacity
+	for i := 0; i < int(defaultCapacity)+offset; i++ {
+		ef.Filter(caller, request)
+	}
+	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+		t.Error("Test methodFilter failed! elapsed:", elapsed)
+	}
+
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "-1"}
+	caller, ef = getEf(param)
+	startTime = time.Now()
+	// rateLimit will use default capacity
+	for i := 0; i < int(defaultCapacity)+offset; i++ {
+		ef.Filter(caller, request)
+	}
+	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+		t.Error("Test methodFilter failed! elapsed:", elapsed)
+	}
+
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "5"}
 	caller, ef = getEf(param)
 	startTime = time.Now()
 	// rateLimit will use default capacity
