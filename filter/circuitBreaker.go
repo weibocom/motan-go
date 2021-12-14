@@ -15,7 +15,7 @@ const (
 	ErrorPercentThreshold       = "circuitBreaker.errorPercent" //%
 	MaxConcurrentField          = "circuitBreaker.maxConcurrent"
 	IncludeBizException         = "circuitBreaker.bizException"
-	defaultMaxConcurrent        = 1000
+	defaultMaxConcurrent        = 5000
 )
 
 type CircuitBreakerFilter struct {
