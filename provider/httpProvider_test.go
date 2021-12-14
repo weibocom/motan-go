@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"github.com/stretchr/testify/assert"
 	"net/http"
 	"os"
 	"testing"
@@ -55,7 +56,7 @@ func TestHTTPProvider_Call(t *testing.T) {
 	req.Method = "/p1/test"
 	req.SetAttachment("Host", "test.domain")
 	req.SetAttachment(mhttp.QueryString, "a=b")
-	//assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]byte)))
+	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]byte)))
 
 	req.SetAttachment(mhttp.Proxy, "true")
 	httpReq := fasthttp.AcquireRequest()
@@ -68,7 +69,7 @@ func TestHTTPProvider_Call(t *testing.T) {
 	serialization := &serialize.SimpleSerialization{}
 	body, _ := serialization.SerializeMulti(req.Arguments)
 	req.Arguments = []interface{}{&core.DeserializableValue{Serialization: serialization, Body: body}}
-	//assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
+	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
 }
 
 func TestMain(m *testing.M) {
