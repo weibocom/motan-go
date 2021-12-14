@@ -233,10 +233,8 @@ func TestCapacity(t *testing.T) {
 	startTime = time.Now()
 	// rateLimit will use default capacity
 	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
+		resp := ef.Filter(caller, request)
+		assert2.Nil(t, resp.GetException())
 	}
 
 	//Test wrong input
