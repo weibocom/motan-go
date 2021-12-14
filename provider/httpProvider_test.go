@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/config"
@@ -68,6 +69,7 @@ func TestHTTPProvider_Call(t *testing.T) {
 	req.Arguments = []interface{}{headerBuffer.Bytes(), nil}
 	serialization := &serialize.SimpleSerialization{}
 	body, _ := serialization.SerializeMulti(req.Arguments)
+
 	req.Arguments = []interface{}{&core.DeserializableValue{Serialization: serialization, Body: body}}
 	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
 }
@@ -82,5 +84,6 @@ func TestMain(m *testing.M) {
 		})
 		http.ListenAndServe(addr, handler)
 	}()
+	time.Sleep(time.Second * 2)
 	os.Exit(m.Run())
 }
