@@ -70,19 +70,19 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	filterSleepTimeLock.Lock()
 	filterSleepTime = 0 * time.Millisecond
 	filterSleepTimeLock.Unlock()
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 20; i++ {
 		ef.Filter(caller, request)
 	}
-	time.Sleep(10 * time.Millisecond) //wait until async call complete
+	time.Sleep(100 * time.Millisecond) //wait until async call complete
 	filterSleepTimeLock.Lock()
 	filterSleepTime = 7 * time.Millisecond
 	filterSleepTimeLock.Unlock()
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 30; i++ {
 		ef.Filter(caller, request)
 	}
 	time.Sleep(10000 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
-	if count != 171 && count != 172 {
+	if count != 61 && count != 62 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
 	countLock.RUnlock()
