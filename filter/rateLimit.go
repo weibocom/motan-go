@@ -41,7 +41,7 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 		}
 		ret.serviceBucket = ratelimit.NewBucketWithRate(rate, capacity)
 		ret.serviceMaxDuration = url.GetTimeDuration(timeoutKey, time.Millisecond, defaultTimeout)
-		vlog.Infof("[rateLimit] %s %s config success", url.GetIdentity(), RateLimit)
+		vlog.Infof("[rateLimit] %s %s service config success, rate:%f, capacity:%d, wait max duration:%s", url.GetIdentity(), RateLimit, rate, capacity, ret.serviceMaxDuration.String())
 	} else {
 		if rlp != "" {
 			vlog.Warningf("[rateLimit] parse %s config error:%v", RateLimit, err)
@@ -125,13 +125,13 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 			continue
 		}
 		methodBuckets[key] = ratelimit.NewBucketWithRate(value, capacity)
-	}
-	//fill default value for missing method timeout
-	for key := range methodBuckets {
+		//fill default value for missing timeout
 		if _, ok := methodTimeout[key]; !ok {
 			methodTimeout[key] = defaultTimeout
 		}
+		vlog.Infof("[rateLimit] %s %s method: %s config success, rate:%f, capacity:%d, wait max duration:%s", url.GetIdentity(), RateLimit, key, value, capacity, methodTimeout[key].String())
 	}
+
 	if len(methodBuckets) == 0 && ret.serviceBucket == nil {
 		vlog.Warningf("[rateLimit] %s: no service or method rateLimit takes effect", url.GetIdentity())
 	}
