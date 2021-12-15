@@ -94,12 +94,13 @@ func TestGetConfigStr(t *testing.T) {
 		SleepWindow:            300,
 		MaxConcurrentRequests:  500,
 		ErrorPercentThreshold:  50,
+		Timeout:                50,
 	}
 	res := getConfigStr(conf)
-	assert.Equal(res, "requestThreshold:10 sleepWindow:300 errorPercent:50 maxConcurrent:500 ")
+	assert.Equal(res, "requestThreshold:10 sleepWindow:300 errorPercent:50 maxConcurrent:500 timeout:50ms ")
 	conf = &hystrix.CommandConfig{}
 	res = getConfigStr(conf)
-	assert.Equal(res, "requestThreshold:20 sleepWindow:5000 errorPercent:50 maxConcurrent:5000 ")
+	assert.Equal(res, "requestThreshold:20 sleepWindow:5000 errorPercent:50 maxConcurrent:5000 timeout:1000ms ")
 }
 
 func TestBuildConfig(t *testing.T) {
@@ -115,7 +116,7 @@ func TestBuildConfig(t *testing.T) {
 	}
 	conf := buildCommandConfig("test", &valid)
 	assert.Equal(conf.ErrorPercentThreshold, 10)
-	assert.Equal(conf.Timeout, 20)
+	assert.Equal(conf.Timeout, 10)
 	assert.Equal(conf.MaxConcurrentRequests, 10)
 	assert.Equal(conf.SleepWindow, 10)
 	assert.Equal(conf.RequestVolumeThreshold, 10)
@@ -130,7 +131,7 @@ func TestBuildConfig(t *testing.T) {
 	}
 	conf = buildCommandConfig("test", &invalid)
 	assert.Equal(conf.ErrorPercentThreshold, 50)
-	assert.Equal(conf.Timeout, 2000)
+	assert.Equal(conf.Timeout, 1000)
 	assert.Equal(conf.MaxConcurrentRequests, defaultMaxConcurrent)
 	assert.Equal(conf.SleepWindow, 5000)
 	assert.Equal(conf.RequestVolumeThreshold, 20)
@@ -145,7 +146,7 @@ func TestBuildConfig(t *testing.T) {
 	}
 	conf = buildCommandConfig("test", &empty)
 	assert.Equal(conf.ErrorPercentThreshold, 50)
-	assert.Equal(conf.Timeout, 2000)
+	assert.Equal(conf.Timeout, 1000)
 	assert.Equal(conf.MaxConcurrentRequests, defaultMaxConcurrent)
 	assert.Equal(conf.SleepWindow, 5000)
 	assert.Equal(conf.RequestVolumeThreshold, 20)

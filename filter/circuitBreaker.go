@@ -119,10 +119,10 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 	}
 	if v, ok := url.Parameters[motan.TimeOutKey]; ok {
 		if temp, _ := strconv.Atoi(v); temp > 0 {
-			commandConfig.Timeout = temp * 2
+			commandConfig.Timeout = temp
 		} else {
-			commandConfig.Timeout = hystrix.DefaultTimeout * 2
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, motan.TimeOutKey, hystrix.DefaultTimeout*2)
+			commandConfig.Timeout = hystrix.DefaultTimeout
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, motan.TimeOutKey, hystrix.DefaultTimeout)
 		}
 	}
 	return commandConfig
@@ -162,6 +162,11 @@ func getConfigStr(config *hystrix.CommandConfig) string {
 		ret += "maxConcurrent:" + strconv.Itoa(config.MaxConcurrentRequests) + " "
 	} else {
 		ret += "maxConcurrent:" + strconv.Itoa(defaultMaxConcurrent) + " "
+	}
+	if config.Timeout != 0 {
+		ret += "timeout:" + strconv.Itoa(config.Timeout) + "ms "
+	} else {
+		ret += "timeout:" + strconv.Itoa(hystrix.DefaultTimeout) + "ms "
 	}
 	return ret
 }
