@@ -15,7 +15,7 @@ const (
 	defaultCapacity      int64 = 1000
 	defaultTimeout             = 1000 * time.Millisecond
 	timeoutKey                 = "timeout"
-	Capacity                   = "capacity"
+	capacity                   = "capacity"
 	methodConfigPrefix         = "rateLimit."
 	methodCapacityPrefix       = "capacity."
 	methodTimeoutPrefix        = "timeout."
@@ -23,10 +23,10 @@ const (
 
 type RateLimitFilter struct {
 	switcher           *core.Switcher
-	bucket             *ratelimit.Bucket //limit service
+	serviceBucket      *ratelimit.Bucket //limit service
 	serviceMaxDuration time.Duration
 	methodBuckets      map[string]*ratelimit.Bucket //limit method
-	methodMaxDuration  map[string]time.Duration
+	methodMaxDurations map[string]time.Duration
 	next               core.EndPointFilter
 }
 
@@ -35,11 +35,11 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	//init bucket
 	rlp := url.GetParam(RateLimit, "")
 	if rate, err := strconv.ParseFloat(rlp, 64); err == nil {
-		capacity := url.GetPositiveIntValue(Capacity, defaultCapacity)
+		capacity := url.GetPositiveIntValue(capacity, defaultCapacity)
 		if rate <= 0 || rate > float64(capacity) {
 			vlog.Warningf("[rateLimit] %s: service rateLimit config invalid, rate: %f, capacity:%d", url.GetIdentity(), rate, capacity)
 		}
-		ret.bucket = ratelimit.NewBucketWithRate(rate, capacity)
+		ret.serviceBucket = ratelimit.NewBucketWithRate(rate, capacity)
 		ret.serviceMaxDuration = url.GetTimeDuration(timeoutKey, time.Millisecond, defaultTimeout)
 		vlog.Infof("[rateLimit] %s %s config success", url.GetIdentity(), RateLimit)
 	} else {
@@ -80,7 +80,7 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 					methodTimeout[temp[1]] = time.Millisecond * time.Duration(t)
 				} else {
 					if err != nil {
-						vlog.Warningf("[rateLimit] parse %s timeout config error:%s, just use default timeout", key, err.Error())
+						vlog.Warningf("[rateLimit] parse %s timeout config error:%s, just use default timeout: %s", key, err.Error(), defaultTimeout.String())
 					} else {
 						if t <= 0 {
 							vlog.Warningf("[rateLimit] parse %s timeout config error: value is 0 or negative", key)
@@ -100,7 +100,7 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 					methodCapacity[temp[1]] = c
 				} else {
 					if err != nil {
-						vlog.Warningf("[rateLimit] parse %s capacity config error:%s, just use default capacity", key, err.Error())
+						vlog.Warningf("[rateLimit] parse %s capacity config error:%s, just use default capacity: %d", key, err.Error(), defaultCapacity)
 					} else {
 						if c <= 0 {
 							vlog.Warningf("[rateLimit] parse %s capacity config error: value is 0 or negative", key)
@@ -126,11 +126,11 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 		}
 		methodBuckets[key] = ratelimit.NewBucketWithRate(value, capacity)
 	}
-	if len(methodBuckets) == 0 && ret.bucket == nil {
+	if len(methodBuckets) == 0 && ret.serviceBucket == nil {
 		vlog.Warningf("[rateLimit] %s: no service or method rateLimit takes effect", url.GetIdentity())
 	}
 	ret.methodBuckets = methodBuckets
-	ret.methodMaxDuration = methodTimeout
+	ret.methodMaxDurations = methodTimeout
 	//init switcher
 	switcherName := GetRateLimitSwitcherName(url)
 	core.GetSwitcherManager().Register(switcherName, true)
@@ -141,15 +141,15 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 
 func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.Response {
 	if r.switcher.IsOpen() {
-		if r.bucket != nil {
-			callable := r.bucket.WaitMaxDuration(1, r.serviceMaxDuration)
+		if r.serviceBucket != nil {
+			callable := r.serviceBucket.WaitMaxDuration(1, r.serviceMaxDuration)
 			if !callable {
 				return defaultErrMotanResponse(request, fmt.Sprintf("[rateLimit] wait time exceed timeout(%s)", r.serviceMaxDuration.String()))
 			}
 		}
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
 			methodTimeout := defaultTimeout
-			if t, ok := r.methodMaxDuration[request.GetMethod()]; ok {
+			if t, ok := r.methodMaxDurations[request.GetMethod()]; ok {
 				methodTimeout = t
 			}
 			callable := methodBucket.WaitMaxDuration(1, methodTimeout)

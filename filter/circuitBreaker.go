@@ -71,7 +71,7 @@ func newCircuitBreaker(filterName string, url *motan.URL) bool {
 	bizException, err := strconv.ParseBool(bizExceptionStr)
 	if err != nil {
 		bizException = true
-		vlog.Warningf("[%s] parse config %s error, use default", filterName, IncludeBizException)
+		vlog.Warningf("[%s] parse config %s error, use default: true", filterName, IncludeBizException)
 	}
 	commandConfig := buildCommandConfig(filterName, url)
 	hystrix.ConfigureCommand(url.GetIdentity(), *commandConfig)
@@ -90,7 +90,7 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 			commandConfig.RequestVolumeThreshold = temp
 		} else {
 			commandConfig.RequestVolumeThreshold = hystrix.DefaultVolumeThreshold
-			vlog.Warningf("[%s] parse config %s error, use default", filterName, RequestVolumeThresholdField)
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, RequestVolumeThresholdField, hystrix.DefaultVolumeThreshold)
 		}
 	}
 	if v, ok := url.Parameters[SleepWindowField]; ok {
@@ -98,7 +98,7 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 			commandConfig.SleepWindow = temp
 		} else {
 			commandConfig.SleepWindow = hystrix.DefaultSleepWindow
-			vlog.Warningf("[%s] parse config %s error, use default", filterName, SleepWindowField)
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, SleepWindowField, hystrix.DefaultSleepWindow)
 		}
 	}
 	if v, ok := url.Parameters[ErrorPercentThreshold]; ok {
@@ -106,7 +106,7 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 			commandConfig.ErrorPercentThreshold = temp
 		} else {
 			commandConfig.ErrorPercentThreshold = hystrix.DefaultErrorPercentThreshold
-			vlog.Warningf("[%s] parse config %s error, use default", filterName, ErrorPercentThreshold)
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, ErrorPercentThreshold, hystrix.DefaultErrorPercentThreshold)
 		}
 	}
 	if v, ok := url.Parameters[MaxConcurrentField]; ok {
@@ -114,7 +114,7 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 			commandConfig.MaxConcurrentRequests = temp
 		} else {
 			commandConfig.MaxConcurrentRequests = defaultMaxConcurrent
-			vlog.Warningf("[%s] parse config %s error, use default", filterName, MaxConcurrentField)
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, MaxConcurrentField, defaultMaxConcurrent)
 		}
 	}
 	if v, ok := url.Parameters[motan.TimeOutKey]; ok {
@@ -122,7 +122,7 @@ func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfi
 			commandConfig.Timeout = temp * 2
 		} else {
 			commandConfig.Timeout = hystrix.DefaultTimeout * 2
-			vlog.Warningf("[%s] parse config %s error, use default", filterName, motan.TimeOutKey)
+			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, motan.TimeOutKey, hystrix.DefaultTimeout*2)
 		}
 	}
 	return commandConfig
