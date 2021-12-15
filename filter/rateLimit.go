@@ -126,6 +126,12 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 		}
 		methodBuckets[key] = ratelimit.NewBucketWithRate(value, capacity)
 	}
+	//fill default value for missing method timeout
+	for key := range methodBuckets {
+		if _, ok := methodTimeout[key]; !ok {
+			methodTimeout[key] = defaultTimeout
+		}
+	}
 	if len(methodBuckets) == 0 && ret.serviceBucket == nil {
 		vlog.Warningf("[rateLimit] %s: no service or method rateLimit takes effect", url.GetIdentity())
 	}
@@ -148,10 +154,7 @@ func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.
 			}
 		}
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
-			methodTimeout := defaultTimeout
-			if t, ok := r.methodMaxDurations[request.GetMethod()]; ok {
-				methodTimeout = t
-			}
+			methodTimeout := r.methodMaxDurations[request.GetMethod()]
 			callable := methodBucket.WaitMaxDuration(1, methodTimeout)
 			if !callable {
 				return defaultErrMotanResponse(request, fmt.Sprintf("[rateLimit] method %s wait time exceed timeout(%s)", request.GetMethod(), methodTimeout.String()))
