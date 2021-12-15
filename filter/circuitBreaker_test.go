@@ -36,8 +36,9 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	f := defaultExtFactory.GetFilter(CircuitBreaker)
 	if f == nil {
 		t.Error("Can not find circuitBreaker filter!")
+	} else {
+		f = f.NewFilter(filterURL)
 	}
-	f = f.NewFilter(filterURL)
 	ef := f.(core.EndPointFilter)
 	ef.SetNext(new(mockEndPointFilter))
 
@@ -79,7 +80,7 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		ef.Filter(caller, request)
 	}
-	time.Sleep(5000 * time.Millisecond) //wait until async call complete
+	time.Sleep(10000 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
 	if count != 171 && count != 172 {
 		t.Error("Test sleepWindow failed! count:", count)
@@ -181,8 +182,9 @@ func TestMockException(t *testing.T) {
 	f := defaultExtFactory.GetFilter(CircuitBreaker)
 	if f == nil {
 		t.Error("Can not find circuitBreaker filter!")
+	} else {
+		f = f.NewFilter(filterURL)
 	}
-	f = f.NewFilter(filterURL)
 	ef := f.(core.EndPointFilter)
 	ef.SetNext(new(mockExceptionEPFilter))
 	res := ef.Filter(caller, request)
@@ -195,7 +197,7 @@ func (m *mockEndPointFilter) GetName() string {
 	return "mockEndPointFilter"
 }
 
-func (m *mockEndPointFilter) NewFilter(url *core.URL) core.Filter {
+func (m *mockEndPointFilter) NewFilter(*core.URL) core.Filter {
 	return core.GetLastEndPointFilter()
 }
 
@@ -232,11 +234,11 @@ func (m *mockExceptionEPFilter) GetName() string {
 	return "mockEndPointFilter"
 }
 
-func (m *mockExceptionEPFilter) NewFilter(url *core.URL) core.Filter {
+func (m *mockExceptionEPFilter) NewFilter(*core.URL) core.Filter {
 	return core.GetLastEndPointFilter()
 }
 
-func (m *mockExceptionEPFilter) Filter(caller core.Caller, request core.Request) core.Response {
+func (m *mockExceptionEPFilter) Filter(_ core.Caller, request core.Request) core.Response {
 	return defaultErrMotanResponse(request, "mock exception")
 }
 
