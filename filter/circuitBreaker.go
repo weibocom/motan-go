@@ -73,7 +73,7 @@ func newCircuitBreaker(filterName string, url *motan.URL) bool {
 		bizException = true
 		vlog.Warningf("[%s] parse config %s error, use default: true", filterName, IncludeBizException)
 	}
-	commandConfig := buildCommandConfig(filterName, url)
+	commandConfig := buildCommandConfig(url)
 	hystrix.ConfigureCommand(url.GetIdentity(), *commandConfig)
 	if _, _, err = hystrix.GetCircuit(url.GetIdentity()); err != nil {
 		vlog.Errorf("[%s] new circuit fail. err:%s, url:%v, config{%s}", err.Error(), filterName, url.GetIdentity(), getConfigStr(commandConfig)+"bizException:"+bizExceptionStr)
@@ -83,48 +83,30 @@ func newCircuitBreaker(filterName string, url *motan.URL) bool {
 	return bizException
 }
 
-func buildCommandConfig(filterName string, url *motan.URL) *hystrix.CommandConfig {
+func getConfigValue(url *motan.URL, key string, defaultValue int) int {
+	if v, ok := url.Parameters[key]; ok {
+		if temp, _ := strconv.Atoi(v); temp > 0 {
+			if key == ErrorPercentThreshold {
+				if temp <= 100 {
+					return temp
+				}
+				vlog.Warningf("[%s] parse config %s error, use default: %d", CircuitBreaker, key, defaultValue)
+				return defaultValue
+			}
+			return temp
+		}
+	}
+	vlog.Warningf("[%s] parse config %s error, use default: %d", CircuitBreaker, key, defaultValue)
+	return defaultValue
+}
+
+func buildCommandConfig(url *motan.URL) *hystrix.CommandConfig {
 	commandConfig := &hystrix.CommandConfig{}
-	if v, ok := url.Parameters[RequestVolumeThresholdField]; ok {
-		if temp, _ := strconv.Atoi(v); temp > 0 {
-			commandConfig.RequestVolumeThreshold = temp
-		} else {
-			commandConfig.RequestVolumeThreshold = hystrix.DefaultVolumeThreshold
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, RequestVolumeThresholdField, hystrix.DefaultVolumeThreshold)
-		}
-	}
-	if v, ok := url.Parameters[SleepWindowField]; ok {
-		if temp, _ := strconv.Atoi(v); temp > 0 {
-			commandConfig.SleepWindow = temp
-		} else {
-			commandConfig.SleepWindow = hystrix.DefaultSleepWindow
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, SleepWindowField, hystrix.DefaultSleepWindow)
-		}
-	}
-	if v, ok := url.Parameters[ErrorPercentThreshold]; ok {
-		if temp, _ := strconv.Atoi(v); temp > 0 && temp <= 100 {
-			commandConfig.ErrorPercentThreshold = temp
-		} else {
-			commandConfig.ErrorPercentThreshold = hystrix.DefaultErrorPercentThreshold
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, ErrorPercentThreshold, hystrix.DefaultErrorPercentThreshold)
-		}
-	}
-	if v, ok := url.Parameters[MaxConcurrentField]; ok {
-		if temp, _ := strconv.Atoi(v); temp > 0 {
-			commandConfig.MaxConcurrentRequests = temp
-		} else {
-			commandConfig.MaxConcurrentRequests = defaultMaxConcurrent
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, MaxConcurrentField, defaultMaxConcurrent)
-		}
-	}
-	if v, ok := url.Parameters[motan.TimeOutKey]; ok {
-		if temp, _ := strconv.Atoi(v); temp > 0 {
-			commandConfig.Timeout = temp
-		} else {
-			commandConfig.Timeout = hystrix.DefaultTimeout
-			vlog.Warningf("[%s] parse config %s error, use default: %d", filterName, motan.TimeOutKey, hystrix.DefaultTimeout)
-		}
-	}
+	commandConfig.RequestVolumeThreshold = getConfigValue(url, RequestVolumeThresholdField, hystrix.DefaultVolumeThreshold)
+	commandConfig.SleepWindow = getConfigValue(url, SleepWindowField, hystrix.DefaultSleepWindow)
+	commandConfig.ErrorPercentThreshold = getConfigValue(url, ErrorPercentThreshold, hystrix.DefaultErrorPercentThreshold)
+	commandConfig.MaxConcurrentRequests = getConfigValue(url, MaxConcurrentField, defaultMaxConcurrent)
+	commandConfig.Timeout = getConfigValue(url, motan.TimeOutKey, hystrix.DefaultTimeout)
 	return commandConfig
 }
 
@@ -143,31 +125,11 @@ func defaultErrMotanResponse(request motan.Request, errMsg string) motan.Respons
 
 func getConfigStr(config *hystrix.CommandConfig) string {
 	var ret string
-	if config.RequestVolumeThreshold != 0 {
-		ret += "requestThreshold:" + strconv.Itoa(config.RequestVolumeThreshold) + " "
-	} else {
-		ret += "requestThreshold:" + strconv.Itoa(hystrix.DefaultVolumeThreshold) + " "
-	}
-	if config.SleepWindow != 0 {
-		ret += "sleepWindow:" + strconv.Itoa(config.SleepWindow) + " "
-	} else {
-		ret += "sleepWindow:" + strconv.Itoa(hystrix.DefaultSleepWindow) + " "
-	}
-	if config.ErrorPercentThreshold != 0 {
-		ret += "errorPercent:" + strconv.Itoa(config.ErrorPercentThreshold) + " "
-	} else {
-		ret += "errorPercent:" + strconv.Itoa(hystrix.DefaultErrorPercentThreshold) + " "
-	}
-	if config.MaxConcurrentRequests != 0 {
-		ret += "maxConcurrent:" + strconv.Itoa(config.MaxConcurrentRequests) + " "
-	} else {
-		ret += "maxConcurrent:" + strconv.Itoa(defaultMaxConcurrent) + " "
-	}
-	if config.Timeout != 0 {
-		ret += "timeout:" + strconv.Itoa(config.Timeout) + "ms "
-	} else {
-		ret += "timeout:" + strconv.Itoa(hystrix.DefaultTimeout) + "ms "
-	}
+	ret += "requestThreshold:" + strconv.Itoa(config.RequestVolumeThreshold) + " "
+	ret += "sleepWindow:" + strconv.Itoa(config.SleepWindow) + " "
+	ret += "errorPercent:" + strconv.Itoa(config.ErrorPercentThreshold) + " "
+	ret += "maxConcurrent:" + strconv.Itoa(config.MaxConcurrentRequests) + " "
+	ret += "timeout:" + strconv.Itoa(config.Timeout) + "ms "
 	return ret
 }
 

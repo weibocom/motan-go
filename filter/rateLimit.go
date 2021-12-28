@@ -48,70 +48,20 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 		}
 
 	}
-
 	//read config
 	methodBuckets := make(map[string]*ratelimit.Bucket)
 	methodTimeout := make(map[string]time.Duration)
 	methodCapacity := make(map[string]int64)
 	methodRate := make(map[string]float64)
 	for key, value := range url.Parameters {
-		if strings.HasPrefix(key, methodConfigPrefix) {
-			if temp := strings.Split(key, methodConfigPrefix); len(temp) == 2 {
-				if r, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" && r > 0 {
-					methodRate[temp[1]] = r
-				} else {
-					if err != nil {
-						vlog.Warningf("[rateLimit] parse %s config error:%s", key, err.Error())
-					} else {
-						if r <= 0 {
-							vlog.Warningf("[rateLimit] parse %s config error: value is 0 or negative", key)
-						}
-					}
-					if temp[1] == "" {
-						vlog.Warningf("[rateLimit] parse %s config error: key is empty", key)
-					}
-				}
-			}
+		if k, v, ok := getKeyValue(key, value, methodConfigPrefix); ok {
+			methodRate[k] = v
 		}
-		//init config timeout
-		if strings.HasPrefix(key, methodTimeoutPrefix) {
-			if temp := strings.Split(key, methodTimeoutPrefix); len(temp) == 2 {
-				if t, err := strconv.ParseInt(value, 10, 64); err == nil && temp[1] != "" && t > 0 {
-					methodTimeout[temp[1]] = time.Millisecond * time.Duration(t)
-				} else {
-					if err != nil {
-						vlog.Warningf("[rateLimit] parse %s timeout config error:%s, just use default timeout: %s", key, err.Error(), defaultTimeout.String())
-					} else {
-						if t <= 0 {
-							vlog.Warningf("[rateLimit] parse %s timeout config error: value is 0 or negative", key)
-						}
-					}
-					if temp[1] == "" {
-						vlog.Warningf("[rateLimit] parse %s timeout config error: key is empty", key)
-					}
-
-				}
-			}
+		if k, v, ok := getKeyValue(key, value, methodTimeoutPrefix); ok {
+			methodTimeout[k] = time.Millisecond * time.Duration(v)
 		}
-		//init config capacity
-		if strings.HasPrefix(key, methodCapacityPrefix) {
-			if temp := strings.Split(key, methodCapacityPrefix); len(temp) == 2 {
-				if c, err := strconv.ParseInt(value, 10, 64); err == nil && temp[1] != "" && c > 0 {
-					methodCapacity[temp[1]] = c
-				} else {
-					if err != nil {
-						vlog.Warningf("[rateLimit] parse %s capacity config error:%s, just use default capacity: %d", key, err.Error(), defaultCapacity)
-					} else {
-						if c <= 0 {
-							vlog.Warningf("[rateLimit] parse %s capacity config error: value is 0 or negative", key)
-						}
-					}
-					if temp[1] == "" {
-						vlog.Warningf("[rateLimit] parse %s capacity config error: key is empty", key)
-					}
-
-				}
-			}
+		if k, v, ok := getKeyValue(key, value, methodCapacityPrefix); ok {
+			methodCapacity[k] = int64(v)
 		}
 	}
 	//init methodBucket
@@ -143,6 +93,28 @@ func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	ret.switcher = core.GetSwitcherManager().GetSwitcher(switcherName)
 
 	return ret
+}
+
+func getKeyValue(key, value, prefix string) (string, float64, bool) {
+	if strings.HasPrefix(key, prefix) {
+		if temp := strings.Split(key, prefix); len(temp) == 2 {
+			if r, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" && r > 0 {
+				return temp[1], r, true
+			} else {
+				if err != nil {
+					vlog.Warningf("[rateLimit] parse %s config error:%s", key, err.Error())
+				} else {
+					if r <= 0 {
+						vlog.Warningf("[rateLimit] parse %s config error: value is 0 or negative", key)
+					}
+				}
+				if temp[1] == "" {
+					vlog.Warningf("[rateLimit] parse %s config error: key is empty", key)
+				}
+			}
+		}
+	}
+	return "", 0, false
 }
 
 func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.Response {
