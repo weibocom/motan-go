@@ -13,155 +13,133 @@ import (
 var offset = 2
 var rate = 10 // times per second
 
+var defaultCap = 1000
+
 func TestRateLimitFilter(t *testing.T) {
-	assert := assert2.New(t)
-	//Init
-	defaultExtFactory := &core.DefaultExtensionFactory{}
-	defaultExtFactory.Initialize()
-	RegistDefaultFilters(defaultExtFactory)
-	endpoint.RegistDefaultEndpoint(defaultExtFactory)
-	url := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint"}
-	caller := defaultExtFactory.GetEndPoint(url)
 	request := &core.MotanRequest{Method: "testMethod"}
+	testItems := []testItem{
+		{
+			title: "plain service rateLimit",
+			param: map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "zha"},
+		},
+		{
+			title: "plain method rateLimit",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"},
+		},
+		{
+			title: "rateLimit switcher off",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"},
+			preCall: func() {
+				core.GetSwitcherManager().GetSwitcher("zha_rateLimit").SetValue(false)
+			},
+			afterCall: func() {
+				core.GetSwitcherManager().GetSwitcher("zha_rateLimit").SetValue(true)
+			},
+		},
+	}
+	for i, j := range testItems {
+		if j.preCall != nil {
+			j.preCall()
+		}
+		caller, ef := getEf(j.param)
+		if ef == nil {
+			t.Error("Can not find rateLimit filter!")
+			return
+		}
+		startTime := time.Now()
+		for i := 0; i < defaultCap+offset; i++ {
+			ef.Filter(caller, request)
+		}
+		elapsed := time.Since(startTime)
+		if i == 2 {
+			if elapsed > time.Duration(offset-1)*time.Second/time.Duration(rate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed)
+			}
+		} else {
+			if elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed)
+			}
+		}
+		if j.afterCall != nil {
+			j.afterCall()
+		}
+	}
+}
 
-	//Test NewFilter
-	param := map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "zha"}
-	filterURL := &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
-	f := defaultExtFactory.GetFilter("rateLimit")
-	if f == nil {
-		t.Error("Can not find rateLimit filter!")
+func TestWrongParam(t *testing.T) {
+	assert := assert2.New(t)
+	testItems := []testItem{
+		{
+			title: "wrong type of service rate value",
+			param: map[string]string{"rateLimit": "jia", "conf-id": "zha"},
+		},
+		{
+			title: "wrong type of method rate value",
+			param: map[string]string{"rateLimit.testMethod": "jia", "conf-id": "jia"},
+		},
+		{
+			title: "wrong method rate key",
+			param: map[string]string{"rateLimit.": "10", "conf-id": "jia"},
+		},
+		{
+			title: "wrong type of method timeout value",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().requestTimeout": "jia"},
+		},
+		{
+			title: "negative value of method timeout",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().requestTimeout": "-1"},
+		},
+		{
+			title: "wrong service rate value and wrong type of method timeout",
+			param: map[string]string{"rateLimit.testMethod": "-1", "conf-id": "Jia", "testMethod().requestTimeout": "jia"},
+		},
+		{
+			title: "negative service rate value",
+			param: map[string]string{"rateLimit": "-1", "conf-id": "jia"},
+		},
 	}
-	if f != nil {
-		f = f.NewFilter(filterURL)
+	request := &core.MotanRequest{Method: "testMethod"}
+	for _, j := range testItems {
+		caller, ef := getEf(j.param)
+		for i := 0; i < defaultCap+offset; i++ {
+			resp := ef.Filter(caller, request)
+			assert.Nil(resp.GetException())
+		}
 	}
-	ef := f.(core.EndPointFilter)
-	ef.SetNext(core.GetLastEndPointFilter())
-
-	//Test serviceFilter
-	startTime := time.Now()
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test serviceFilter failed! elapsed:", elapsed)
-	}
-
-	//Test wrong param
-	param = map[string]string{"rateLimit": "jia", "conf-id": "zha"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-
-	//Test wrong param
-	param = map[string]string{"rateLimit": "1001", "conf-id": "zha"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-	//Test methodFilter
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"}
-	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
-	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
-	ef.SetNext(core.GetLastEndPointFilter())
-	startTime = time.Now()
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
-	}
-
-	//Test wrong input
-	param = map[string]string{"rateLimit.testMethod": "jia", "conf-id": "jia", "timeout.testMethod": "50"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-	param = map[string]string{"rateLimit.": "10", "conf-id": "jia", "timeout.testMethod": "50"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-	//Test switcher
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "zha"}
-	filterURL = &core.URL{Host: "127.0.0.1", Port: 7888, Protocol: "mockEndpoint", Parameters: param}
-	ef = defaultExtFactory.GetFilter("rateLimit").NewFilter(filterURL).(core.EndPointFilter)
-	ef.SetNext(core.GetLastEndPointFilter())
-	core.GetSwitcherManager().GetSwitcher("zha_rateLimit").SetValue(false)
-	startTime = time.Now()
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed > time.Duration(offset+1)*time.Second/time.Duration(rate) {
-		t.Error("Test switcher failed! elapsed:", elapsed)
-	}
-	core.GetSwitcherManager().GetSwitcher("zha_rateLimit").SetValue(true)
 }
 
 func TestRateLimitTimeout(t *testing.T) {
 	assert := assert2.New(t)
 	request := &core.MotanRequest{Method: "testMethod"}
-	//Test NewFilter
-	param := map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "timeout": "50"}
-	caller, ef := getEf(param)
-	//Test serviceFilter
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		if i >= int(defaultCapacity) {
-			assert.NotNil(resp.GetException())
-			assert.Equal(resp.GetException().ErrMsg, "[rateLimit] wait time exceed timeout(50ms)")
+
+	testItems := []testItem{
+		{
+			title:  "plain service max duration(timeout)",
+			param:  map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "requestTimeout": "50"},
+			errMsg: "[rateLimit] wait time exceed timeout(50ms)",
+		},
+		{
+			title:  "plain method max duration(timeout)",
+			param:  map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().requestTimeout": "50"},
+			errMsg: "[rateLimit] method testMethod wait time exceed timeout(50ms)",
+		},
+	}
+	for _, j := range testItems {
+		caller, ef := getEf(j.param)
+		for i := 0; i < defaultCap+offset; i++ {
+			resp := ef.Filter(caller, request)
+			if i >= defaultCap {
+				assert.NotNil(resp.GetException())
+				assert.Equal(resp.GetException().ErrMsg, j.errMsg)
+			}
 		}
-	}
-	//Test methodFilter
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "50"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		if i >= int(defaultCapacity) {
-			assert.NotNil(resp.GetException())
-			assert.Equal(resp.GetException().ErrMsg, "[rateLimit] method testMethod wait time exceed timeout(50ms)")
-		}
-	}
-
-	//Test wrong param
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.": "50"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "jia"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "-1"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
-	}
-
-	param = map[string]string{"rateLimit.testMethod": "-1", "conf-id": "Jia", "timeout.testMethod": "jia"}
-	caller, ef = getEf(param)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		resp := ef.Filter(caller, request)
-		assert.Nil(resp.GetException())
 	}
 
 	//Test switcher
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "timeout.testMethod": "50"}
-	caller, ef = getEf(param)
+	param := map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().requestTimeout": "50"}
+	caller, ef := getEf(param)
 	core.GetSwitcherManager().GetSwitcher("Jia_rateLimit").SetValue(false)
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
+	for i := 0; i < defaultCap+offset; i++ {
 		resp := ef.Filter(caller, request)
 		assert.Nil(resp.GetException())
 	}
@@ -169,85 +147,99 @@ func TestRateLimitTimeout(t *testing.T) {
 }
 
 func TestCapacity(t *testing.T) {
-	//Init
 	capacity := 200
 	request := &core.MotanRequest{Method: "testMethod"}
-	param := map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "capacity": strconv.Itoa(capacity)}
+	testItems := []testItem{
+		{
+			title: "plain service capacity",
+			param: map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "capacity": strconv.Itoa(capacity)},
+		},
+		{
+			title: "plain method capacity",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().capacity": strconv.Itoa(capacity)},
+		},
+		{
+			title: "wrong type of service capacity value",
+			param: map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "capacity": "jia"},
+		},
+		{
+			title: "wrong type of method capacity value",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().capacity": "jia"},
+		},
+		{
+			title: "wrong value of method capacity",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().capacity": "-1"},
+		},
+	}
+	for k, j := range testItems {
+		caller, ef := getEf(j.param)
+		startTime := time.Now()
+		for i := 0; i < capacity+offset; i++ {
+			ef.Filter(caller, request)
+		}
+		if k >= 2 {
+			if elapsed := time.Since(startTime); elapsed > time.Duration(offset-1)*time.Second/time.Duration(rate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed.String(), " ", time.Duration(offset-1)*time.Second/time.Duration(rate))
+			}
+		} else {
+			if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed.String(), " ", time.Duration(offset-1)*time.Second/time.Duration(rate))
+			}
+		}
+	}
+	param := map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "5"}
 	caller, ef := getEf(param)
-	//Test serviceFilter
-	startTime := time.Now()
-	for i := 0; i < capacity+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test serviceFilter failed! elapsed:", elapsed.String(), " ", time.Duration(offset-1)*time.Second/time.Duration(rate))
-	}
-
-	//Test wrong params
-	param = map[string]string{"rateLimit": strconv.Itoa(rate), "conf-id": "Jia", "capacity": "jia"}
-	caller, ef = getEf(param)
-	startTime = time.Now()
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
-	}
-
-	//Test methodFilter
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": strconv.Itoa(capacity)}
-	caller, ef = getEf(param)
-	startTime = time.Now()
-	for i := 0; i < capacity+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
-	}
-
-	//Test wrong params
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "jia"}
-	caller, ef = getEf(param)
-	startTime = time.Now()
 	// rateLimit will use default capacity
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
-	}
-
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "-1"}
-	caller, ef = getEf(param)
-	startTime = time.Now()
-	// rateLimit will use default capacity
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
-	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
-	}
-
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.testMethod": "5"}
-	caller, ef = getEf(param)
-	startTime = time.Now()
-	// rateLimit will use default capacity
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
+	for i := 0; i < defaultCap+offset; i++ {
 		resp := ef.Filter(caller, request)
 		assert2.Nil(t, resp.GetException())
 	}
+}
 
-	//Test wrong input
-	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "capacity.": "1000"}
-	caller, ef = getEf(param)
-	startTime = time.Now()
-	// rateLimit will use default capacity
-	for i := 0; i < int(defaultCapacity)+offset; i++ {
-		ef.Filter(caller, request)
+func TestCapacityEdge(t *testing.T) {
+	request := &core.MotanRequest{Method: "testMethod"}
+	bigRate := 2501
+	properRate := 600
+	properCapacity := properRate * 2
+	testItems := []testItem{
+		{
+			title: "max service capacity",
+			param: map[string]string{"rateLimit": strconv.Itoa(bigRate), "conf-id": "Jia"},
+		},
+		{
+			title: "max method capacity",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(bigRate), "conf-id": "Jia"},
+		},
+		{
+			title: "proper service capacity",
+			param: map[string]string{"rateLimit": strconv.Itoa(properRate), "conf-id": "Jia"},
+		},
+		{
+			title: "proper method capacity",
+			param: map[string]string{"rateLimit.testMethod": strconv.Itoa(properRate), "conf-id": "Jia"},
+		},
 	}
-	if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(rate) {
-		t.Error("Test methodFilter failed! elapsed:", elapsed)
+	for k, j := range testItems {
+		caller, ef := getEf(j.param)
+		startTime := time.Now()
+		if k >= 2 {
+			for i := 0; i < properCapacity+offset; i++ {
+				ef.Filter(caller, request)
+			}
+			if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(properRate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed.String(), " ", time.Duration(offset-1)*time.Second/time.Duration(rate))
+			}
+		} else {
+			for i := 0; i < maxCapacity+offset; i++ {
+				ef.Filter(caller, request)
+			}
+			if elapsed := time.Since(startTime); elapsed < time.Duration(offset-1)*time.Second/time.Duration(bigRate) {
+				t.Error("Test ", j.title, " failed! elapsed:", elapsed.String(), " ", time.Duration(offset-1)*time.Second/time.Duration(rate))
+			}
+		}
+
 	}
+
 }
 
 func TestOther(t *testing.T) {
@@ -276,4 +268,12 @@ func getEf(param map[string]string) (core.EndPoint, core.EndPointFilter) {
 	ef := f.(core.EndPointFilter)
 	ef.SetNext(core.GetLastEndPointFilter())
 	return caller, ef
+}
+
+type testItem struct {
+	title     string
+	param     map[string]string
+	preCall   func()
+	afterCall func()
+	errMsg    string
 }

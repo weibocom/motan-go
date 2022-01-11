@@ -90,10 +90,9 @@ func getConfigValue(url *motan.URL, key string, defaultValue int) int {
 				if temp <= 100 {
 					return temp
 				}
-				vlog.Warningf("[%s] parse config %s error, use default: %d", CircuitBreaker, key, defaultValue)
-				return defaultValue
+			} else {
+				return temp
 			}
-			return temp
 		}
 	}
 	vlog.Warningf("[%s] parse config %s error, use default: %d", CircuitBreaker, key, defaultValue)
