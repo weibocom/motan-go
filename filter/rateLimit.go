@@ -86,19 +86,20 @@ func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.
 			}
 		}
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
-			var methodTimeout time.Duration
+			var methodTimeout int64
 			tRequest := request.GetAttachment(mpro.MTimeout)
 			if tRequest != "" {
 				if v, err := strconv.ParseInt(tRequest, 10, 64); err == nil {
-					methodTimeout = time.Duration(v) * time.Millisecond
+					methodTimeout = v
 				}
 			} else {
 				v := r.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), core.TimeOutKey, defaultTimeout)
-				methodTimeout = time.Duration(v) * time.Millisecond
+				methodTimeout = v
 			}
-			callable := methodBucket.WaitMaxDuration(1, methodTimeout)
+			methodDuration := time.Duration(methodTimeout) * time.Millisecond
+			callable := methodBucket.WaitMaxDuration(1, methodDuration)
 			if !callable {
-				return defaultErrMotanResponse(request, fmt.Sprintf("[rateLimit] method %s wait time exceed timeout(%s)", request.GetMethod(), methodTimeout.String()))
+				return defaultErrMotanResponse(request, fmt.Sprintf("[rateLimit] method %s wait time exceed timeout(%s)", request.GetMethod(), methodDuration.String()))
 			}
 		}
 	}
