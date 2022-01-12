@@ -65,7 +65,6 @@ func TestHTTPProvider_Call(t *testing.T) {
 	req.Arguments = []interface{}{headerBuffer.Bytes(), nil}
 	serialization := &serialize.SimpleSerialization{}
 	body, _ := serialization.SerializeMulti(req.Arguments)
-
 	req.Arguments = []interface{}{&core.DeserializableValue{Serialization: serialization, Body: body}}
 	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
 }

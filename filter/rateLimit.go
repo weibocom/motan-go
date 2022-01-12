@@ -2,6 +2,7 @@ package filter
 
 import (
 	"fmt"
+	mpro "github.com/weibocom/motan-go/protocol"
 	"strconv"
 	"strings"
 	"time"
@@ -85,8 +86,16 @@ func (r *RateLimitFilter) Filter(caller core.Caller, request core.Request) core.
 			}
 		}
 		if methodBucket, ok := r.methodBuckets[request.GetMethod()]; ok {
-			v := r.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), core.TimeOutKey, defaultTimeout)
-			methodTimeout := time.Duration(v) * time.Millisecond
+			var methodTimeout time.Duration
+			tRequest := request.GetAttachment(mpro.MTimeout)
+			if tRequest != "" {
+				if v, err := strconv.ParseInt(tRequest, 10, 64); err == nil {
+					methodTimeout = time.Duration(v) * time.Millisecond
+				}
+			} else {
+				v := r.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), core.TimeOutKey, defaultTimeout)
+				methodTimeout = time.Duration(v) * time.Millisecond
+			}
 			callable := methodBucket.WaitMaxDuration(1, methodTimeout)
 			if !callable {
 				return defaultErrMotanResponse(request, fmt.Sprintf("[rateLimit] method %s wait time exceed timeout(%s)", request.GetMethod(), methodTimeout.String()))

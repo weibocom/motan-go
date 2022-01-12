@@ -2,6 +2,7 @@ package filter
 
 import (
 	assert2 "github.com/stretchr/testify/assert"
+	mpro "github.com/weibocom/motan-go/protocol"
 	"strconv"
 	"testing"
 	"time"
@@ -144,6 +145,19 @@ func TestRateLimitTimeout(t *testing.T) {
 		assert.Nil(resp.GetException())
 	}
 	core.GetSwitcherManager().GetSwitcher("Jia_rateLimit").SetValue(true)
+
+	//Test set timeout in request
+	request.SetAttachment(mpro.MTimeout, "50")
+	param = map[string]string{"rateLimit.testMethod": strconv.Itoa(rate), "conf-id": "Jia", "testMethod().requestTimeout": "100"}
+	caller, ef = getEf(param)
+	for i := 0; i < defaultCap+offset; i++ {
+		resp := ef.Filter(caller, request)
+		if i >= defaultCap {
+			assert.NotNil(resp.GetException())
+			// timeout value will use the one in request attachment(50)
+			assert.Equal(resp.GetException().ErrMsg, "[rateLimit] method testMethod wait time exceed timeout(50ms)")
+		}
+	}
 }
 
 func TestCapacity(t *testing.T) {
