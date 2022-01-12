@@ -3,14 +3,13 @@ package filter
 import (
 	"github.com/afex/hystrix-go/hystrix"
 	assert2 "github.com/stretchr/testify/assert"
+	"github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/log"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/endpoint"
-	"github.com/weibocom/motan-go/log"
 )
 
 var (
