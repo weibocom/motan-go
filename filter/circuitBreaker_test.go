@@ -7,7 +7,6 @@ import (
 	"github.com/weibocom/motan-go/endpoint"
 	"github.com/weibocom/motan-go/log"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -199,7 +198,7 @@ func (m *mockEndPointFilter) NewFilter(*core.URL) core.Filter {
 
 func (m *mockEndPointFilter) Filter(caller core.Caller, request core.Request) core.Response {
 	countLock.Lock()
-	atomic.AddInt64(&count, 1)
+	count += 1
 	countLock.Unlock()
 	filterSleepTimeLock.RLock()
 	time.Sleep(filterSleepTime)
