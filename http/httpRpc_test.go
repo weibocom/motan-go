@@ -2,12 +2,14 @@ package http_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	"github.com/weibocom/motan-go"
 	"github.com/weibocom/motan-go/config"
 	motancore "github.com/weibocom/motan-go/core"
+	http2 "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/protocol"
 	"math/rand"
 	"net/http"
@@ -45,6 +47,10 @@ motan-service:
     filter: "accessLog,metrics"
     requestTimeout: 2000
 `
+
+var (
+	httpRequestHeader http.Header
+)
 
 type APITestSuite struct {
 	suite.Suite
@@ -97,9 +103,17 @@ func (s *APITestSuite) TestRequestResponse() {
 	resp, err = callTimeOutWrongArgumentCount("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{argumentString}, attachments)
 	assert.NotNil(s.T(), err)
 	assert.Nil(s.T(), resp)
+	// json content-type request
+	bodyBytes,_ := json.Marshal(arguments)
+	attachments[http2.HeaderContentType] = "application/json"
+	resp, err = callTimeOutWithAttachment("127.0.0.1", "9989", "test", "test.domain", 30000, "", "/", []interface{}{bodyBytes}, attachments)
+	assert.Nil(s.T(), err)
+	assert.NotNil(s.T(), resp)
+	assert.Equal(s.T(), "application/json", httpRequestHeader.Get(http2.HeaderContentType))
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
+	httpRequestHeader = r.Header
 	fmt.Fprintf(w, "hello world")
 }
 

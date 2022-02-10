@@ -21,6 +21,10 @@ const (
 )
 
 const (
+	HeaderContentType = "Content-Type"
+)
+
+const (
 	DomainKey                = "domain"
 	KeepaliveTimeoutKey      = "keepaliveTimeout"
 	IdleConnectionTimeoutKey = "idleConnectionTimeout"
@@ -437,6 +441,9 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		if k == "Host" {
 			fasthttpRequest.Header.SetHost(v)
 			return true
+		}
+		if k == HeaderContentType {
+			fasthttpRequest.Header.SetContentType(v)
 		}
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		fasthttpRequest.Header.Add(k, v)
