@@ -430,20 +430,18 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 	motanRequest.GetAttachments().Range(func(k, v string) bool {
 		// ignore some specified key
 		for _, attachmentKey := range httpProxySpecifiedAttachments {
-			if attachmentKey == k {
+			if strings.EqualFold(k, attachmentKey) {
 				return true
 			}
 		}
-		if k == core.HostKey {
-			return true
-		}
 		// fasthttp will use a special field to store this header
-		if k == "Host" {
+		if strings.EqualFold(k, core.HostKey) {
 			fasthttpRequest.Header.SetHost(v)
 			return true
 		}
-		if k == HeaderContentType {
+		if strings.EqualFold(k, HeaderContentType) {
 			fasthttpRequest.Header.SetContentType(v)
+			return true
 		}
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
 		fasthttpRequest.Header.Add(k, v)
