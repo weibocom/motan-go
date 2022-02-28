@@ -80,7 +80,7 @@ func (m *MotanEndpoint) Initialize() {
 	}
 	channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
 	if err != nil {
-		vlog.Errorf("Channel pool init failed. err:%s", err.Error())
+		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
 		// retry connect
 		go func() {
 			defer motan.HandlePanic(nil)
@@ -219,7 +219,8 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
 	errCount := atomic.AddUint32(&m.errorCount, 1)
-	if errCount == uint32(m.errorCountThreshold) {
+	// ensure trigger keepalive
+	if errCount >= uint32(m.errorCountThreshold) {
 		m.setAvailable(false)
 		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 		go m.keepalive()

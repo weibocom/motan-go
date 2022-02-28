@@ -43,10 +43,10 @@ const (
 var (
 	// NewStatItem is the factory func for StatItem
 	NewStatItem = NewDefaultStatItem
-	items     = make(map[string]StatItem, 64)
-	itemsLock sync.RWMutex
-	start     sync.Once
-	rp        = &reporter{
+	items       = make(map[string]StatItem, 64)
+	itemsLock   sync.RWMutex
+	start       sync.Once
+	rp          = &reporter{
 		interval:  defaultSinkDuration,
 		processor: defaultEventProcessor, //sink processor size
 		eventBus:  make(chan *event, eventBufferSize),

@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 
-	"github.com/weibocom/motan-go"
+	motan "github.com/weibocom/motan-go"
+
 	motancore "github.com/weibocom/motan-go/core"
 )
 

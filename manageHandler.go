@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/load"
-	"github.com/shirou/gopsutil/mem"
-	"github.com/shirou/gopsutil/net"
-	"github.com/shirou/gopsutil/process"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/load"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/net"
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/filter"
@@ -680,7 +680,6 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 }
-
 
 //------------ below code is copied from net/http/pprof -------------
 

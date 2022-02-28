@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	URL "net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 
+	vlog "github.com/weibocom/motan-go/log"
+
 	"github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
 )
 
 const dynamicConfigRegistrySnapshot = "registry.snap"
@@ -222,7 +224,28 @@ func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) 
 		for id, url := range h.agent.Context.RegistryURLs {
 			if fmt.Sprintf("%s://%s:%d", url.Protocol, url.Host, url.Port) == proxyRegistry {
 				registryID = id
+				vlog.Infof("find proxy registry by ProxyRegistryKey, id:%s", registryID)
 				break
+			}
+		}
+	}
+	if registryID == "" {
+		// find proper registry
+		proxyRegistryUrlString := url.GetParam(core.ProxyRegistryUrlString, "")
+		if proxyRegistryUrlString != "" {
+			unescapeString, err := URL.QueryUnescape(proxyRegistryUrlString)
+			if err == nil {
+				ProxyRegistryUrl := core.FromExtInfo(unescapeString)
+				if ProxyRegistryUrl != nil {
+					for id, url := range h.agent.Context.RegistryURLs {
+						if registryEquals(ProxyRegistryUrl, url) {
+							registryID = id
+							vlog.Infof("find proxy registry by registryEquals, id:%s", registryID)
+							break
+						}
+					}
+					// TODO 动态添加 registry url， 需要考虑并发 问题
+				}
 			}
 		}
 	}
@@ -326,4 +349,11 @@ func writeHandlerResponse(res http.ResponseWriter, code int, message string, bod
 	}
 	bytes, _ := json.Marshal(m)
 	res.Write(bytes)
+}
+
+func registryEquals(reg1 *core.URL, reg2 *core.URL) bool {
+	if reg1 != nil && reg2 != nil {
+		return reg1.Protocol == reg2.Protocol && reg1.Host == reg2.Host && reg1.Port == reg2.Port
+	}
+	return false
 }

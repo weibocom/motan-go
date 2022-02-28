@@ -21,6 +21,10 @@ const (
 )
 
 const (
+	HeaderContentType = "Content-Type"
+)
+
+const (
 	DomainKey                = "domain"
 	KeepaliveTimeoutKey      = "keepaliveTimeout"
 	IdleConnectionTimeoutKey = "idleConnectionTimeout"
@@ -42,10 +46,31 @@ const (
 	proxyMatchTypeExact
 )
 
-var (
-	WhitespaceSplitPattern = regexp.MustCompile(`\s+`)
+const (
+	proxyRewriteTypeUnknown ProxyRewriteType = iota
+	proxyRewriteTypeRegexp
+	proxyRewriteTypeRegexpIgnoreCase
+	proxyRewriteTypeStart
+	proxyRewriteTypeExact
+	proxyRewriteTypeRegexpVar
+)
 
+var (
+	WhitespaceSplitPattern        = regexp.MustCompile(`\s+`)
+	findRewriteVarPattern         = regexp.MustCompile(`\{[0-9a-zA-Z_-]+\}`)
 	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString}
+	rewriteVarFunc                = func(condType ProxyRewriteType, uri string, queryBytes []byte) string {
+		if condType != proxyRewriteTypeRegexpVar || len(queryBytes) == 0 {
+			return uri
+		}
+		query, _ := url.ParseQuery(string(queryBytes))
+		// replace path with query variables, variable holder format is : {foo}
+		for _, varHolder := range findRewriteVarPattern.FindAllString(uri, -1) {
+			varKey := varHolder[1 : len(varHolder)-1]
+			uri = strings.Replace(uri, varHolder, query.Get(varKey), -1)
+		}
+		return uri
+	}
 )
 
 func PatternSplit(s string, pattern *regexp.Regexp) []string {
@@ -69,7 +94,7 @@ func PatternSplit(s string, pattern *regexp.Regexp) []string {
 }
 
 type URIConverter interface {
-	URIToServiceName(uri string) string
+	URIToServiceName(uri string, queryStringBytes []byte) string
 }
 
 type ProxyMatchType uint8
@@ -104,6 +129,42 @@ func stringToProxyMatchType(s string) ProxyMatchType {
 	}
 }
 
+type ProxyRewriteType uint8
+
+func (t ProxyRewriteType) String() string {
+	switch t {
+	case proxyRewriteTypeRegexp:
+		return "regexp"
+	case proxyRewriteTypeRegexpIgnoreCase:
+		return "iregexp"
+	case proxyRewriteTypeStart:
+		return "start"
+	case proxyRewriteTypeExact:
+		return "exact"
+	case proxyRewriteTypeRegexpVar:
+		return "regexpVar"
+	default:
+		return "unknown"
+	}
+}
+
+func stringToProxyRewriteType(s string) ProxyRewriteType {
+	switch s {
+	case "regexp":
+		return proxyRewriteTypeRegexp
+	case "iregexp":
+		return proxyRewriteTypeRegexpIgnoreCase
+	case "start":
+		return proxyRewriteTypeStart
+	case "exact":
+		return proxyRewriteTypeExact
+	case "regexpVar":
+		return proxyRewriteTypeRegexpVar
+	default:
+		return proxyRewriteTypeUnknown
+	}
+}
+
 type ProxyLocation struct {
 	Upstream     string   `yaml:"upstream"`
 	Match        string   `yaml:"match"`
@@ -120,7 +181,7 @@ type ProxyLocation struct {
 // !regexp ^/2/.* ^/(.*) /2/$1
 type rewriteRule struct {
 	not         bool
-	condType    ProxyMatchType
+	condType    ProxyRewriteType
 	condString  string
 	condPattern *regexp.Regexp
 	pattern     *regexp.Regexp
@@ -134,23 +195,23 @@ func newRewriteRule(rule string) (*rewriteRule, error) {
 		return nil, fmt.Errorf("illegal argument number %d for rewrite rule", argc)
 	}
 	r := rewriteRule{}
-	matchTypeString := args[0]
-	if strings.HasPrefix(matchTypeString, "!") {
+	rewriteTypeString := args[0]
+	if strings.HasPrefix(rewriteTypeString, "!") {
 		r.not = true
-		matchTypeString = matchTypeString[1:]
+		rewriteTypeString = rewriteTypeString[1:]
 	}
-	r.condType = stringToProxyMatchType(matchTypeString)
-	if r.condType == proxyMatchTypeUnknown {
+	r.condType = stringToProxyRewriteType(rewriteTypeString)
+	if r.condType == proxyRewriteTypeUnknown {
 		return nil, errors.New("unsupported condition type " + args[0])
 	}
 	r.condString = args[1]
-	if r.condType == proxyMatchTypeRegexp {
+	if r.condType == proxyRewriteTypeRegexp || r.condType == proxyRewriteTypeRegexpVar {
 		pattern, err := regexp.Compile(args[1])
 		if err != nil {
 			return nil, err
 		}
 		r.condPattern = pattern
-	} else if r.condType == proxyMatchTypeRegexpIgnoreCase {
+	} else if r.condType == proxyRewriteTypeRegexpIgnoreCase {
 		pattern, err := regexp.Compile("(?i)" + args[1])
 		if err != nil {
 			return nil, err
@@ -166,14 +227,14 @@ func newRewriteRule(rule string) (*rewriteRule, error) {
 	return &r, nil
 }
 
-func (r *rewriteRule) rewrite(uri string) (string, bool) {
+func (r *rewriteRule) rewrite(uri string, query []byte) (string, bool) {
 	ruleMatched := false
 	switch r.condType {
-	case proxyMatchTypeExact:
+	case proxyRewriteTypeExact:
 		ruleMatched = r.condString == uri
-	case proxyMatchTypeStart:
+	case proxyRewriteTypeStart:
 		ruleMatched = strings.HasPrefix(uri, r.condString)
-	case proxyMatchTypeRegexp, proxyMatchTypeRegexpIgnoreCase:
+	case proxyRewriteTypeRegexp, proxyRewriteTypeRegexpIgnoreCase, proxyRewriteTypeRegexpVar:
 		ruleMatched = r.condPattern.MatchString(uri)
 	}
 	if r.not {
@@ -182,19 +243,20 @@ func (r *rewriteRule) rewrite(uri string) (string, bool) {
 	if ruleMatched {
 		matchedIndex := r.pattern.FindStringSubmatchIndex(uri)
 		if matchedIndex == nil {
-			return uri, false
+			return rewriteVarFunc(r.condType, uri, query), false
 		}
-		return string(r.pattern.ExpandString(nil, r.replace, uri, matchedIndex)), true
+		uri = rewriteVarFunc(r.condType, string(r.pattern.ExpandString(nil, r.replace, uri, matchedIndex)), query)
+		return uri, true
 	}
-	return uri, false
+	return rewriteVarFunc(r.condType, uri, query), false
 }
 
-func (l *ProxyLocation) DeterminePath(path string, doRewrite bool) string {
+func (l *ProxyLocation) DeterminePath(path string, query []byte, doRewrite bool) string {
 	if !doRewrite {
 		return path
 	}
 	for _, r := range l.rewriteRules {
-		if s, b := r.rewrite(path); b {
+		if s, b := r.rewrite(path, query); b {
 			return s
 		}
 	}
@@ -206,6 +268,7 @@ type LocationMatcher struct {
 	exactLocations  []*ProxyLocation
 	startLocations  []*ProxyLocation
 	regexpLocations []*ProxyLocation
+	needQueryString bool
 }
 
 func NewLocationMatcherFromContext(domain string, context *core.Context) *LocationMatcher {
@@ -254,6 +317,9 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 					vlog.Errorf("Illegal rewrite rule %s for location %s: %s", rule, l.Match, err.Error())
 					continue
 				}
+				if r.condType == proxyRewriteTypeRegexpVar {
+					matcher.needQueryString = true
+				}
 				rewriteRules = append(rewriteRules, r)
 			}
 			l.rewriteRules = rewriteRules
@@ -298,19 +364,21 @@ func NewLocationMatcher(locations []*ProxyLocation) *LocationMatcher {
 // Pick returns the matched upstream and do url rewrite and etc
 // Now this functions just compatible with nginx location match rules
 // See http://nginx.org/en/docs/http/ngx_http_core_module.html#location
-func (m *LocationMatcher) Pick(path string, doRewrite bool) (string, string, bool) {
+func (m *LocationMatcher) Pick(path string, query []byte, doRewrite bool) (string, string, bool) {
+
 	// First do exact location match
 	for _, l := range m.exactLocations {
 		if path == l.Match {
-			return l.Upstream, l.DeterminePath(path, doRewrite), true
+			return l.Upstream, l.DeterminePath(path, query, doRewrite), true
 		}
 	}
 	// Second do regexp match by order
 	for _, l := range m.regexpLocations {
 		if l.pattern.MatchString(path) {
-			return l.Upstream, l.DeterminePath(path, doRewrite), true
+			return l.Upstream, l.DeterminePath(path, query, doRewrite), true
 		}
 	}
+
 	// Last do start location match, use longest prefix match
 	// TODO: nginx '^~' will disable regex match if longest prefix matched
 	var longestLocation *ProxyLocation
@@ -323,17 +391,22 @@ func (m *LocationMatcher) Pick(path string, doRewrite bool) (string, string, boo
 			}
 		}
 	}
+
 	if longestLocation != nil {
-		return longestLocation.Upstream, longestLocation.DeterminePath(path, doRewrite), true
+		return longestLocation.Upstream, longestLocation.DeterminePath(path, query, doRewrite), true
 	}
 	return "", "", false
 }
 
-func (m *LocationMatcher) URIToServiceName(uri string) string {
-	if s, _, b := m.Pick(uri, false); b {
+func (m *LocationMatcher) URIToServiceName(uri string, queryString []byte) string {
+	if s, _, b := m.Pick(uri, queryString, false); b {
 		return s
 	}
 	return ""
+}
+
+func (m *LocationMatcher) NeedURLQueryString() bool {
+	return m.needQueryString
 }
 
 // MotanRequestToFasthttpRequest convert a motan request to a fasthttp request
@@ -357,16 +430,17 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 	motanRequest.GetAttachments().Range(func(k, v string) bool {
 		// ignore some specified key
 		for _, attachmentKey := range httpProxySpecifiedAttachments {
-			if attachmentKey == k {
+			if strings.EqualFold(k, attachmentKey) {
 				return true
 			}
 		}
-		if k == core.HostKey {
+		// fasthttp will use a special field to store this header
+		if strings.EqualFold(k, core.HostKey) {
+			fasthttpRequest.Header.SetHost(v)
 			return true
 		}
-		// fasthttp will use a special field to store this header
-		if k == "Host" {
-			fasthttpRequest.Header.SetHost(v)
+		if strings.EqualFold(k, HeaderContentType) {
+			fasthttpRequest.Header.SetContentType(v)
 			return true
 		}
 		k = strings.Replace(k, "M_", "MOTAN-", -1)

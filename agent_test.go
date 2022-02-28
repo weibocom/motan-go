@@ -22,7 +22,7 @@ import (
 
 const (
 	goNum      = 5
-	requestNum = 10000
+	requestNum = 100
 )
 
 var proxyClient *http.Client
@@ -30,6 +30,7 @@ var meshClient *MeshClient
 var agent *Agent
 
 func TestMain(m *testing.M) {
+	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	cfgFile := filepath.Join("testdata", "agent.yaml")
 	go func() {
 		var addr = ":9090"
@@ -45,7 +46,6 @@ func TestMain(m *testing.M) {
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
-	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	proxyURL, _ := url.Parse("http://localhost:9983")
 	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	time.Sleep(1 * time.Second)
@@ -250,9 +250,9 @@ func TestAgent_InitCall(t *testing.T) {
 
 	// test hot reload clusters except
 	reloadUrls := map[string]*core.URL{
-		"test4-0":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
-		"test4-1":      {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
-		"test5":        {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
+		"test4-0": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g1", Protocol: ""},
+		"test4-1": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
+		"test5":   {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
 	ctx.RefersURLs = reloadUrls
 	agent.reloadClusters(ctx)

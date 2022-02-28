@@ -108,7 +108,7 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 }
 
 func (c *HTTPCluster) CanServe(uri string) (string, bool) {
-	service := c.uriConverter.URIToServiceName(uri)
+	service := c.uriConverter.URIToServiceName(uri, nil)
 	if service == "" {
 		return "", false
 	}

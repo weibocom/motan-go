@@ -2,16 +2,16 @@ package provider
 
 import (
 	"bytes"
-	"net/http"
-	"os"
-	"testing"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
 	"github.com/weibocom/motan-go/serialize"
+	"net/http"
+	"os"
+	"testing"
+	"time"
 )
 
 const httpProviderTestData = `
@@ -22,19 +22,16 @@ http-locations:
     upstream: test1
     rewriteRules:
     - 'exact /Test2/1 /(.*) /test'
-
   - match: ^/test2/.*
     type: regexp
     upstream: test2
     rewriteRules:
     - '!iregexp ^/Test2/1/.* ^/test2/(.*) /test/$1'
-
   - match: ^/test3/.*
     type: iregexp
     upstream: test3
     rewriteRules:
     - 'start / ^/(.*) /test/$1'
-
   - match: ^(/|/2/)(p1|p2).*
     type: regexp
     upstream: test4
@@ -82,5 +79,6 @@ func TestMain(m *testing.M) {
 		})
 		http.ListenAndServe(addr, handler)
 	}()
+	time.Sleep(time.Second * 2)
 	os.Exit(m.Run())
 }

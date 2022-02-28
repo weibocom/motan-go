@@ -30,7 +30,6 @@ motan-service:
     path: test
     export: "motan2:9982"
     provider: http
-    serialization: simple
     proxyAddress: localhost:9090
     filter: "accessLog,metrics"
     requestTimeout: 2000

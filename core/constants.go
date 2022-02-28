@@ -47,6 +47,7 @@ const (
 	HostKey                 = "host"
 	RemoteIPKey             = "remoteIP"
 	ProxyRegistryKey        = "proxyRegistry"
+	ProxyRegistryUrlString  = "proxyRegistryUrlString"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"
@@ -56,6 +57,7 @@ const (
 	ManagementUnixSockKey   = "managementUnixSock"
 	ManagementPortRangeKey  = "managementPortRange"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
+	MixGroups               = "mixGroups"
 )
 
 // nodeType

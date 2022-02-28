@@ -41,6 +41,7 @@ type CommandRegistryWrapper struct {
 	mux                sync.Mutex
 	ownGroupURLs       []*motan.URL
 	otherGroupListener map[string]*serviceListener
+	staticTcCommand    *ClientCommand // static traffic control command.
 	tcCommand          *ClientCommand //effective traffic control command
 	degradeCommand     *ClientCommand //effective degrade command
 	switcherCommand    *ClientCommand
@@ -97,7 +98,7 @@ func (s *serviceListener) unSubscribe(registry motan.Registry) {
 }
 
 func (s *serviceListener) subscribe(registry motan.Registry) {
-	// this listener should not reuse, so let it crash when this listener is resubscribe after unsubscribe.
+	// this listener should not reuse, so let it crash when this listener is resubscribed after unsubscribe.
 	registry.Subscribe(s.referURL, s)
 	s.urls = registry.Discover(s.referURL)
 }
@@ -145,6 +146,23 @@ func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) m
 	cmdRegistry.ownGroupURLs = make([]*motan.URL, 0)
 	cmdRegistry.otherGroupListener = make(map[string]*serviceListener)
 	cmdRegistry.cluster = cluster
+	mixGroups := cluster.GetURL().GetParam(motan.MixGroups, "")
+	if mixGroups != "" {
+		groups := strings.Split(mixGroups, ",")
+		command := &ClientCommand{CommandType: CMDTrafficControl, Index: 0, Version: "1.0", MergeGroups: make([]string, 0, len(groups)+1)}
+		ownGroup := cluster.GetURL().Group
+		command.MergeGroups = append(command.MergeGroups, ownGroup)
+		for _, group := range groups {
+			group = strings.TrimSpace(group)
+			if group != "" && group != ownGroup {
+				command.MergeGroups = append(command.MergeGroups, group)
+			}
+		}
+		if len(command.MergeGroups) > 1 { // has other group
+			cmdRegistry.staticTcCommand = command
+			vlog.Infof("set static command for cluster: %s, mixGroups: %s", cluster.GetIdentity(), mixGroups)
+		}
+	}
 	return cmdRegistry
 }
 
@@ -219,29 +237,46 @@ func (c *CommandRegistryWrapper) clear() {
 	c.otherGroupListener = make(map[string]*serviceListener)
 }
 
+func (c *CommandRegistryWrapper) getCurrentTcCommand() *ClientCommand {
+	// dynamic tc command > static tc command
+	currentCommand := c.tcCommand
+	if currentCommand == nil && c.staticTcCommand != nil {
+		currentCommand = c.staticTcCommand
+		vlog.Infof("%s use static command", c.cluster.GetIdentity())
+	}
+	return currentCommand
+}
+
 func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.URL {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	result := make([]*motan.URL, 0)
-	if c.tcCommand != nil {
-		vlog.Infof("%s get result with tc command.%+v", c.cluster.GetIdentity(), c.tcCommand)
+	currentCommand := c.getCurrentTcCommand()
+	if currentCommand != nil {
+		vlog.Infof("%s get result with tc command.%+v", c.cluster.GetIdentity(), currentCommand)
 		var buffer bytes.Buffer
-		for _, group := range c.tcCommand.MergeGroups {
+		for _, group := range currentCommand.MergeGroups {
+			var urls []*motan.URL
 			g := strings.Split(group, ":")        //group name should not include ':'
 			if c.cluster.GetURL().Group == g[0] { // own group
 				vlog.Infof("%s get result from own group: %s, group result size:%d", c.cluster.GetIdentity(), g[0], len(c.ownGroupURLs))
-				for _, u := range c.ownGroupURLs {
-					result = append(result, u)
+				urls = c.ownGroupURLs
+			} else { // other group
+				if l, ok := c.otherGroupListener[g[0]]; ok {
+					urls = l.urls
+				} else {
+					l := newSubscribe(c, g[0])
+					c.otherGroupListener[g[0]] = l
+					urls = l.urls
 				}
-			} else if l, ok := c.otherGroupListener[g[0]]; ok {
-				vlog.Infof("%s get result merge group: %s, group result size:%d", c.cluster.GetIdentity(), g[0], len(l.urls))
-				for _, u := range l.urls {
-					result = append(result, u)
-				}
-			} else {
-				vlog.Warningf("TC command merge group not found. refer:%s, group not found: %s, TC command %v", c.cluster.GetURL().GetIdentity(), g[0], c.tcCommand)
-				continue
+				vlog.Infof("%s get result merge group: %s, group result size:%d", c.cluster.GetIdentity(), g[0], len(urls))
 			}
+			if urls != nil {
+				for _, u := range urls {
+					result = append(result, u)
+				}
+			}
+			// build weight string
 			if buffer.Len() > 0 {
 				buffer.WriteString(",")
 			}
@@ -251,10 +286,10 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 			url := buildRuleURL(buffer.String())
 			result = append(result, url) // add command rule url to the end of result.
 		}
-		result = processRoute(result, c.tcCommand.RouteRules)
+		result = processRoute(result, currentCommand.RouteRules)
 		if len(result) == 0 {
 			result = c.ownGroupURLs
-			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v", c.cluster.GetURL().GetIdentity(), c.tcCommand.MergeGroups, c.tcCommand.RouteRules)
+			vlog.Warningf("TC command process failed, use default group. refer:%s, MergeGroups: %v, RouteRules %v", c.cluster.GetURL().GetIdentity(), currentCommand.MergeGroups, currentCommand.RouteRules)
 		}
 	} else {
 		result = c.ownGroupURLs
@@ -262,7 +297,7 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 	if needNotify {
 		c.notifyListener.Notify(c.registry.GetURL(), result)
 	}
-	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t", c.cluster.GetURL().GetIdentity(), c.tcCommand != nil, c.degradeCommand != nil, len(result), needNotify)
+	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t", c.cluster.GetURL().GetIdentity(), currentCommand != nil, c.degradeCommand != nil, len(result), needNotify)
 	return result
 }
 
@@ -365,44 +400,64 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	if newTcCommand != nil || (c.tcCommand != nil && newTcCommand == nil) {
 		needNotify = true
 	}
-
 	//process all kinds commands
-	c.tcCommand = newTcCommand
-	if c.tcCommand == nil {
+	c.processTcCommand(newTcCommand)
+	c.processDegradeCommand(newDegradeCommand)
+	c.processSwitcherCommand(newSwitcherCommand)
+	return needNotify
+}
+
+func (c *CommandRegistryWrapper) processTcCommand(newTcCommand *ClientCommand) {
+	removeListeners := make(map[string]*serviceListener)
+	for g, listener := range c.otherGroupListener {
+		removeListeners[g] = listener
+	}
+	newListeners := make(map[string]*serviceListener)
+
+	if newTcCommand == nil && c.staticTcCommand == nil {
 		vlog.Infof("%s process command result : no tc command. ", c.cluster.GetURL().GetIdentity())
-		for _, v := range c.otherGroupListener {
-			v.unSubscribe(c.registry)
-		}
-		c.otherGroupListener = make(map[string]*serviceListener)
 	} else {
-		vlog.Infof("%s process command result : has tc command. tc command will enable.command : %+v", c.cluster.GetURL().GetIdentity(), newTcCommand)
-		newOtherGroupListener := make(map[string]*serviceListener)
-		for _, group := range c.tcCommand.MergeGroups {
+		var groups []string
+		if newTcCommand != nil {
+			vlog.Infof("%s process command result : has dynamic tc command. tc command will enable.command : %+v", c.cluster.GetURL().GetIdentity(), newTcCommand)
+			groups = newTcCommand.MergeGroups
+		} else {
+			groups = c.staticTcCommand.MergeGroups
+		}
+		for _, group := range groups {
 			g := strings.Split(group, ":")
 			if c.cluster.GetURL().Group == g[0] { // own group already subscribe
 				continue
 			}
 			if listener, ok := c.otherGroupListener[g[0]]; ok { // already exist
 				vlog.Infof("commandWrapper %s process tc command. reuse group %s", c.cluster.GetURL().GetIdentity(), g[0])
-				newOtherGroupListener[g[0]] = listener
-				delete(c.otherGroupListener, g[0])
+				newListeners[g[0]] = listener
+				delete(removeListeners, g[0])
 			} else {
-				vlog.Infof("commandWrapper %s process tc command. subscribe new group %s", c.cluster.GetURL().GetIdentity(), g[0])
-				newGroupURL := c.cluster.GetURL().Copy()
-				newGroupURL.Group = g[0]
-				l := &serviceListener{crw: c, referURL: newGroupURL}
-				l.subscribe(c.registry)
-				newOtherGroupListener[g[0]] = l
+				newListeners[g[0]] = newSubscribe(c, g[0])
 			}
 		}
-
-		oldOtherGroupListener := c.otherGroupListener
-		c.otherGroupListener = newOtherGroupListener
-		// sync destroy
-		for _, v := range oldOtherGroupListener {
-			v.unSubscribe(c.registry)
-		}
 	}
+
+	c.otherGroupListener = newListeners
+	c.tcCommand = newTcCommand
+
+	// destroy unused listeners
+	for _, v := range removeListeners {
+		v.unSubscribe(c.registry)
+	}
+}
+
+func newSubscribe(c *CommandRegistryWrapper, group string) *serviceListener {
+	vlog.Infof("commandWrapper %s subscribe new group %s", c.cluster.GetURL().GetIdentity(), group)
+	newGroupURL := c.cluster.GetURL().Copy()
+	newGroupURL.Group = group
+	l := &serviceListener{crw: c, referURL: newGroupURL}
+	l.subscribe(c.registry)
+	return l
+}
+
+func (c *CommandRegistryWrapper) processDegradeCommand(newDegradeCommand *ClientCommand) {
 	c.degradeCommand = newDegradeCommand
 	if c.degradeCommand == nil {
 		vlog.Infof("%s no degrade command. this cluster is available.", c.cluster.GetURL().GetIdentity())
@@ -411,8 +466,9 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 		vlog.Infof("%s has degrade command. this cluster will degrade.", c.cluster.GetURL().GetIdentity())
 		c.cluster.available = false
 	}
+}
 
-	//process switcher command
+func (c *CommandRegistryWrapper) processSwitcherCommand(newSwitcherCommand *ClientCommand) {
 	switcherManger := motan.GetSwitcherManager()
 	newSwitcherMap := make(map[string]bool)
 	if newSwitcherCommand != nil {
@@ -441,8 +497,6 @@ func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo str
 	}
 	oldSwitcherMap = newSwitcherMap
 	c.switcherCommand = newSwitcherCommand
-
-	return needNotify
 }
 
 func mergeCommand(commandInfo string, url *motan.URL) (tcCommand *ClientCommand, degradeCommand *ClientCommand, switcherCommand *ClientCommand) {
@@ -488,8 +542,9 @@ func (c *CommandRegistryWrapper) Notify(registryURL *motan.URL, urls []*motan.UR
 	vlog.Infof("CommandRegistryWrapper notify urls size is %d. refer: %v, registry: %v", len(urls), c.cluster.GetURL(), registryURL)
 	c.ownGroupURLs = urls
 	needNotify := false
-	if c.tcCommand != nil {
-		for _, group := range c.tcCommand.MergeGroups {
+	currentCommand := c.getCurrentTcCommand()
+	if currentCommand != nil {
+		for _, group := range currentCommand.MergeGroups {
 			g := strings.Split(group, ":")
 			if g[0] == c.cluster.GetURL().Group {
 				needNotify = true

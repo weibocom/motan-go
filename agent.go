@@ -3,7 +3,6 @@ package motan
 import (
 	"flag"
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -14,7 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shirou/gopsutil/process"
+	cfg "github.com/weibocom/motan-go/config"
+	"gopkg.in/yaml.v2"
+
+	"github.com/shirou/gopsutil/v3/process"
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
@@ -41,6 +43,7 @@ type Agent struct {
 	ConfigFile string
 	extFactory motan.ExtensionFactory
 	Context    *motan.Context
+	onAfterStart []func(a *Agent)
 	recover    bool
 
 	agentServer motan.Server
@@ -69,6 +72,13 @@ type Agent struct {
 	clsLock sync.Mutex
 
 	configurer *DynamicConfigurer
+
+	commandHandlers []CommandHandler
+}
+
+type CommandHandler interface {
+	CanServe(a *Agent, l *AgentListener, registryURL *motan.URL, cmdInfo string) bool
+	Serve() (currentCommandInfo string)
 }
 
 type serviceMapItem struct {
@@ -106,6 +116,22 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 	url.ClearCachedInfo()
 }
 
+func (a *Agent) OnAfterStart(f func(a *Agent)) {
+	a.onAfterStart = append(a.onAfterStart, f)
+}
+// RuntimeDir acquires the agent runtime working directory
+func (a *Agent) RegisterCommandHandler(f CommandHandler) {
+	a.commandHandlers = append(a.commandHandlers, f)
+}
+
+func (a *Agent) callAfterStart() {
+	time.AfterFunc(time.Second*5, func() {
+		for _, f := range a.onAfterStart {
+			f(a)
+		}
+	})
+}
+
 // RuntimeDir acquires the agent runtime working directory
 func (a *Agent) RuntimeDir() string {
 	return a.runtimedir
@@ -130,12 +156,23 @@ func (a *Agent) SetAllServicesUnavailable() {
 
 
 func (a *Agent) StartMotanAgent() {
+	a.StartMotanAgentFromConfig(nil)
+}
+
+func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	if !flag.Parsed() {
 		flag.Parse()
 	}
 	a.recover = *motan.Recover
+
+	if config != nil {
+		a.Context = &motan.Context{Config: config}
+	} else {
 	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
+	}
+
 	a.Context.Initialize()
+
 	if a.Context.Config == nil {
 		fmt.Println("init agent context fail. ConfigFile:", a.Context.ConfigFile)
 		return
@@ -366,9 +403,9 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 
 	a.Context = ctx
 
-	serviceItemKeep := make(map[string] bool)
-	clusterMap := make(map[interface{}] interface{})
-	serviceMap := make(map[interface{}] interface{})
+	serviceItemKeep := make(map[string]bool)
+	clusterMap := make(map[interface{}]interface{})
+	serviceMap := make(map[interface{}]interface{})
 	for _, url := range a.Context.RefersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
@@ -510,6 +547,7 @@ func (a *Agent) startAgent() {
 	vlog.Infof("Motan agent is started. port:%d", a.port)
 	fmt.Println("Motan agent start.")
 	a.agentServer = server
+	a.callAfterStart()
 	err := server.Open(true, true, handler, a.extFactory)
 	if err != nil {
 		vlog.Fatalf("start agent fail. port :%d, err: %v", a.port, err)
@@ -867,8 +905,30 @@ type AgentListener struct {
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
 	//TODO notify according cluster
-	if commandInfo != a.CurrentCommandInfo {
+
+	if commandInfo == a.CurrentCommandInfo {
+		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
+		return
+	}
+	defer motan.HandlePanic(nil)
+	defer func() {
 		a.CurrentCommandInfo = commandInfo
+	}()
+	if len(a.agent.commandHandlers) > 0 {
+		canServeExists := false
+		// there are defined some command handlers
+		for _, h := range a.agent.commandHandlers {
+			if ok := h.CanServe(a.agent, a, registryURL, commandInfo); ok {
+				canServeExists = true
+				commandInfo = h.Serve()
+			}
+		}
+		// there are handlers had processed the command, so we should return here, prevent default processing.
+		if canServeExists {
+			return
+		}
+	}
+
 		a.agent.clusterMap.Range(func(k, v interface{}) bool {
 			cls := v.(*cluster.MotanCluster)
 			for _, registry := range cls.Registries {
@@ -878,7 +938,6 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 			}
 			return true
 		})
-	}
 }
 
 func (a *AgentListener) GetIdentity() string {

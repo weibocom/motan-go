@@ -28,12 +28,12 @@ func TestProcessRouter(t *testing.T) {
 	//not match
 	*motan.LocalIP = "10.75.0.8"
 	result := processRoute(urls, router)
-	checksize(len(result), len(urls), t)
+	checkSize(len(result), len(urls), t)
 
 	// prefix match
 	*motan.LocalIP = "10.73.1.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 2, t)
+	checkSize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.75.1")
 	}, t)
@@ -42,7 +42,7 @@ func TestProcessRouter(t *testing.T) {
 	router = newRouter("10.75.0.8 to 10.73.1.*")
 	*motan.LocalIP = "10.75.0.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 2, t)
+	checkSize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.73.1")
 	}, t)
@@ -51,7 +51,7 @@ func TestProcessRouter(t *testing.T) {
 	router = newRouter(" * to 10.75.*")
 	*motan.LocalIP = "10.108.0.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 4, t)
+	checkSize(len(result), 4, t)
 	checkHost(result, func(host string) bool {
 		return !strings.HasPrefix(host, "10.75")
 	}, t)
@@ -60,18 +60,18 @@ func TestProcessRouter(t *testing.T) {
 	router = newRouter(" * to 10.75.*", "10.108.* to 10.77.1.* ")
 	*motan.LocalIP = "10.108.0.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 0, t)
+	checkSize(len(result), 0, t)
 
 	router = newRouter(" * to 10.75.*", "10.108.* to 10.75.1.* ")
 	result = processRoute(urls, router)
-	checksize(len(result), 2, t)
+	checkSize(len(result), 2, t)
 	checkHost(result, func(host string) bool {
 		return !(strings.HasPrefix(host, "10.77.1") || strings.HasPrefix(host, "10.75"))
 	}, t)
 
 	router = newRouter(" * to 10.*", "10.108.* to !10.73.1.* ")
 	result = processRoute(urls, router)
-	checksize(len(result), 6, t)
+	checkSize(len(result), 6, t)
 	checkHost(result, func(host string) bool {
 		return !(strings.HasPrefix(host, "10.77.1") || strings.HasPrefix(host, "10.75"))
 	}, t)
@@ -79,21 +79,21 @@ func TestProcessRouter(t *testing.T) {
 	router = newRouter(" 10.79.* to !10.75.1.*", "10.108.* to 10.73.1.* ", "10.108.* to !10.73.1.5")
 	*motan.LocalIP = "10.79.0.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 6, t)
+	checkSize(len(result), 6, t)
 	checkHost(result, func(host string) bool {
 		return strings.HasPrefix(host, "10.75.1")
 	}, t)
 
 	*motan.LocalIP = "10.108.0.8"
 	result = processRoute(urls, router)
-	checksize(len(result), 1, t)
+	checkSize(len(result), 1, t)
 	checkHost(result, func(host string) bool {
 		return host != "10.73.1.3"
 	}, t)
 }
 
 func TestGetResultWithCommand(t *testing.T) {
-	crw := getDefalultCommandWarper()
+	crw := getDefaultCommandWrapper(false)
 	cmds := make([]string, 0, 10)
 	cmds = append(cmds, buildCmd(1, CMDTrafficControl, "*", "\"group0:3\",\"group1:5\"", "\" 10.79.* to !10.75.1.*\", \"10.108.* to 10.73.1.* \""))
 	cmds = append(cmds, buildCmd(1, CMDDegrade, "com.weibo.test.TestService", "", ""))
@@ -124,24 +124,53 @@ func TestGetResultWithCommand(t *testing.T) {
 	}
 
 	// check urls
-	hasrule := false
+	hasRule := false
 	for _, u := range urls {
 		if u.Protocol == RuleProtocol {
-			hasrule = true
+			hasRule = true
 			continue
 		}
 		if !strings.HasPrefix(u.Host, "10.73.1") {
 			t.Errorf("notify urls host correct! url:%+v\n", u)
 		}
 	}
-	if !hasrule {
+	if !hasRule {
 		t.Errorf("notify urls not has rule url! urls:%+v\n", urls)
 	}
 
+	// has static command
+	crw = getDefaultCommandWrapper(true)
+	urls = crw.getResultWithCommand(false)
+	crw.notifyListener = listener
+	listener.urls = nil
+	validateResult(crw, []string{"test-group1", "test-group2", "test-group3"}, t)
+
+	cmds = make([]string, 0, 10)
+	cmds = append(cmds, buildCmd(1, CMDTrafficControl, "*", "\"group0:3\",\"group1:5\"", ""))
+	crw.processCommand(ServiceCmd, buildCmdList(cmds))
+	validateResult(crw, []string{"group0", "group1"}, t)
+
+	crw.processCommand(ServiceCmd, "")
+	validateResult(crw, []string{"test-group1", "test-group2", "test-group3"}, t)
+}
+
+func validateResult(crw *CommandRegistryWrapper, notifyGroups []string, t *testing.T) {
+	if len(crw.otherGroupListener) != len(notifyGroups) {
+		t.Errorf("other group listener with wrong size. otherGroupListener: %d, comand merge groups:%d, crw:%+v\n", len(crw.otherGroupListener), len(notifyGroups), crw)
+	}
+	size := 0
+	for _, group := range notifyGroups {
+		crw.otherGroupListener[group].Notify(crw.registry.GetURL(), buildURLs(group))
+		size += len(crw.otherGroupListener[group].urls)
+	}
+	urls := crw.getResultWithCommand(false)
+	if len(urls) != size+1 { // with weight rule
+		t.Errorf("result size not correct. expect size:%d, actual size:%d", size+1, len(urls))
+	}
 }
 
 func TestProcessCommand(t *testing.T) {
-	crw := getDefalultCommandWarper()
+	crw := getDefaultCommandWrapper(false)
 	cmds := make([]string, 0, 10)
 	cmds = append(cmds, buildCmd(1, CMDTrafficControl, "*", "\"group0:3\",\"group1:5\"", ""))
 	cmds = append(cmds, buildCmd(1, CMDDegrade, "com.weibo.test.TestService", "", ""))
@@ -184,6 +213,26 @@ func TestProcessCommand(t *testing.T) {
 		t.Errorf("abnormal command process not correct! notify: %t, crw:%+v\n", notify, crw)
 	}
 	fmt.Printf("notify:%t, crw:%+v\n", notify, crw)
+
+	// has static command
+	crw = getDefaultCommandWrapper(true)
+	processServiceCmd(crw, cl, t)
+	notify = crw.processCommand(ServiceCmd, "")
+	if !notify {
+		t.Errorf("test empty service command fail! notify: %t, crw:%+v\n", notify, crw)
+	}
+	if len(crw.otherGroupListener) != len(crw.staticTcCommand.MergeGroups)-1 {
+		t.Errorf("other group listener with wrong size. otherGroupListener: %d, static comand mergeGroups:%d, crw:%+v\n", len(crw.otherGroupListener), len(crw.staticTcCommand.MergeGroups), crw)
+	}
+	for _, group := range crw.staticTcCommand.MergeGroups {
+		if group == crw.cluster.GetURL().Group {
+			continue
+		}
+		if _, ok := crw.otherGroupListener[group]; !ok {
+			t.Errorf("not have static group listener :%s, crw:%+v\n", group, crw)
+		}
+	}
+
 }
 
 func processServiceCmd(crw *CommandRegistryWrapper, cl string, t *testing.T) {
@@ -239,6 +288,46 @@ func TestMatchPattern(t *testing.T) {
 	}
 }
 
+func TestParseStaticCommand(t *testing.T) {
+	ownGroup := "ownGroup"
+	for _, unit := range []struct {
+		mixGroup         string
+		shouldHasCommand bool
+		groups           []string
+	}{
+		{"test-group1", true, []string{ownGroup, "test-group1"}},
+		{"test-group1 , test-group2", true, []string{ownGroup, "test-group1", "test-group2"}},
+		{"test-group1 , test-group2,test-group3", true, []string{ownGroup, "test-group1", "test-group2", "test-group3"}},
+		{"test-group1 , " + ownGroup + ",test-group2,test-group3", true, []string{ownGroup, "test-group1", "test-group2", "test-group3"}},
+		{ownGroup, false, nil},
+		{ownGroup + ",   ", false, nil},
+		{"   ", false, nil},
+		{"  , ", false, nil},
+	} {
+		cluster := initCluster()
+		cluster.GetURL().Group = ownGroup
+		cluster.url.Parameters[motan.MixGroups] = unit.mixGroup
+		registry := cluster.extFactory.GetRegistry(RegistryURL)
+		commandRegistry := GetCommandRegistryWrapper(cluster, registry).(*CommandRegistryWrapper)
+		command := commandRegistry.staticTcCommand
+		if unit.shouldHasCommand {
+			if command == nil {
+				t.Errorf("static command is nil. mix groups: %s", unit.mixGroup)
+			}
+			if len(unit.groups) != len(command.MergeGroups) {
+				t.Errorf("merge group size not correct. mix groups: %s, expect size: %d, actual size:%d", unit.mixGroup, len(unit.groups), len(command.MergeGroups))
+			}
+			for i, group := range unit.groups {
+				if group != command.MergeGroups[i] {
+					t.Errorf("merge groups not same. mix groups: %s, index:%d, expect:%s, actual:%s", unit.mixGroup, i, group, command.MergeGroups[i])
+				}
+			}
+		} else if command != nil {
+			t.Errorf("command should nil. mix groups: %s", unit.mixGroup)
+		}
+	}
+}
+
 func newRouter(rules ...string) []string {
 	router := make([]string, 0, 20)
 	for _, r := range rules {
@@ -261,9 +350,9 @@ func buildURLs(group string) []*motan.URL {
 	return urls
 }
 
-func checksize(realsize int, expectsize int, t *testing.T) {
-	if realsize != expectsize {
-		t.Errorf("test router check size fail. real:%d, exp:%d\n", realsize, expectsize)
+func checkSize(realSize int, expectSize int, t *testing.T) {
+	if realSize != expectSize {
+		t.Errorf("test router check size fail. real:%d, exp:%d\n", realSize, expectSize)
 	}
 }
 
@@ -275,8 +364,11 @@ func checkHost(urls []*motan.URL, f func(host string) bool, t *testing.T) {
 	}
 }
 
-func getDefalultCommandWarper() *CommandRegistryWrapper {
+func getDefaultCommandWrapper(withStaticCommand bool) *CommandRegistryWrapper {
 	cluster := initCluster()
+	if withStaticCommand {
+		cluster.url.Parameters[motan.MixGroups] = "test-group1,test-group2,test-group3"
+	}
 	registry := cluster.extFactory.GetRegistry(RegistryURL)
 	return GetCommandRegistryWrapper(cluster, registry).(*CommandRegistryWrapper)
 }
@@ -317,5 +409,5 @@ func (m *MockListener) Notify(registryURL *motan.URL, urls []*motan.URL) {
 }
 
 func (m *MockListener) GetIdentity() string {
-	return "mocklistener"
+	return "mockListener"
 }
