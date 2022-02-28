@@ -3,6 +3,7 @@ package core
 import (
 	"flag"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,8 @@ func TestGetContext(t *testing.T) {
 	assert.NotNil(t, rs.RefersURLs, "parse refers urls fail.")
 	assert.NotNil(t, rs.RefersURLs["status-rpc-json"], "parse refer section fail.")
 	assert.Equal(t, "test-group", rs.RefersURLs["status-rpc-json"].Group, "get refer key fail.")
+	assert.Contains(t, rs.RefersURLs["status-rpc-json"].Parameters["filter"], "accessLog", "get refer filter fail.")
+	assert.Contains(t, rs.RefersURLs["status-rpc-json"].Parameters["filter"], "metrics", "get refer filter fail.")
 	assert.NotEqual(t, 0, len(rs.ServiceURLs), "parse service urls fail")
 	assert.Equal(t, "motan-demo-rpc", rs.ServiceURLs["mytest-motan2"].Group, "parse serivce key fail")
 }
@@ -62,4 +65,13 @@ func TestNewContext(t *testing.T) {
 	assert.NotNil(t, context.Config)
 	context = NewContext("testdata", "app", "")
 	assert.NotNil(t, context.Config)
+
+	globalFilterContext := NewContext("testdata", "globalFilter", "app-idc1")
+	assert.NotNil(t, globalFilterContext)
+	filterArr := strings.Split(globalFilterContext.RefersURLs["test-motan-refer"].Parameters["filter"], ",")
+	assert.Contains(t, filterArr, "testGlobalFilter1")
+	assert.Contains(t, filterArr, "testGlobalFilter2")
+	assert.NotContains(t, filterArr, "testGlobalFilter3")
+	assert.Contains(t, filterArr, "accessLog")
+	assert.Contains(t, filterArr, "metrics")
 }

@@ -40,11 +40,11 @@ const (
 )
 
 type Agent struct {
-	ConfigFile string
-	extFactory motan.ExtensionFactory
-	Context    *motan.Context
+	ConfigFile   string
+	extFactory   motan.ExtensionFactory
+	Context      *motan.Context
 	onAfterStart []func(a *Agent)
-	recover    bool
+	recover      bool
 
 	agentServer motan.Server
 
@@ -119,7 +119,7 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 func (a *Agent) OnAfterStart(f func(a *Agent)) {
 	a.onAfterStart = append(a.onAfterStart, f)
 }
-// RuntimeDir acquires the agent runtime working directory
+
 func (a *Agent) RegisterCommandHandler(f CommandHandler) {
 	a.commandHandlers = append(a.commandHandlers, f)
 }
@@ -154,7 +154,6 @@ func (a *Agent) SetAllServicesUnavailable() {
 	a.saveStatus()
 }
 
-
 func (a *Agent) StartMotanAgent() {
 	a.StartMotanAgentFromConfig(nil)
 }
@@ -168,7 +167,7 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	if config != nil {
 		a.Context = &motan.Context{Config: config}
 	} else {
-	a.Context = &motan.Context{ConfigFile: a.ConfigFile}
+		a.Context = &motan.Context{ConfigFile: a.ConfigFile}
 	}
 
 	a.Context.Initialize()
@@ -904,7 +903,7 @@ type AgentListener struct {
 
 func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, commandInfo string) {
 	vlog.Infof("agentlistener command notify:%s", commandInfo)
-	//TODO notify according cluster
+	// command repeated, just ignore it.
 
 	if commandInfo == a.CurrentCommandInfo {
 		vlog.Infof("agentlistener ignore repeated command notify:%s", commandInfo)
@@ -929,15 +928,15 @@ func (a *AgentListener) NotifyCommand(registryURL *motan.URL, commandType int, c
 		}
 	}
 
-		a.agent.clusterMap.Range(func(k, v interface{}) bool {
-			cls := v.(*cluster.MotanCluster)
-			for _, registry := range cls.Registries {
-				if cr, ok := registry.(motan.CommandNotifyListener); ok {
-					cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
-				}
+	a.agent.clusterMap.Range(func(k, v interface{}) bool {
+		cls := v.(*cluster.MotanCluster)
+		for _, registry := range cls.Registries {
+			if cr, ok := registry.(motan.CommandNotifyListener); ok {
+				cr.NotifyCommand(registryURL, cluster.AgentCmd, commandInfo)
 			}
-			return true
-		})
+		}
+		return true
+	})
 }
 
 func (a *AgentListener) GetIdentity() string {

@@ -1,0 +1,11 @@
+motan-agent:
+  port: 9981
+  mport: 8002
+  log_dir: logs
+  registry: consul
+  application: testGlobal
+  globalFilter: "testGlobalFilter1,testGlobalFilter2,testGlobalFilter3"
+
+import-refer:
+  - motan.TestService
+

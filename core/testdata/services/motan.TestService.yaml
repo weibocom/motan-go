@@ -18,3 +18,4 @@ motan-refer:
     serialization: simple
     basicRefer: test-basic-refer
     requestTimeout: 1000
+    disableGlobalFilter: "testGlobalFilter3"
