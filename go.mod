@@ -17,12 +17,12 @@ require (
 	github.com/shirou/gopsutil/v3 v3.21.9
 	github.com/smartystreets/goconvey v0.0.0-20190330032615-68dc04aab96a // indirect
 	github.com/stretchr/testify v1.7.0
-	github.com/valyala/fasthttp v1.2.0
+	github.com/valyala/fasthttp v1.34.0
 	github.com/weibreeze/breeze-go v0.1.1
 	go.uber.org/atomic v1.3.2 // indirect
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.9.1
-	golang.org/x/net v0.0.0-20181005035420-146acd28ed58
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	google.golang.org/genproto v0.0.0-20180831171423-11092d34479b // indirect
 	google.golang.org/grpc v1.15.0
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
