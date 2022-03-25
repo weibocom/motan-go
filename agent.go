@@ -191,6 +191,7 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
 	go a.registerAgent()
+	go a.startPipe()
 	f, err := os.Create(a.pidfile)
 	if err != nil {
 		vlog.Errorf("create file %s fail.", a.pidfile)
@@ -579,6 +580,22 @@ func (a *Agent) registerAgent() {
 			vlog.Warningf("can not find agent registry in conf, so do not register. agent url:%s", agentURL.GetIdentity())
 		}
 	}
+}
+
+func (a *Agent) startPipe() {
+	vlog.Infoln("begin start pipe.")
+	if a.Context.PipeURL == nil {
+		vlog.Infof("not config pipe section,skip")
+		return
+	}
+	pipe := a.extFactory.GetPipe()
+	if pipe == nil {
+		vlog.Infof("not register pipe,skip")
+		return
+	}
+	pipe.Initialize(a.Context)
+	pipe.Start()
+	vlog.Infoln("end start pipe.")
 }
 
 type agentMessageHandler struct {
