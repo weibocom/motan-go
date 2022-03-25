@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,6 +284,14 @@ type Serialization interface {
 	DeSerializeMulti(b []byte, v []interface{}) ([]interface{}, error)
 }
 
+// Pipe : Pipe
+type Pipe interface {
+	Init(url *URL)
+	Start()
+	GetPipePort() http.HandlerFunc
+	NotifyMessage() http.HandlerFunc
+}
+
 // ExtensionFactory : can regiser and get all kinds of extension implements.
 type ExtensionFactory interface {
 	GetHa(url *URL) HaStrategy
@@ -294,6 +303,7 @@ type ExtensionFactory interface {
 	GetServer(url *URL) Server
 	GetMessageHandler(name string) MessageHandler
 	GetSerialization(name string, id int) Serialization
+	GetPipe() Pipe
 	RegistExtFilter(name string, newFilter DefaultFilterFunc)
 	RegistExtHa(name string, newHa NewHaFunc)
 	RegistExtLb(name string, newLb NewLbFunc)
@@ -303,6 +313,7 @@ type ExtensionFactory interface {
 	RegistExtServer(name string, newServer NewServerFunc)
 	RegistryExtMessageHandler(name string, newMessage NewMessageHandlerFunc)
 	RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc)
+	RegisterExtPipe(pipe NewPipeFunc)
 }
 
 // Initializable :Initializable
@@ -641,6 +652,7 @@ type NewRegistryFunc func(url *URL) Registry
 type NewServerFunc func(url *URL) Server
 type NewMessageHandlerFunc func() MessageHandler
 type NewSerializationFunc func() Serialization
+type NewPipeFunc func() Pipe
 
 type DefaultExtensionFactory struct {
 	// factories
@@ -653,6 +665,7 @@ type DefaultExtensionFactory struct {
 	servers           map[string]NewServerFunc
 	messageHandlers   map[string]NewMessageHandlerFunc
 	serializations    map[string]NewSerializationFunc
+	pipe 			  Pipe
 
 	// singleton instance
 	registries      map[string]Registry
@@ -765,6 +778,10 @@ func (d *DefaultExtensionFactory) GetSerialization(name string, id int) Serializ
 	return nil
 }
 
+func (d *DefaultExtensionFactory) GetPipe() Pipe {
+	return d.pipe
+}
+
 func (d *DefaultExtensionFactory) RegistExtFilter(name string, newFilter DefaultFilterFunc) {
 	// 覆盖方式
 	d.filterFactories[name] = newFilter
@@ -801,6 +818,10 @@ func (d *DefaultExtensionFactory) RegistryExtMessageHandler(name string, newMess
 func (d *DefaultExtensionFactory) RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc) {
 	d.serializations[name] = newSerialization
 	d.serializations[strconv.Itoa(id)] = newSerialization
+}
+
+func (d *DefaultExtensionFactory) RegisterExtPipe(newPipe NewPipeFunc) {
+	d.pipe = newPipe()
 }
 
 func (d *DefaultExtensionFactory) Initialize() {
