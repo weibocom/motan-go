@@ -27,6 +27,7 @@ const (
 	importHTTPLocationSection = "import-http-location"
 	dynamicSection            = "dynamic-param"
 	SwitcherSection           = "switcher"
+	PipeSection				  = "motan-pipe"
 
 	// URLConfKey is config id
 	// config Keys
@@ -58,6 +59,7 @@ type Context struct {
 	AgentURL         *URL
 	ClientURL        *URL
 	ServerURL        *URL
+	PipeURL          *URL
 
 	application string
 	pool        string
@@ -349,6 +351,8 @@ func (c *Context) parseHostURL() {
 	c.ClientURL = confToURL(clientInfo)
 	serverInfo, _ := c.Config.GetSection(serverSection)
 	c.ServerURL = confToURL(serverInfo)
+	pipeInfo, _ := c.Config.GetSection(PipeSection)
+	c.PipeURL = confToURL(pipeInfo)
 }
 
 func (c *Context) parseRegistrys() {

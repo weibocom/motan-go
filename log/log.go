@@ -31,6 +31,7 @@ const (
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
+	defaultPipeLogName    = "pipe"
 	defaultLogSeparator   = "-"
 	defaultLogLevel       = InfoLevel
 	defaultFlushInterval  = time.Second
@@ -64,6 +65,14 @@ type Logger interface {
 	Fatalf(string, ...interface{})
 	AccessLog(*AccessLogEntity)
 	MetricsLog(string)
+	PipeInfoln(...interface{})
+	PipeInfof(format string, fields ...interface{})
+	PipeWarningln(fields ...interface{})
+	PipeWarningf(format string, fields ...interface{})
+	PipeErrorln(fields ...interface{})
+	PipeErrorf(format string, fields ...interface{})
+	PipeFatalln(fields ...interface{})
+	PipeFatalf(format string, fields ...interface{})
 	Flush()
 	SetAsync(bool)
 	GetLevel() LogLevel
@@ -164,6 +173,54 @@ func MetricsLog(msg string) {
 	}
 }
 
+func PipeInfoln(args ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeInfoln(args...)
+	}
+}
+
+func PipeInfof(format string, fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeInfof(format, fields...)
+	}
+}
+
+func PipeWarningln(fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeWarningln(fields...)
+	}
+}
+
+func PipeWarningf(format string, fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeWarningf(format, fields...)
+	}
+}
+
+func PipeErrorln(fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeErrorln(fields...)
+	}
+}
+
+func PipeErrorf(format string, fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeErrorf(format, fields...)
+	}
+}
+
+func PipeFatalln(fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeFatalln(fields...)
+	}
+}
+
+func PipeFatalf(format string, fields ...interface{}) {
+	if loggerInstance != nil {
+		loggerInstance.PipeFatalf(format, fields...)
+	}
+}
+
 func startFlush() {
 	go func() {
 		defer func() {
@@ -257,15 +314,24 @@ func newDefaultLog() Logger {
 	)
 	logger := zap.New(zapCore, zap.AddCaller(), zap.AddCallerSkip(2))
 
+	pipeZapCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(pName + defaultLogSeparator + defaultPipeLogName +defaultLogSuffix))),
+		level,
+	)
+	pipeLogger := zap.New(pipeZapCore, zap.AddCaller(), zap.AddCallerSkip(2))
+
 	accessLogger, accessLevel := newZapLogger(pName + defaultLogSeparator + defaultAccessLogName + defaultLogSuffix)
 	metricsLogger, metricsLevel := newZapLogger(pName + defaultLogSeparator + defaultMetricsLogName + defaultLogSuffix)
 	return &defaultLogger{
 		logger:        logger.Sugar(),
 		accessLogger:  accessLogger,
 		metricsLogger: metricsLogger,
+		pipeLogger: pipeLogger.Sugar(),
 		loggerLevel:   level,
 		accessLevel:   accessLevel,
 		metricsLevel:  metricsLevel,
+		pipeLevel: level,
 	}
 }
 
@@ -302,9 +368,11 @@ type defaultLogger struct {
 	logger           *zap.SugaredLogger
 	accessLogger     *zap.Logger
 	metricsLogger    *zap.Logger
+	pipeLogger       *zap.SugaredLogger
 	loggerLevel      zap.AtomicLevel
 	accessLevel      zap.AtomicLevel
 	metricsLevel     zap.AtomicLevel
+	pipeLevel		 zap.AtomicLevel
 }
 
 func (d *defaultLogger) Infoln(fields ...interface{}) {
@@ -401,10 +469,43 @@ func (d *defaultLogger) MetricsLog(msg string) {
 	d.metricsLogger.Info(msg)
 }
 
+func (d *defaultLogger) PipeInfoln(fields ...interface{}) {
+	d.pipeLogger.Info(fields...)
+}
+
+func (d *defaultLogger) PipeInfof(format string, fields ...interface{}) {
+	d.pipeLogger.Infof(format, fields...)
+}
+
+func (d *defaultLogger) PipeWarningln(fields ...interface{}) {
+	d.pipeLogger.Warn(fields...)
+}
+
+func (d *defaultLogger) PipeWarningf(format string, fields ...interface{}) {
+	d.pipeLogger.Warnf(format, fields...)
+}
+
+func (d *defaultLogger) PipeErrorln(fields ...interface{}) {
+	d.pipeLogger.Error(fields...)
+}
+
+func (d *defaultLogger) PipeErrorf(format string, fields ...interface{}) {
+	d.pipeLogger.Errorf(format, fields...)
+}
+
+func (d *defaultLogger) PipeFatalln(fields ...interface{}) {
+	d.pipeLogger.Fatal(fields...)
+}
+
+func (d *defaultLogger) PipeFatalf(format string, fields ...interface{}) {
+	d.pipeLogger.Fatalf(format, fields...)
+}
+
 func (d *defaultLogger) Flush() {
 	_ = d.logger.Sync()
 	_ = d.accessLogger.Sync()
 	_ = d.metricsLogger.Sync()
+	_ = d.pipeLogger.Sync()
 }
 
 func (d *defaultLogger) SetAsync(value bool) {
