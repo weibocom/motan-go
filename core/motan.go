@@ -286,7 +286,7 @@ type Serialization interface {
 
 // Pipe : Pipe
 type Pipe interface {
-	Init(url *URL)
+	Initialize(context *Context)
 	Start()
 	GetPipePort() http.HandlerFunc
 	NotifyMessage() http.HandlerFunc

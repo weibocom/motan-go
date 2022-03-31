@@ -593,7 +593,7 @@ func (a *Agent) startPipe()  {
 		vlog.Infof("not register pipe,skip")
 		return
 	}
-	pipe.Init(a.Context.PipeURL)
+	pipe.Initialize(a.Context)
 	pipe.Start()
 }
 
