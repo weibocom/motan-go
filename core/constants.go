@@ -33,6 +33,8 @@ const (
 	ApplicationKey          = "application"
 	VersionKey              = "version"
 	FilterKey               = "filter"
+	GlobalFilter            = "globalFilter"
+	DisableGlobalFilter     = "disableGlobalFilter"
 	RegistryKey             = "registry"
 	WeightKey               = "weight"
 	SerializationKey        = "serialization"

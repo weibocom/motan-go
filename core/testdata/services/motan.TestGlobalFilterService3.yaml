@@ -1,0 +1,21 @@
+motan-basicRefer:
+  test-basic-refer:
+    group: motan-demo-rpc
+    protocol: motan2
+    registry: consul
+    requestTimeout: 1000
+    haStrategy: failover
+    loadbalance: random
+    maxClientConnection: 10
+    minClientConnection: 1
+    retries: 0
+    application: test
+
+motan-refer:
+  test-global-filter-service-3-refer:
+    path: motan.TestGlobalFilterService3
+    serialization: simple
+    basicRefer: test-basic-refer
+    requestTimeout: 1000
+    filter: accessLog,metrics
+    disableGlobalFilter: "testGlobalFilter2,testGlobalFilter3"
