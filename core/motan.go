@@ -290,6 +290,8 @@ type Pipe interface {
 	Start()
 	GetPipePort() http.HandlerFunc
 	NotifyMessage() http.HandlerFunc
+	GetSdkMetrics() http.HandlerFunc
+	GetMeshMetrics() http.HandlerFunc
 }
 
 // ExtensionFactory : can regiser and get all kinds of extension implements.
