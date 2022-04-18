@@ -25,6 +25,7 @@ func TestExtFactory(t *testing.T) {
 	ext.RegistExtServer("test", newServer)
 	ext.RegistryExtMessageHandler("test", newMsHandler)
 	ext.RegistryExtSerialization("test", 0, newSerial)
+	ext.RegisterExtPipe(newPipe)
 }
 
 func TestRegistLocalProvider(t *testing.T) {
@@ -172,6 +173,10 @@ func newMsHandler() MessageHandler {
 }
 
 func newSerial() Serialization {
+	return nil
+}
+
+func newPipe() Pipe  {
 	return nil
 }
 

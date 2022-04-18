@@ -582,8 +582,8 @@ func (a *Agent) registerAgent() {
 	}
 }
 
-func (a *Agent) startPipe()  {
-	vlog.Infoln("start pipe.")
+func (a *Agent) startPipe() {
+	vlog.Infoln("begin start pipe.")
 	if a.Context.PipeURL == nil {
 		vlog.Infof("not config pipe section,skip")
 		return
@@ -595,6 +595,7 @@ func (a *Agent) startPipe()  {
 	}
 	pipe.Initialize(a.Context)
 	pipe.Start()
+	vlog.Infoln("end start pipe.")
 }
 
 type agentMessageHandler struct {

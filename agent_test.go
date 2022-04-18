@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	vlog "github.com/weibocom/motan-go/log"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -42,7 +43,11 @@ func TestMain(m *testing.M) {
 		http.ListenAndServe(addr, handler)
 	}()
 	go func() {
-		agent = NewAgent(nil)
+		ext := GetDefaultExtFactory()
+		ext.RegisterExtPipe(func() core.Pipe {
+			return &pipeDemo{}
+		})
+		agent = NewAgent(ext)
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
@@ -334,4 +339,37 @@ func (l *LocalTestServiceProvider) Destroy() {
 
 func (l *LocalTestServiceProvider) GetPath() string {
 	return l.url.Path
+}
+
+
+type pipeDemo struct {
+}
+
+func (p *pipeDemo)Initialize(context *core.Context)  {
+	vlog.PipeInfoln("pipe Initialize, test pipeLog")
+	vlog.PipeInfof("pipe Initialize, test pipeLog")
+	vlog.PipeWarningln("pipe Initialize, test pipeLog")
+	vlog.PipeWarningf("pipe Initialize, test pipeLog")
+	vlog.PipeErrorln("pipe Initialize, test pipeLog")
+	vlog.PipeErrorf("pipe Initialize, test pipeLog")
+	vlog.PipeFatalln("pipe Initialize, test pipeLog")
+	vlog.PipeFatalf("pipe Initialize, test pipeLog")
+}
+
+func (p *pipeDemo)Start() {
+}
+
+func (p *pipeDemo)GetPipePort() http.HandlerFunc {
+	return nil
+}
+
+func (p *pipeDemo)NotifyMessage() http.HandlerFunc {
+	return nil
+}
+func (p *pipeDemo)GetSdkRuntime() http.HandlerFunc {
+	return nil
+}
+
+func (p *pipeDemo)GetMeshRuntime() http.HandlerFunc {
+	return nil
 }
