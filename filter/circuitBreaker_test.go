@@ -81,7 +81,7 @@ func TestCircuitBreakerFilter(t *testing.T) {
 	}
 	time.Sleep(10000 * time.Millisecond) //wait until async call complete
 	countLock.RLock()
-	if count != 61 && count != 62 {
+	if count < 61 {
 		t.Error("Test sleepWindow failed! count:", count)
 	}
 	countLock.RUnlock()
