@@ -696,8 +696,10 @@ func sleep(w http.ResponseWriter, d time.Duration) {
 	if cn, ok := w.(http.CloseNotifier); ok {
 		clientGone = cn.CloseNotify()
 	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
 	select {
-	case <-time.After(d):
+	case <-timer.C:
 	case <-clientGone:
 	}
 }
