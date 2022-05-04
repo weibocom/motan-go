@@ -610,13 +610,15 @@ func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Level      string `json:"level"`
 		AccessLog  bool   `json:"accessLog"`
 		MetricsLog bool   `json:"metricsLog"`
+		PipeLog    bool   `json:"pipeLog"`
 	}
 	switch r.URL.Path {
 	case "/logConfig/get":
 		body, _ := json.Marshal(resBody{
 			Level:      vlog.GetLevel().String(),
 			AccessLog:  vlog.GetAccessLogAvailable(),
-			MetricsLog: vlog.GetMetricsLogAvailable()})
+			MetricsLog: vlog.GetMetricsLogAvailable(),
+			PipeLog:    vlog.GetPipeLogAvailable()})
 		_ = jsonEncoder.Encode(logResponse{
 			Code: 200,
 			Body: string(body)})
@@ -646,6 +648,8 @@ func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
 			vlog.SetAccessLogAvailable(status)
 		case "metricsLog":
 			vlog.SetMetricsLogAvailable(status)
+		case "pipeLog":
+			vlog.SetPipeLogAvailable(status)
 		}
 		_ = jsonEncoder.Encode(logResponse{Code: 200, Body: "set " + logType + " status:" + available})
 		vlog.Infoln("set "+logType+" status:", status)

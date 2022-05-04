@@ -26,11 +26,13 @@ var (
 )
 
 const (
-	defaultAsyncLogLen = 5000
+	defaultAsyncLogLen  = 5000
+	defaultFilterLogLen = 5000
 
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
+	defaultPipeLogName    = "pipe"
 	defaultLogSeparator   = "-"
 	defaultLogLevel       = InfoLevel
 	defaultFlushInterval  = time.Second
@@ -53,7 +55,38 @@ type AccessLogEntity struct {
 	Exception     string `json:"exception"`
 }
 
+type PipeLogEntity struct {
+	Format string
+	Args   []interface{}
+	Level  LogLevel
+}
+
+type Filter func(level LogLevel, Name, stackTrace, format string, fields ...interface{})
+
+type filterLog struct {
+	Level      LogLevel
+	Name       string
+	StackTrace string
+	Format     string
+	Fields     []interface{}
+}
+
+type executorFilters struct {
+	filters []Filter
+}
+
+func (e *executorFilters) Call(log *filterLog) {
+	for _, filter := range e.filters {
+		filter(log.Level, log.Name, log.StackTrace, log.Format, log.Fields...)
+	}
+}
+
+func newFilterExecutor(filters []Filter) *executorFilters {
+	return &executorFilters{filters: filters}
+}
+
 type Logger interface {
+	AddFilter(filter Filter)
 	Infoln(...interface{})
 	Infof(string, ...interface{})
 	Warningln(...interface{})
@@ -64,6 +97,7 @@ type Logger interface {
 	Fatalf(string, ...interface{})
 	AccessLog(*AccessLogEntity)
 	MetricsLog(string)
+	PipeLog(*PipeLogEntity)
 	Flush()
 	SetAsync(bool)
 	GetLevel() LogLevel
@@ -73,6 +107,8 @@ type Logger interface {
 	SetAccessLogAvailable(bool)
 	GetMetricsLogAvailable() bool
 	SetMetricsLogAvailable(bool)
+	GetPipeLogAvailable() bool
+	SetPipeLogAvailable(bool)
 }
 
 func LogInit(logger Logger) {
@@ -86,6 +122,12 @@ func LogInit(logger Logger) {
 		setAccessStructured(*logStructured)
 		startFlush()
 	})
+}
+
+func AddFilter(filter Filter) {
+	if loggerInstance != nil {
+		loggerInstance.AddFilter(filter)
+	}
 }
 
 func Infoln(args ...interface{}) {
@@ -164,6 +206,12 @@ func MetricsLog(msg string) {
 	}
 }
 
+func PipeLog(entry *PipeLogEntity) {
+	if loggerInstance != nil {
+		loggerInstance.PipeLog(entry)
+	}
+}
+
 func startFlush() {
 	go func() {
 		defer func() {
@@ -233,6 +281,19 @@ func SetMetricsLogAvailable(status bool) {
 	}
 }
 
+func GetPipeLogAvailable() bool {
+	if loggerInstance != nil {
+		return loggerInstance.GetPipeLogAvailable()
+	}
+	return false
+}
+
+func SetPipeLogAvailable(status bool) {
+	if loggerInstance != nil {
+		loggerInstance.SetPipeLogAvailable(status)
+	}
+}
+
 func newDefaultLog() Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:      "time",
@@ -257,15 +318,19 @@ func newDefaultLog() Logger {
 	)
 	logger := zap.New(zapCore, zap.AddCaller(), zap.AddCallerSkip(2))
 
+	pipeLogger, pipeLevel := newPipeZapLogger()
 	accessLogger, accessLevel := newZapLogger(pName + defaultLogSeparator + defaultAccessLogName + defaultLogSuffix)
 	metricsLogger, metricsLevel := newZapLogger(pName + defaultLogSeparator + defaultMetricsLogName + defaultLogSuffix)
 	return &defaultLogger{
+		filterLock:    &sync.Mutex{},
 		logger:        logger.Sugar(),
 		accessLogger:  accessLogger,
 		metricsLogger: metricsLogger,
+		pipeLogger:    pipeLogger.Sugar(),
 		loggerLevel:   level,
 		accessLevel:   accessLevel,
 		metricsLevel:  metricsLevel,
+		pipeLevel:     pipeLevel,
 	}
 }
 
@@ -295,48 +360,127 @@ func newZapLogger(logName string) (*zap.Logger, zap.AtomicLevel) {
 	return zapLogger, zapLevel
 }
 
+func newPipeZapLogger() (*zap.Logger, zap.AtomicLevel) {
+	encoderConfig := zapcore.EncoderConfig{
+		TimeKey:      "time",
+		LevelKey:     "level",
+		CallerKey:    "caller",
+		MessageKey:   "message",
+		EncodeLevel:  zapcore.CapitalLevelEncoder,
+		EncodeTime:   zapcore.ISO8601TimeEncoder,
+		EncodeCaller: zapcore.ShortCallerEncoder,
+	}
+	var ll LogLevel
+	if err := ll.Set(*logLevel); err != nil {
+		ll = defaultLogLevel
+		Warningf("init pipe log level failed: %s, use default level: %s", err.Error(), defaultLogLevel.String())
+	}
+	level := zap.NewAtomicLevelAt(zapcore.Level(ll))
+	pName := filepath.Base(os.Args[0])
+	pipeZapCore := zapcore.NewCore(
+		zapcore.NewConsoleEncoder(encoderConfig),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(newRotateHook(pName+defaultLogSeparator+defaultPipeLogName+defaultLogSuffix))),
+		level,
+	)
+	return zap.New(pipeZapCore, zap.AddCaller(), zap.AddCallerSkip(3)), level
+}
+
 type defaultLogger struct {
+	filterLock       *sync.Mutex
+	filters          []Filter
+	filterLogChan    chan *filterLog
 	async            bool
 	accessStructured bool
 	outputChan       chan *AccessLogEntity
 	logger           *zap.SugaredLogger
 	accessLogger     *zap.Logger
 	metricsLogger    *zap.Logger
+	pipeLogger       *zap.SugaredLogger
 	loggerLevel      zap.AtomicLevel
 	accessLevel      zap.AtomicLevel
 	metricsLevel     zap.AtomicLevel
+	pipeLevel        zap.AtomicLevel
+}
+
+func (d *defaultLogger) AddFilter(filter Filter) {
+	d.filterLock.Lock()
+	defer d.filterLock.Unlock()
+	if d.filterLogChan == nil {
+		d.filterLogChan = make(chan *filterLog, defaultFilterLogLen)
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Printf("filter log. err:%v", err)
+					debug.PrintStack()
+				}
+			}()
+			for {
+				select {
+				case l := <-d.filterLogChan:
+					newFilterExecutor(d.filters).Call(l)
+				}
+			}
+		}()
+	}
+	d.filters = append(d.filters, filter)
+}
+
+func (d *defaultLogger) filterLog(level LogLevel, name, format string, fields ...interface{}) {
+	if len(d.filters) == 0 {
+		return
+	}
+	select {
+	case d.filterLogChan <- &filterLog{
+		Level:      level,
+		Name:       name,
+		StackTrace: string(debug.Stack()),
+		Format:     format,
+		Fields:     fields,
+	}:
+		return
+	default:
+		return
+	}
 }
 
 func (d *defaultLogger) Infoln(fields ...interface{}) {
 	d.logger.Info(fields...)
+	d.filterLog(InfoLevel, "", "", fields...)
 }
 
 func (d *defaultLogger) Infof(format string, fields ...interface{}) {
 	d.logger.Infof(format, fields...)
+	d.filterLog(InfoLevel, "", format, fields...)
 }
 
 func (d *defaultLogger) Warningln(fields ...interface{}) {
 	d.logger.Warn(fields...)
+	d.filterLog(WarnLevel, "", "", fields...)
 }
 
 func (d *defaultLogger) Warningf(format string, fields ...interface{}) {
 	d.logger.Warnf(format, fields...)
+	d.filterLog(WarnLevel, "", format, fields...)
 }
 
 func (d *defaultLogger) Errorln(fields ...interface{}) {
 	d.logger.Error(fields...)
+	d.filterLog(ErrorLevel, "", "", fields...)
 }
 
 func (d *defaultLogger) Errorf(format string, fields ...interface{}) {
 	d.logger.Errorf(format, fields...)
+	d.filterLog(ErrorLevel, "", format, fields)
 }
 
 func (d *defaultLogger) Fatalln(fields ...interface{}) {
 	d.logger.Fatal(fields...)
+	d.filterLog(FatalLevel, "", "", fields)
 }
 
 func (d *defaultLogger) Fatalf(format string, fields ...interface{}) {
 	d.logger.Fatalf(format, fields...)
+	d.filterLog(FatalLevel, "", format, fields)
 }
 
 func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
@@ -345,6 +489,7 @@ func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
 	} else {
 		d.doAccessLog(logObject)
 	}
+	d.filterLog(InfoLevel, defaultAccessLogName, "", logObject)
 }
 
 func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
@@ -399,12 +544,28 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 
 func (d *defaultLogger) MetricsLog(msg string) {
 	d.metricsLogger.Info(msg)
+	d.filterLog(InfoLevel, defaultMetricsLogName, "", msg)
+}
+
+func (d *defaultLogger) PipeLog(entry *PipeLogEntity) {
+	switch entry.Level {
+	case InfoLevel:
+		d.pipeLogger.Infof(entry.Format, entry.Args...)
+	case WarnLevel:
+		d.pipeLogger.Warnf(entry.Format, entry.Args...)
+	case ErrorLevel:
+		d.pipeLogger.Errorf(entry.Format, entry.Args...)
+	case FatalLevel:
+		d.pipeLogger.Fatalf(entry.Format, entry.Args...)
+	}
+	d.filterLog(entry.Level, defaultPipeLogName, entry.Format, entry.Args...)
 }
 
 func (d *defaultLogger) Flush() {
 	_ = d.logger.Sync()
 	_ = d.accessLogger.Sync()
 	_ = d.metricsLogger.Sync()
+	_ = d.pipeLogger.Sync()
 }
 
 func (d *defaultLogger) SetAsync(value bool) {
@@ -461,5 +622,17 @@ func (d *defaultLogger) SetMetricsLogAvailable(status bool) {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel))
 	} else {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel + 1))
+	}
+}
+
+func (d *defaultLogger) GetPipeLogAvailable() bool {
+	return d.pipeLevel.Level() <= zapcore.Level(defaultLogLevel)
+}
+
+func (d *defaultLogger) SetPipeLogAvailable(status bool) {
+	if status {
+		d.pipeLevel.SetLevel(zapcore.Level(defaultLogLevel))
+	} else {
+		d.pipeLevel.SetLevel(zapcore.Level(defaultLogLevel + 1))
 	}
 }
