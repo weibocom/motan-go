@@ -130,7 +130,12 @@ func NewClientContextFromConfig(conf *config.Config) (mc *MCContext) {
 	if section != nil && section["log_level"] != nil {
 		logLevel = section["log_level"].(string)
 	}
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
+	logFilterCaller := ""
+	if section != nil && section["log_filter_caller"] != nil {
+		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
+	}
+
+	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller)
 	registerSwitchers(mc.context)
 	return mc
 }
