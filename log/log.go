@@ -31,6 +31,7 @@ const (
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
+	defaultPipeLogName    = "pipe"
 	defaultLogSeparator   = "-"
 	defaultLogLevel       = InfoLevel
 	defaultFlushInterval  = time.Second
@@ -51,6 +52,12 @@ type AccessLogEntity struct {
 	Success       bool   `json:"success"`
 	ResponseCode  string `json:"responseCode"`
 	Exception     string `json:"exception"`
+}
+
+type PipeLogEntity struct {
+	Format string
+	Fields []interface{}
+	Level  LogLevel
 }
 
 type Logger interface {
@@ -89,6 +96,7 @@ func LogInit(logger Logger) {
 }
 
 func Infoln(args ...interface{}) {
+	doAsyncFilters(InfoLevel, "", "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Infoln(args...)
 	} else {
@@ -97,6 +105,7 @@ func Infoln(args ...interface{}) {
 }
 
 func Infof(format string, args ...interface{}) {
+	doAsyncFilters(InfoLevel, "", "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Infof(format, args...)
 	} else {
@@ -105,6 +114,7 @@ func Infof(format string, args ...interface{}) {
 }
 
 func Warningln(args ...interface{}) {
+	doAsyncFilters(WarnLevel, "", "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningln(args...)
 	} else {
@@ -113,6 +123,7 @@ func Warningln(args ...interface{}) {
 }
 
 func Warningf(format string, args ...interface{}) {
+	doAsyncFilters(WarnLevel, "", format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningf(format, args...)
 	} else {
@@ -121,6 +132,7 @@ func Warningf(format string, args ...interface{}) {
 }
 
 func Errorln(args ...interface{}) {
+	doAsyncFilters(ErrorLevel, "", "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorln(args...)
 	} else {
@@ -129,6 +141,7 @@ func Errorln(args ...interface{}) {
 }
 
 func Errorf(format string, args ...interface{}) {
+	doAsyncFilters(ErrorLevel, "", format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorf(format, args...)
 	} else {
@@ -137,6 +150,7 @@ func Errorf(format string, args ...interface{}) {
 }
 
 func Fatalln(args ...interface{}) {
+	doAsyncFilters(FatalLevel, "", "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalln(args...)
 	} else {
@@ -145,6 +159,7 @@ func Fatalln(args ...interface{}) {
 }
 
 func Fatalf(format string, args ...interface{}) {
+	doAsyncFilters(FatalLevel, "", format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalf(format, args...)
 	} else {
@@ -153,15 +168,21 @@ func Fatalf(format string, args ...interface{}) {
 }
 
 func AccessLog(logType *AccessLogEntity) {
+	doAsyncFilters(InfoLevel, defaultAccessLogName, "", logType)
 	if loggerInstance != nil {
 		loggerInstance.AccessLog(logType)
 	}
 }
 
 func MetricsLog(msg string) {
+	doAsyncFilters(InfoLevel, defaultMetricsLogName, "", msg)
 	if loggerInstance != nil {
 		loggerInstance.MetricsLog(msg)
 	}
+}
+
+func PipeLog(entry *PipeLogEntity) {
+	doAsyncFilters(entry.Level, defaultPipeLogName, entry.Format, entry.Fields...)
 }
 
 func startFlush() {
