@@ -1,7 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"flag"
+	"github.com/weibocom/motan-go/config"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -67,6 +69,7 @@ func TestNewContext(t *testing.T) {
 	assert.NotNil(t, context.Config)
 
 	globalFilterContext := NewContext("testdata", "globalFilter", "app-idc1")
+
 	assert.NotNil(t, globalFilterContext)
 
 	filterArrs := make(map[string][]string)
@@ -99,5 +102,46 @@ func TestNewContext(t *testing.T) {
 			assert.Contains(t, filterArr, "accessLog")
 			assert.Contains(t, filterArr, "metrics")
 		})
+	}
+}
+
+func Test_fixMergeGlobalFilter(t *testing.T) {
+	testCases := []map[string]interface{}{
+		{
+			"config": `
+motan-server:
+  application: testFix
+
+motan-service:
+  mytest:
+    path: test
+`,
+			"expect_value": "",
+			"expect_ok":    false,
+		},
+		{
+			"config": `
+motan-server:
+  application: testFix
+
+motan-service:
+  mytest:
+    path: test
+    filter: test
+`,
+			"expect_value": "test",
+			"expect_ok":    true,
+		},
+	}
+	for _, testCase := range testCases {
+		conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(testCase["config"].(string))))
+		assert.Nil(t, err)
+		context := NewContextFromConfig(conf, "", "")
+		Initialize(context)
+		for _, url := range context.ServiceURLs {
+			v, ok := url.Parameters[FilterKey]
+			assert.Equal(t, testCase["expect_value"].(string), v)
+			assert.Equal(t, testCase["expect_ok"].(bool), ok)
+		}
 	}
 }

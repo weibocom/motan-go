@@ -439,9 +439,10 @@ func (c *Context) mergeGlobalFilter(newURL *URL) {
 			}
 		}
 		finalFilter = strings.TrimRight(finalFilter, ",")
-		newURL.PutParam(FilterKey, finalFilter)
+		if finalFilter != "" {
+			newURL.PutParam(FilterKey, finalFilter)
+		}
 	}
-
 }
 
 func (c *Context) parseRefers() {
