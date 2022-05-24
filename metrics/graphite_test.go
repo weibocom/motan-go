@@ -35,6 +35,16 @@ func Test_graphite_Write(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	server.stop()
 	assert.Equal(t, 589, server.data.Len(), "send data size")
+
+	// illegal udp connection address
+	g = newGraphite("1.1.1.1", "test pool 2", 1234)
+	item.AddCounter(keyPrefix+"c1", 1)
+	item.AddHistograms(keyPrefix+" h1", 100)
+	server.data.Reset()
+	assert.Equal(t, 0, server.data.Len(), "illegal udp address data size")
+	err = g.Write([]Snapshot{item.SnapshotAndClear()})
+	assert.Equal(t, nil, err, "illegal udp address")
+	assert.Equal(t, 0, server.data.Len(), "illegal udp address data size")
 }
 
 func TestGenGraphiteMessages(t *testing.T) {
