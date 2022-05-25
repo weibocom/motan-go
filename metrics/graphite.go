@@ -59,11 +59,15 @@ func (g *graphite) Write(snapshots []Snapshot) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if g.conn == nil {
-		if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
-			return errors.New("open graphite conn failed")
-		}
+	if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+		return errors.New("open graphite conn failed")
 	}
+
+	defer func() {
+		if g.conn != nil {
+			g.conn.Close()
+		}
+	}()
 
 	if g.localIP == "" {
 		g.localIP = strings.Replace(strings.Split(g.conn.LocalAddr().String(), ":")[0], ".", "_", -1)
