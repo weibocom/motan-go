@@ -41,6 +41,42 @@ motan-refer:
 	err = mclient.BaseCall(req, &reply) // sync call
 	assert.Nil(err)
 	assert.Equal("Hello Ray", reply)
+
+	confWithCallertrue, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-client:
+  log_filter_caller: true
+`)))
+	assert.Nil(err)
+	conf.Merge(confWithCallertrue)
+	section, err := conf.GetSection("motan-client")
+	assert.Nil(err)
+	assert.Equal(true, section["log_filter_caller"].(bool))
+	mccontext = NewClientContextFromConfig(conf)
+	mccontext.Start(ext)
+	time.Sleep(time.Second)
+	mclient = mccontext.GetClient("mytest")
+	req = mclient.BuildRequest("hello", []interface{}{"Ray"})
+	err = mclient.BaseCall(req, &reply) // sync call
+	assert.Nil(err)
+	assert.Equal("Hello Ray", reply)
+
+	confWithCallerFalse, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-client:
+  log_filter_caller: false
+`)))
+	assert.Nil(err)
+	conf.Merge(confWithCallerFalse)
+	section, err = conf.GetSection("motan-client")
+	assert.Nil(err)
+	assert.Equal(false, section["log_filter_caller"].(bool))
+	mccontext = NewClientContextFromConfig(conf)
+	mccontext.Start(ext)
+	time.Sleep(time.Second)
+	mclient = mccontext.GetClient("mytest")
+	req = mclient.BuildRequest("hello", []interface{}{"Ray"})
+	err = mclient.BaseCall(req, &reply) // sync call
+	assert.Nil(err)
+	assert.Equal("Hello Ray", reply)
 }
 
 func StartServer() {

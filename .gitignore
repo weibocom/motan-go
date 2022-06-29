@@ -17,6 +17,9 @@ tmtags
 pretty/zj
 zj*
 
+# Windows
+*.exe
+
 .idea/*
 # gdb
 *.gdb_history

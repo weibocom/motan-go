@@ -21,6 +21,10 @@ const (
 )
 
 const (
+	HeaderContentType = "Content-Type"
+)
+
+const (
 	DomainKey                = "domain"
 	KeepaliveTimeoutKey      = "keepaliveTimeout"
 	IdleConnectionTimeoutKey = "idleConnectionTimeout"
@@ -426,16 +430,17 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 	motanRequest.GetAttachments().Range(func(k, v string) bool {
 		// ignore some specified key
 		for _, attachmentKey := range httpProxySpecifiedAttachments {
-			if attachmentKey == k {
+			if strings.EqualFold(k, attachmentKey) {
 				return true
 			}
 		}
-		if k == core.HostKey {
+		// fasthttp will use a special field to store this header
+		if strings.EqualFold(k, core.HostKey) {
+			fasthttpRequest.Header.SetHost(v)
 			return true
 		}
-		// fasthttp will use a special field to store this header
-		if k == "Host" {
-			fasthttpRequest.Header.SetHost(v)
+		if strings.EqualFold(k, HeaderContentType) {
+			fasthttpRequest.Header.SetContentType(v)
 			return true
 		}
 		k = strings.Replace(k, "M_", "MOTAN-", -1)

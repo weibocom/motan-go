@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	"github.com/weibocom/motan-go/config"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -64,6 +65,34 @@ func TestMain(m *testing.M) {
 		break
 	}
 	os.Exit(m.Run())
+}
+
+func Test_initParam(t *testing.T) {
+	assert := assert.New(t)
+	conf, err := config.NewConfigFromFile(filepath.Join("testdata", "agent.yaml"))
+	assert.Nil(err)
+	a := NewAgent(nil)
+	a.Context = &core.Context{Config: conf}
+	logFilterCallerFalseConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_filter_caller: false
+`)))
+	conf.Merge(logFilterCallerFalseConfig)
+	section, err := conf.GetSection("motan-agent")
+	assert.Nil(err)
+	assert.Equal(false, section["log_filter_caller"].(bool))
+	a.initParam()
+
+	logFilterCallerTrueConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_filter_caller: true
+`)))
+	assert.Nil(err)
+	conf.Merge(logFilterCallerTrueConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	assert.Equal(true, section["log_filter_caller"].(bool))
+	a.initParam()
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {

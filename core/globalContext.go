@@ -232,11 +232,11 @@ func (c *Context) Initialize() {
 	}
 
 	c.parseRegistrys()
+	c.parseHostURL()
 	c.parseBasicRefers()
 	c.parseRefers()
 	c.parserBasicServices()
 	c.parseServices()
-	c.parseHostURL()
 	c.parseHTTPClients()
 }
 
@@ -396,9 +396,53 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		} else {
 			newURL = url
 		}
+
+		// merge agent globalFilter, filter
+		c.mergeGlobalFilter(newURL)
+
 		newURLs[key] = newURL
 	}
 	return newURLs
+}
+
+func (c *Context) mergeGlobalFilter(newURL *URL) {
+	if c.AgentURL != nil {
+		finalFilterSet := make(map[string]bool)
+		globalFilterStr := c.AgentURL.GetStringParamsWithDefault(GlobalFilter, "")
+		// disable globalFilter
+		if globalFilterStr != "" {
+			finalFilterSet = TrimSplitSet(globalFilterStr, ",")
+			disableGlobalFilterStr := newURL.GetStringParamsWithDefault(DisableGlobalFilter, "")
+			if disableGlobalFilterStr != "" {
+				vlog.Infoln("disable global filter: " + disableGlobalFilterStr)
+				disableGlobalFilterArr := TrimSplit(disableGlobalFilterStr, ",")
+				for _, disableFilter := range disableGlobalFilterArr {
+					if _, ok := finalFilterSet[disableFilter]; ok {
+						delete(finalFilterSet, disableFilter)
+					}
+				}
+			}
+		}
+		// append filter
+		filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
+		if filterStr != "" {
+			filterArr := TrimSplit(filterStr, ",")
+			for _, filter := range filterArr {
+				finalFilterSet[filter] = true
+			}
+		}
+		// make new filter string
+		var finalFilter string
+		for filter := range finalFilterSet {
+			if filter != "" {
+				finalFilter += filter + ","
+			}
+		}
+		finalFilter = strings.TrimRight(finalFilter, ",")
+		if finalFilter != "" {
+			newURL.PutParam(FilterKey, finalFilter)
+		}
+	}
 }
 
 func (c *Context) parseRefers() {

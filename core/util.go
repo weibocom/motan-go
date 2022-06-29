@@ -158,6 +158,18 @@ func TrimSplit(s string, sep string) []string {
 	return a[:i+1]
 }
 
+// TrimSplitSet slices string and convert to map set
+func TrimSplitSet(s string, sep string) map[string]bool {
+	slice := TrimSplit(s, sep)
+	set := make(map[string]bool, len(slice))
+
+	for _, item := range slice {
+		set[item] = true
+	}
+
+	return set
+}
+
 // ListenUnixSock try to listen a unix socket address
 // this method using by create motan agent server, management server and http proxy server
 func ListenUnixSock(unixSockAddr string) (net.Listener, error) {

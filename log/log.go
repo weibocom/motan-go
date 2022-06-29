@@ -16,13 +16,14 @@ import (
 )
 
 var (
-	loggerInstance Logger
-	once           sync.Once
-	logDir         = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
-	logAsync       = flag.Bool("log_async", true, "If false, write log sync, default is true")
-	logLevel       = flag.String("log_level", "info", "Init log level, default is info.")
-	logStructured  = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
-	rotatePerHour  = flag.Bool("rotate_per_hour", true, "")
+	loggerInstance     Logger
+	once               sync.Once
+	logDir             = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
+	logAsync           = flag.Bool("log_async", true, "If false, write log sync, default is true")
+	logLevel           = flag.String("log_level", "info", "Init log level, default is info.")
+	logStructured      = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
+	rotatePerHour      = flag.Bool("rotate_per_hour", true, "")
+	filterCallerSwitch = flag.Bool("log_filter_caller", false, "If true, set caller for filter item, default is false")
 )
 
 const (
@@ -89,6 +90,7 @@ func LogInit(logger Logger) {
 }
 
 func Infoln(args ...interface{}) {
+	doAsyncFilters(InfoLevel, EntrypointInfoln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Infoln(args...)
 	} else {
@@ -97,6 +99,7 @@ func Infoln(args ...interface{}) {
 }
 
 func Infof(format string, args ...interface{}) {
+	doAsyncFilters(InfoLevel, EntrypointInfof, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Infof(format, args...)
 	} else {
@@ -105,6 +108,7 @@ func Infof(format string, args ...interface{}) {
 }
 
 func Warningln(args ...interface{}) {
+	doAsyncFilters(WarnLevel, EntrypointWarningln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningln(args...)
 	} else {
@@ -113,6 +117,7 @@ func Warningln(args ...interface{}) {
 }
 
 func Warningf(format string, args ...interface{}) {
+	doAsyncFilters(WarnLevel, EntrypointWarningf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningf(format, args...)
 	} else {
@@ -121,6 +126,7 @@ func Warningf(format string, args ...interface{}) {
 }
 
 func Errorln(args ...interface{}) {
+	doAsyncFilters(ErrorLevel, EntrypointErrorln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorln(args...)
 	} else {
@@ -129,6 +135,7 @@ func Errorln(args ...interface{}) {
 }
 
 func Errorf(format string, args ...interface{}) {
+	doAsyncFilters(ErrorLevel, EntrypointErrorf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorf(format, args...)
 	} else {
@@ -137,6 +144,7 @@ func Errorf(format string, args ...interface{}) {
 }
 
 func Fatalln(args ...interface{}) {
+	doAsyncFilters(FatalLevel, EntrypointFatalln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalln(args...)
 	} else {
@@ -145,6 +153,7 @@ func Fatalln(args ...interface{}) {
 }
 
 func Fatalf(format string, args ...interface{}) {
+	doAsyncFilters(FatalLevel, EntrypointFatalf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalf(format, args...)
 	} else {
@@ -153,12 +162,14 @@ func Fatalf(format string, args ...interface{}) {
 }
 
 func AccessLog(logType *AccessLogEntity) {
+	doAsyncFilters(InfoLevel, EntrypointAccessLog, "", logType)
 	if loggerInstance != nil {
 		loggerInstance.AccessLog(logType)
 	}
 }
 
 func MetricsLog(msg string) {
+	doAsyncFilters(InfoLevel, EntrypointMetricsLog, "", msg)
 	if loggerInstance != nil {
 		loggerInstance.MetricsLog(msg)
 	}
