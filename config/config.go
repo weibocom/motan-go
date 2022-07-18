@@ -30,11 +30,11 @@ func multipleServiceGroupParse(c map[interface{}]interface{}) {
 	motanServiceMap := motanService.(map[interface{}]interface{})
 	for k, v := range motanServiceMap {
 		serviceMap := v.(map[interface{}]interface{})
-		group := serviceMap["group"].(string)
-		if !strings.Contains(group, ",") {
+		group := serviceMap["group"]
+		if group == nil || !strings.Contains(group.(string), ",") {
 			continue
 		}
-		groups := strings.Split(group, ",")
+		groups := strings.Split(group.(string), ",")
 		service := motanServiceMap[k].(map[interface{}]interface{})
 		service["group"] = groups[0]
 		for idx, g := range groups[1:] {
