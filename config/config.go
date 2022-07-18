@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strings"
 
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v2"
@@ -18,6 +19,34 @@ type Config struct {
 	conf         map[interface{}]interface{}
 	placeHolders map[string]interface{}
 	rex          *regexp.Regexp
+}
+
+// multipleServiceGroupParse  add motan-service group support of multiple comma split group name
+func multipleServiceGroupParse(c map[interface{}]interface{}) {
+	motanService, ok := c["motan-service"]
+	if !ok {
+		return
+	}
+	motanServiceMap := motanService.(map[interface{}]interface{})
+	for k, v := range motanServiceMap {
+		serviceMap := v.(map[interface{}]interface{})
+		group := serviceMap["group"].(string)
+		if !strings.Contains(group, ",") {
+			continue
+		}
+		groups := strings.Split(group, ",")
+		service := motanServiceMap[k].(map[interface{}]interface{})
+		service["group"] = groups[0]
+		for idx, g := range groups[1:] {
+			key := fmt.Sprintf("%v-%v", k, idx)
+			newService := map[interface{}]interface{}{}
+			for k1, v1 := range service {
+				newService[k1] = v1
+			}
+			newService["group"] = g
+			motanServiceMap[key] = newService
+		}
+	}
 }
 
 // NewConfigFromReader parse config from a reader
@@ -32,6 +61,7 @@ func NewConfigFromReader(r io.Reader) (*Config, error) {
 		fmt.Printf("config unmarshal failed. " + err.Error())
 		return nil, errors.New("config unmarshal failed: " + err.Error())
 	}
+	multipleServiceGroupParse(m)
 	return &Config{conf: m}, nil
 }
 

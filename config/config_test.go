@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/stretchr/testify/assert"
 )
 
 type graphite struct {
@@ -111,4 +112,38 @@ func Test_Merge(t *testing.T) {
 	if len(dddSlice) != 5 {
 		t.Errorf("value merge fail! result:%v\n", dddSlice)
 	}
+}
+
+func Test_multipleServiceGroupParse(t *testing.T) {
+	data0 := map[interface{}]interface{}{
+		"motan-service": map[interface{}]interface{}{
+			"service1": map[interface{}]interface{}{
+				"group": "",
+			},
+		},
+	}
+	data1 := map[interface{}]interface{}{
+		"motan-service": map[interface{}]interface{}{
+			"service1": map[interface{}]interface{}{
+				"group": "hello",
+			},
+		},
+	}
+	data2 := map[interface{}]interface{}{
+		"motan-service": map[interface{}]interface{}{
+			"service1": map[interface{}]interface{}{
+				"group": "hello,hello1,hello2",
+			},
+		},
+	}
+	multipleServiceGroupParse(map[interface{}]interface{}{})
+	multipleServiceGroupParse(data0)
+	assert.Len(t, data0["motan-service"], 1)
+	multipleServiceGroupParse(data1)
+	assert.Len(t, data1["motan-service"], 1)
+	multipleServiceGroupParse(data2)
+	assert.Len(t, data2["motan-service"], 3)
+	assert.Equal(t, data2["motan-service"].(map[interface{}]interface{})["service1"].(map[interface{}]interface{})["group"], "hello")
+	assert.Equal(t, data2["motan-service"].(map[interface{}]interface{})["service1-0"].(map[interface{}]interface{})["group"], "hello1")
+	assert.Equal(t, data2["motan-service"].(map[interface{}]interface{})["service1-1"].(map[interface{}]interface{})["group"], "hello2")
 }
