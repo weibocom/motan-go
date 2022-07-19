@@ -138,12 +138,12 @@ func HandlePanic(f func()) {
 // returns a slice of the substrings between those separators,
 // specially trim all substrings.
 func TrimSplit(s string, sep string) []string {
-	n := strings.Count(s, sep) + 1
-	a := make([]string, n)
-	i := 0
 	if sep == "" {
 		return strings.Split(s, sep)
 	}
+	n := strings.Count(s, sep) + 1
+	a := make([]string, n)
+	i := 0
 	for {
 		m := strings.Index(s, sep)
 		if m < 0 {

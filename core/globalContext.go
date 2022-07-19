@@ -35,14 +35,15 @@ const (
 	basicServiceKey = "basicService"
 
 	// const for application pool
-	basicConfig       = "basic.yaml"
-	servicePath       = "services/"
-	applicationPath   = "applications/"
-	poolPath          = "pools/"
-	httpServicePath   = "http/service/"
-	httpLocationPath  = "http/location/"
-	httpPoolPath      = "http/pools/"
-	poolNameSeparator = "-"
+	basicConfig        = "basic.yaml"
+	servicePath        = "services/"
+	applicationPath    = "applications/"
+	poolPath           = "pools/"
+	httpServicePath    = "http/service/"
+	httpLocationPath   = "http/location/"
+	httpPoolPath       = "http/pools/"
+	poolNameSeparator  = "-"
+	groupNameSeparator = ","
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -448,15 +449,14 @@ func (c *Context) mergeGlobalFilter(newURL *URL) {
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
 func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
 	for k, serviceURL := range motanServiceMap {
-		if !strings.Contains(serviceURL.Group, ",") {
+		if !strings.Contains(serviceURL.Group, groupNameSeparator) {
 			continue
 		}
-		groups := strings.Split(serviceURL.Group, ",")
-		service := motanServiceMap[k]
-		service.Group = groups[0]
+		groups := TrimSplit(serviceURL.Group, groupNameSeparator)
+		serviceURL.Group = groups[0]
 		for idx, g := range groups[1:] {
 			key := fmt.Sprintf("%v-%v", k, idx)
-			newService := service.Copy()
+			newService := serviceURL.Copy()
 			newService.Group = g
 			motanServiceMap[key] = newService
 		}
