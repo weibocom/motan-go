@@ -341,6 +341,24 @@ func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[strin
 	return ph
 }
 
+// parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
+func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	for k, serviceURL := range motanServiceMap {
+		if !strings.Contains(serviceURL.Group, ",") {
+			continue
+		}
+		groups := strings.Split(serviceURL.Group, ",")
+		service := motanServiceMap[k]
+		service.Group = groups[0]
+		for idx, g := range groups[1:] {
+			key := fmt.Sprintf("%v-%v", k, idx)
+			newService := service.Copy()
+			newService.Group = g
+			motanServiceMap[key] = newService
+		}
+	}
+}
+
 // parse host url including agenturl, clienturl, serverurl
 func (c *Context) parseHostURL() {
 	agentInfo, _ := c.Config.GetSection(agentSection)
@@ -454,7 +472,9 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(servicesSection)
+	urlsMap := c.confToURLs(servicesSection)
+	c.parseMultipleServiceGroup(urlsMap)
+	c.ServiceURLs = urlsMap
 }
 
 func (c *Context) parserBasicServices() {
