@@ -3,10 +3,11 @@ package core
 import (
 	"bytes"
 	"flag"
-	"github.com/weibocom/motan-go/config"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/weibocom/motan-go/config"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -144,4 +145,33 @@ motan-service:
 			assert.Equal(t, testCase["expect_ok"].(bool), ok)
 		}
 	}
+}
+
+func TestContext_parseMultipleServiceGroup(t *testing.T) {
+	data0 := map[string]*URL{
+		"service1": {
+			Group: "",
+		},
+	}
+	data1 := map[string]*URL{
+		"service1": {
+			Group: "hello",
+		},
+	}
+	data2 := map[string]*URL{
+		"service1": {
+			Group: "hello,hello1,hello2",
+		},
+	}
+	ctx := Context{}
+	ctx.parseMultipleServiceGroup(map[string]*URL{})
+	ctx.parseMultipleServiceGroup(data0)
+	assert.Len(t, data0, 1)
+	ctx.parseMultipleServiceGroup(data1)
+	assert.Len(t, data1, 1)
+	ctx.parseMultipleServiceGroup(data2)
+	assert.Len(t, data2, 3)
+	assert.Equal(t, data2["service1"].Group, "hello")
+	assert.Equal(t, data2["service1-0"].Group, "hello1")
+	assert.Equal(t, data2["service1-1"].Group, "hello2")
 }
