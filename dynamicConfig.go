@@ -216,6 +216,7 @@ func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, err
 	for _, group := range groups {
 		u := url.Copy()
 		u.Group = group
+		h.parseURL(u)
 		urls = append(urls, u)
 	}
 	return urls, nil
