@@ -201,7 +201,7 @@ func (h *DynamicConfigurerHandler) ServeHTTP(res http.ResponseWriter, req *http.
 		res.WriteHeader(http.StatusNotFound)
 	}
 }
-func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, error) {
+func (h *DynamicConfigurerHandler) readURLsFromRequest(req *http.Request) ([]*core.URL, error) {
 	bytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
@@ -216,10 +216,31 @@ func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, err
 	for _, group := range groups {
 		u := url.Copy()
 		u.Group = group
-		h.parseURL(u)
 		urls = append(urls, u)
 	}
 	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, error) {
+	urls, err := h.readURLsFromRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	err = h.parseURLs(urls)
+	if err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) parseURLs(urls []*core.URL) error {
+	for _, u := range urls {
+		_, e := h.parseURL(u)
+		if e != nil {
+			return e
+		}
+	}
+	return nil
 }
 
 func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
