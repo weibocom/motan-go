@@ -185,3 +185,16 @@ func ListenUnixSock(unixSockAddr string) (net.Listener, error) {
 	}
 	return listener, nil
 }
+
+// c convert slices to set slices
+func SlicesUnique(src []string) []string {
+	var dst []string
+	set := map[string]bool{}
+	for _, v := range src {
+		if !set[v] {
+			set[v] = true
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}

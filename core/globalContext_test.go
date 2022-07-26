@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"flag"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -163,15 +164,40 @@ func TestContext_parseMultipleServiceGroup(t *testing.T) {
 			Group: "hello,hello1,hello2",
 		},
 	}
+	data3 := map[string]*URL{
+		"service1": {
+			Group: "hello,hello1",
+		},
+	}
+	data4 := map[string]*URL{
+		"service1": {
+			Group: "",
+		},
+	}
 	ctx := Context{}
 	ctx.parseMultipleServiceGroup(map[string]*URL{})
+
 	ctx.parseMultipleServiceGroup(data0)
 	assert.Len(t, data0, 1)
+
 	ctx.parseMultipleServiceGroup(data1)
 	assert.Len(t, data1, 1)
+
 	ctx.parseMultipleServiceGroup(data2)
 	assert.Len(t, data2, 3)
 	assert.Equal(t, data2["service1"].Group, "hello")
 	assert.Equal(t, data2["service1-0"].Group, "hello1")
 	assert.Equal(t, data2["service1-1"].Group, "hello2")
+
+	os.Setenv(GroupEnvironmentName,"hello2")
+	ctx.parseMultipleServiceGroup(data3)
+	assert.Len(t, data3, 3)
+	assert.Equal(t, data3["service1"].Group, "hello")
+	assert.Equal(t, data3["service1-0"].Group, "hello1")
+	assert.Equal(t, data3["service1-1"].Group, "hello2")
+
+	os.Setenv(GroupEnvironmentName,"hello")
+	ctx.parseMultipleServiceGroup(data4)
+	assert.Len(t, data4, 1)
+	assert.Equal(t, data3["service1"].Group, "hello")
 }
