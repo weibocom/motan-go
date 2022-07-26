@@ -35,14 +35,15 @@ const (
 	basicServiceKey = "basicService"
 
 	// const for application pool
-	basicConfig       = "basic.yaml"
-	servicePath       = "services/"
-	applicationPath   = "applications/"
-	poolPath          = "pools/"
-	httpServicePath   = "http/service/"
-	httpLocationPath  = "http/location/"
-	httpPoolPath      = "http/pools/"
-	poolNameSeparator = "-"
+	basicConfig        = "basic.yaml"
+	servicePath        = "services/"
+	applicationPath    = "applications/"
+	poolPath           = "pools/"
+	httpServicePath    = "http/service/"
+	httpLocationPath   = "http/location/"
+	httpPoolPath       = "http/pools/"
+	poolNameSeparator  = "-"
+	groupNameSeparator = ","
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -445,6 +446,23 @@ func (c *Context) mergeGlobalFilter(newURL *URL) {
 	}
 }
 
+// parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
+func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	for k, serviceURL := range motanServiceMap {
+		if !strings.Contains(serviceURL.Group, groupNameSeparator) {
+			continue
+		}
+		groups := TrimSplit(serviceURL.Group, groupNameSeparator)
+		serviceURL.Group = groups[0]
+		for idx, g := range groups[1:] {
+			key := fmt.Sprintf("%v-%v", k, idx)
+			newService := serviceURL.Copy()
+			newService.Group = g
+			motanServiceMap[key] = newService
+		}
+	}
+}
+
 func (c *Context) parseRefers() {
 	c.RefersURLs = c.basicConfToURLs(refersSection)
 }
@@ -454,7 +472,9 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(servicesSection)
+	urlsMap := c.basicConfToURLs(servicesSection)
+	c.parseMultipleServiceGroup(urlsMap)
+	c.ServiceURLs = urlsMap
 }
 
 func (c *Context) parserBasicServices() {

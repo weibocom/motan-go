@@ -800,6 +800,9 @@ func (a *Agent) doExportService(url *motan.URL) {
 		a.agentPortServer[url.Port] = server
 	} else if canShareChannel(*url, *server.GetURL()) {
 		server.GetMessageHandler().AddProvider(provider)
+	}else{
+		vlog.Errorf("service can't find a share channel , url:%v", url)
+		return
 	}
 	err := exporter.Export(server, a.extFactory, globalContext)
 	if err != nil {

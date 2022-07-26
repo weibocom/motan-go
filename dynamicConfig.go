@@ -201,18 +201,49 @@ func (h *DynamicConfigurerHandler) ServeHTTP(res http.ResponseWriter, req *http.
 		res.WriteHeader(http.StatusNotFound)
 	}
 }
-
-func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) {
+func (h *DynamicConfigurerHandler) readURLsFromRequest(req *http.Request) ([]*core.URL, error) {
 	bytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
 	}
-
 	url := new(core.URL)
 	err = json.Unmarshal(bytes, url)
 	if err != nil {
 		return nil, err
 	}
+	groups := strings.Split(url.Group, ",")
+	urls := []*core.URL{}
+	for _, group := range groups {
+		u := url.Copy()
+		u.Group = group
+		urls = append(urls, u)
+	}
+	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, error) {
+	urls, err := h.readURLsFromRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	err = h.parseURLs(urls)
+	if err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) parseURLs(urls []*core.URL) error {
+	for _, u := range urls {
+		_, e := h.parseURL(u)
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
 	if url.Group == "" {
 		url.Group = url.GetParam(core.GroupKey, "")
 		delete(url.Parameters, core.GroupKey)
@@ -278,51 +309,57 @@ func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) 
 }
 
 func (h *DynamicConfigurerHandler) register(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
-	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyServiceURL(url)
-	err = h.agent.configurer.Register(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
+		url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
+		h.agent.initProxyServiceURL(url)
+		err = h.agent.configurer.Register(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
 func (h *DynamicConfigurerHandler) unregister(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
-	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyServiceURL(url)
-	err = h.agent.configurer.Unregister(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
+		url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
+		h.agent.initProxyServiceURL(url)
+		err = h.agent.configurer.Unregister(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
 func (h *DynamicConfigurerHandler) subscribe(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.Host = ""
-	url.Port = 0
-	err = h.agent.configurer.Subscribe(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.Host = ""
+		url.Port = 0
+		err = h.agent.configurer.Subscribe(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
