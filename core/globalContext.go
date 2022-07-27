@@ -35,15 +35,16 @@ const (
 	basicServiceKey = "basicService"
 
 	// const for application pool
-	basicConfig        = "basic.yaml"
-	servicePath        = "services/"
-	applicationPath    = "applications/"
-	poolPath           = "pools/"
-	httpServicePath    = "http/service/"
-	httpLocationPath   = "http/location/"
-	httpPoolPath       = "http/pools/"
-	poolNameSeparator  = "-"
-	groupNameSeparator = ","
+	basicConfig          = "basic.yaml"
+	servicePath          = "services/"
+	applicationPath      = "applications/"
+	poolPath             = "pools/"
+	httpServicePath      = "http/service/"
+	httpLocationPath     = "http/location/"
+	httpPoolPath         = "http/pools/"
+	poolNameSeparator    = "-"
+	GroupNameSeparator   = ","
+	GroupEnvironmentName = "MESH_SERVICE_ADDITIONAL_GROUP"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -448,18 +449,30 @@ func (c *Context) mergeGlobalFilter(newURL *URL) {
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
 func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	addMotanServiceMap := map[string]*URL{}
 	for k, serviceURL := range motanServiceMap {
-		if !strings.Contains(serviceURL.Group, groupNameSeparator) {
+		//add additional service group from environment
+		if v := os.Getenv(GroupEnvironmentName); v != "" {
+			if serviceURL.Group == "" {
+				serviceURL.Group = v
+			} else {
+				serviceURL.Group += "," + v
+			}
+		}
+		if !strings.Contains(serviceURL.Group, GroupNameSeparator) {
 			continue
 		}
-		groups := TrimSplit(serviceURL.Group, groupNameSeparator)
+		groups := SlicesUnique(TrimSplit(serviceURL.Group, GroupNameSeparator))
 		serviceURL.Group = groups[0]
 		for idx, g := range groups[1:] {
 			key := fmt.Sprintf("%v-%v", k, idx)
 			newService := serviceURL.Copy()
 			newService.Group = g
-			motanServiceMap[key] = newService
+			addMotanServiceMap[key] = newService
 		}
+	}
+	for k, v := range addMotanServiceMap {
+		motanServiceMap[k] = v
 	}
 }
 

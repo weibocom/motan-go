@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	URL "net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -211,7 +212,15 @@ func (h *DynamicConfigurerHandler) readURLsFromRequest(req *http.Request) ([]*co
 	if err != nil {
 		return nil, err
 	}
-	groups := strings.Split(url.Group, ",")
+	//add additional service group from environment
+	if v := os.Getenv(core.GroupEnvironmentName); v != "" {
+		if url.Group == "" {
+			url.Group = v
+		} else {
+			url.Group += "," + v
+		}
+	}
+	groups := core.SlicesUnique(core.TrimSplit(url.Group, core.GroupNameSeparator))
 	urls := []*core.URL{}
 	for _, group := range groups {
 		u := url.Copy()
