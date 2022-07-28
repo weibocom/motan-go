@@ -189,15 +189,43 @@ func TestContext_parseMultipleServiceGroup(t *testing.T) {
 	assert.Equal(t, data2["service1-0"].Group, "hello1")
 	assert.Equal(t, data2["service1-1"].Group, "hello2")
 
-	os.Setenv(GroupEnvironmentName,"hello2")
+	os.Setenv(GroupEnvironmentName, "hello2")
 	ctx.parseMultipleServiceGroup(data3)
 	assert.Len(t, data3, 3)
 	assert.Equal(t, data3["service1"].Group, "hello")
 	assert.Equal(t, data3["service1-0"].Group, "hello1")
 	assert.Equal(t, data3["service1-1"].Group, "hello2")
 
-	os.Setenv(GroupEnvironmentName,"hello")
+	os.Setenv(GroupEnvironmentName, "hello")
 	ctx.parseMultipleServiceGroup(data4)
 	assert.Len(t, data4, 1)
 	assert.Equal(t, data3["service1"].Group, "hello")
+}
+
+func TestContext_mergeDefaultFilter(t *testing.T) {
+	c := Context{AgentURL: &URL{
+		Parameters: map[string]string{"defaultFilter": "a,b,d"},
+	}}
+	u1 := &URL{
+		Parameters: map[string]string{"filter": "a,c", "disableDefaultFilter": "b"},
+	}
+	u2 := &URL{
+		Parameters: map[string]string{"filter": "a,c", "disableDefaultFilter": "b"},
+	}
+ 	c.mergeDefaultFilter(u1)
+	for _,v:=range strings.Split("a,d,c",","){
+		assert.Contains(t, u1.Parameters["filter"],v)
+	}
+
+	c = Context{}
+	c.mergeDefaultFilter(u2)
+	for _,v:=range strings.Split("a,c",","){
+		assert.Contains(t, u1.Parameters["filter"],v)
+	}
+
+	c = Context{AgentURL: &URL{}}
+	c.mergeDefaultFilter(u2)
+	for _,v:=range strings.Split("a,c",","){
+		assert.Contains(t, u1.Parameters["filter"],v)
+	}
 }

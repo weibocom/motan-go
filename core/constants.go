@@ -35,6 +35,8 @@ const (
 	FilterKey               = "filter"
 	GlobalFilter            = "globalFilter"
 	DisableGlobalFilter     = "disableGlobalFilter"
+	DefaultFilter            = "defaultFilter"
+	DisableDefaultFilter     = "disableDefaultFilter"
 	RegistryKey             = "registry"
 	WeightKey               = "weight"
 	SerializationKey        = "serialization"

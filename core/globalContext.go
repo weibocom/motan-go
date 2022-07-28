@@ -35,14 +35,14 @@ const (
 	basicServiceKey = "basicService"
 
 	// const for application pool
-	basicConfig          = "basic.yaml"
-	servicePath          = "services/"
-	applicationPath      = "applications/"
-	poolPath             = "pools/"
-	httpServicePath      = "http/service/"
-	httpLocationPath     = "http/location/"
-	httpPoolPath         = "http/pools/"
-	poolNameSeparator    = "-"
+	basicConfig       = "basic.yaml"
+	servicePath       = "services/"
+	applicationPath   = "applications/"
+	poolPath          = "pools/"
+	httpServicePath   = "http/service/"
+	httpLocationPath  = "http/location/"
+	httpPoolPath      = "http/pools/"
+	poolNameSeparator = "-"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -397,12 +397,56 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
+		// merge agent defaultFilter to filter
+		c.mergeDefaultFilter(newURL)
+
 		// merge agent globalFilter, filter
 		c.mergeGlobalFilter(newURL)
 
 		newURLs[key] = newURL
 	}
 	return newURLs
+}
+
+func (c *Context) mergeDefaultFilter(newURL *URL) {
+	if c.AgentURL == nil {
+		return
+	}
+	defaultFilterStr := c.AgentURL.GetStringParamsWithDefault(DefaultFilter, "")
+	if defaultFilterStr == "" {
+		return
+	}
+	finalFilterSet := TrimSplitSet(defaultFilterStr, ",")
+	disableDefaultFilterStr := newURL.GetStringParamsWithDefault(DisableDefaultFilter, "")
+	if disableDefaultFilterStr != "" {
+		// disable defaultFilter
+		vlog.Infoln("disable default filter: " + disableDefaultFilterStr)
+		disableDefaultFilterArr := TrimSplit(disableDefaultFilterStr, ",")
+		for _, disableFilter := range disableDefaultFilterArr {
+			if _, ok := finalFilterSet[disableFilter]; ok {
+				delete(finalFilterSet, disableFilter)
+			}
+		}
+	}
+	// append filter
+	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
+	if filterStr != "" {
+		filterArr := TrimSplit(filterStr, ",")
+		for _, filter := range filterArr {
+			finalFilterSet[filter] = true
+		}
+	}
+	// make new filter string
+	var finalFilter string
+	for filter := range finalFilterSet {
+		if filter != "" {
+			finalFilter += filter + ","
+		}
+	}
+	finalFilter = strings.TrimRight(finalFilter, ",")
+	if finalFilter != "" {
+		newURL.PutParam(FilterKey, finalFilter)
+	}
 }
 
 func (c *Context) mergeGlobalFilter(newURL *URL) {
