@@ -308,9 +308,7 @@ func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
 	if len(agentFilter) > 0 {
 		filters = strings.Join(agentFilter, ",")
 	}
-	if filters == "" {
-		filters = h.agent.Context.AgentURL.GetParam(core.FilterKey, "")
-	}
+
 	if filters != "" {
 		url.PutParam(core.FilterKey, filters)
 	}
