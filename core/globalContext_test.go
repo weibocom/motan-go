@@ -212,36 +212,50 @@ func TestContext_mergeDefaultFilter(t *testing.T) {
 	u2 := &URL{
 		Parameters: map[string]string{"filter": "a,c", "disableDefaultFilter": "b"},
 	}
- 	c.mergeDefaultFilter(u1)
-	for _,v:=range strings.Split("a,d,c",","){
-		assert.Contains(t, u1.Parameters["filter"],v)
+
+	u1.Parameters[FilterKey] = c.filterSetToStr(
+		c.mergeFilterSet(
+			c.getDefaultFilterSet(u1), c.getFilterSet(u1.Parameters[FilterKey], ""),
+		),
+	)
+
+	for _, v := range strings.Split("a,d,c", ",") {
+		assert.Contains(t, u1.Parameters["filter"], v)
 	}
 
 	c = Context{}
-	c.mergeDefaultFilter(u2)
-	for _,v:=range strings.Split("a,c",","){
-		assert.Contains(t, u1.Parameters["filter"],v)
+	u2.Parameters[FilterKey] = c.filterSetToStr(
+		c.mergeFilterSet(
+			c.getDefaultFilterSet(u1), c.getFilterSet(u2.Parameters[FilterKey], ""),
+		),
+	)
+	for _, v := range strings.Split("a,c", ",") {
+		assert.Contains(t, u1.Parameters["filter"], v)
 	}
 
 	c = Context{AgentURL: &URL{}}
-	c.mergeDefaultFilter(u2)
-	for _,v:=range strings.Split("a,c",","){
-		assert.Contains(t, u1.Parameters["filter"],v)
+	u2.Parameters[FilterKey] = c.filterSetToStr(
+		c.mergeFilterSet(
+			c.getDefaultFilterSet(u1), c.getFilterSet(u2.Parameters[FilterKey], ""),
+		),
+	)
+	for _, v := range strings.Split("a,c", ",") {
+		assert.Contains(t, u2.Parameters["filter"], v)
 	}
 }
 
 func TestContext_getFilterSet(t *testing.T) {
-	 c:=Context{}
-	 a:="a,b,"
-	 b:="b,"
-	 assert.Equal(t,[]string{"a"}, c.getFilterSet(a,b))
+	c := Context{}
+	a := "a,b,"
+	b := "b,"
+	assert.Equal(t, c.getFilterSet("a", ""), c.getFilterSet(a, b))
 }
 
 func TestContext_mergeFilterSet(t *testing.T) {
-	c:=Context{}
-	a:=strings.Split("a,b,c,",",")
-	b:=strings.Split("b,",",")
-	for _,v:=range c.mergeFilterSet(a,b){
-		assert.Contains(t, "a,b,c",v)
+	c := Context{}
+	a := c.getFilterSet("a,b,c,", "")
+	b := c.getFilterSet("b,", "")
+	for v := range c.mergeFilterSet(a, b) {
+		assert.Contains(t, "a,b,c", v)
 	}
 }

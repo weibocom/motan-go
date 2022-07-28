@@ -397,29 +397,41 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		// merge agent defaultFilter to filter
-		c.mergeDefaultFilter(newURL)
-
-		// merge agent globalFilter, filter
-		c.mergeGlobalFilter(newURL)
+		//final filters: defaultFilter + globalFilter + filters
+		finalFilters := c.mergeFilterSet(
+			c.getDefaultFilterSet(newURL),
+			c.getGlobalFilterSet(newURL),
+			c.getFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
+		)
+		if len(finalFilters) > 0 {
+			newURL.PutParam(FilterKey, c.filterSetToStr(finalFilters))
+		}
 
 		newURLs[key] = newURL
 	}
 	return newURLs
 }
 
-func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst []string) {
+func (c *Context) filterSetToStr(f map[string]bool) string {
+	var dst []string
+	for k := range f {
+		dst = append(dst, k)
+	}
+	return strings.Join(dst, ",")
+}
+
+func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst map[string]bool) {
 	if filterStr == "" {
 		return
 	}
-	set := map[string]bool{}
+	dst = map[string]bool{}
 
 	for _, k := range strings.Split(filterStr, ",") {
 		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
-		set[k] = true
+		dst[k] = true
 	}
 
 	for _, k := range strings.Split(disableFilterStr, ",") {
@@ -427,66 +439,39 @@ func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst []string
 		if k == "" {
 			continue
 		}
-		delete(set, k)
-	}
-
-	for k := range set {
-		dst = append(dst, k)
+		delete(dst, k)
 	}
 	return
 }
 
-func (c *Context) mergeFilterSet(sets ...[]string) (dst []string) {
-	setAll := map[string]bool{}
+func (c *Context) mergeFilterSet(sets ...map[string]bool) (dst map[string]bool) {
+	dst = map[string]bool{}
 	for _, set := range sets {
-		for _, k := range set {
+		for k := range set {
 			k = strings.TrimSpace(k)
 			if k == "" {
 				continue
 			}
-			setAll[k] = true
+			dst[k] = true
 		}
-	}
-	for k := range setAll {
-		dst = append(dst, k)
 	}
 	return
 }
 
-func (c *Context) mergeDefaultFilter(newURL *URL) {
+func (c *Context) getDefaultFilterSet(newURL *URL) map[string]bool {
 	if c.AgentURL == nil {
-		return
+		return nil
 	}
-
-	defaultFilterStr := c.AgentURL.GetStringParamsWithDefault(DefaultFilter, "")
-	disableDefaultFilterStr := newURL.GetStringParamsWithDefault(DisableDefaultFilter, "")
-
-	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
-
-	defaultFilterSet := c.getFilterSet(defaultFilterStr, disableDefaultFilterStr)
-	filterSet := c.mergeFilterSet(defaultFilterSet, c.getFilterSet(filterStr, ""))
-	if len(filterSet) == 0 {
-		return
-	}
-	newURL.PutParam(FilterKey, strings.Join(filterSet, ","))
+	return c.getFilterSet(c.AgentURL.GetStringParamsWithDefault(DefaultFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableDefaultFilter, ""))
 }
 
-func (c *Context) mergeGlobalFilter(newURL *URL) {
+func (c *Context) getGlobalFilterSet(newURL *URL) map[string]bool {
 	if c.AgentURL == nil {
-		return
+		return nil
 	}
-
-	globalFilterStr := c.AgentURL.GetStringParamsWithDefault(GlobalFilter, "")
-	disableGlobalFilterStr := newURL.GetStringParamsWithDefault(DisableGlobalFilter, "")
-
-	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
-
-	globalFilterSet := c.getFilterSet(globalFilterStr, disableGlobalFilterStr)
-	filterSet := c.mergeFilterSet(globalFilterSet, c.getFilterSet(filterStr, ""))
-	if len(filterSet) == 0 {
-		return
-	}
-	newURL.PutParam(FilterKey, strings.Join(filterSet, ","))
+	return c.getFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
 }
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
