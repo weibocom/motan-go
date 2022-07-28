@@ -229,3 +229,19 @@ func TestContext_mergeDefaultFilter(t *testing.T) {
 		assert.Contains(t, u1.Parameters["filter"],v)
 	}
 }
+
+func TestContext_getFilterSet(t *testing.T) {
+	 c:=Context{}
+	 a:="a,b,"
+	 b:="b,"
+	 assert.Equal(t,[]string{"a"}, c.getFilterSet(a,b))
+}
+
+func TestContext_mergeFilterSet(t *testing.T) {
+	c:=Context{}
+	a:=strings.Split("a,b,c,",",")
+	b:=strings.Split("b,",",")
+	for _,v:=range c.mergeFilterSet(a,b){
+		assert.Contains(t, "a,b,c",v)
+	}
+}

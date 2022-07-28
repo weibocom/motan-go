@@ -408,85 +408,85 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 	return newURLs
 }
 
+func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst []string) {
+	if filterStr == "" {
+		return
+	}
+	set := map[string]bool{}
+
+	for _, k := range strings.Split(filterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		set[k] = true
+	}
+
+	for _, k := range strings.Split(disableFilterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		delete(set, k)
+	}
+
+	for k := range set {
+		dst = append(dst, k)
+	}
+	return
+}
+
+func (c *Context) mergeFilterSet(sets ...[]string) (dst []string) {
+	setAll := map[string]bool{}
+	for _, set := range sets {
+		for _, k := range set {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			setAll[k] = true
+		}
+	}
+	for k := range setAll {
+		dst = append(dst, k)
+	}
+	return
+}
+
 func (c *Context) mergeDefaultFilter(newURL *URL) {
 	if c.AgentURL == nil {
 		return
 	}
+
 	defaultFilterStr := c.AgentURL.GetStringParamsWithDefault(DefaultFilter, "")
-	if defaultFilterStr == "" {
+	disableDefaultFilterStr := newURL.GetStringParamsWithDefault(DisableDefaultFilter, "")
+
+	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
+
+	defaultFilterSet := c.getFilterSet(defaultFilterStr, disableDefaultFilterStr)
+	filterSet := c.mergeFilterSet(defaultFilterSet, c.getFilterSet(filterStr, ""))
+	if len(filterSet) == 0 {
 		return
 	}
-	finalFilterSet := TrimSplitSet(defaultFilterStr, ",")
-	disableDefaultFilterStr := newURL.GetStringParamsWithDefault(DisableDefaultFilter, "")
-	if disableDefaultFilterStr != "" {
-		// disable defaultFilter
-		vlog.Infoln("disable default filter: " + disableDefaultFilterStr)
-		disableDefaultFilterArr := TrimSplit(disableDefaultFilterStr, ",")
-		for _, disableFilter := range disableDefaultFilterArr {
-			if _, ok := finalFilterSet[disableFilter]; ok {
-				delete(finalFilterSet, disableFilter)
-			}
-		}
-	}
-	// append filter
-	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
-	if filterStr != "" {
-		filterArr := TrimSplit(filterStr, ",")
-		for _, filter := range filterArr {
-			finalFilterSet[filter] = true
-		}
-	}
-	// make new filter string
-	var finalFilter string
-	for filter := range finalFilterSet {
-		if filter != "" {
-			finalFilter += filter + ","
-		}
-	}
-	finalFilter = strings.TrimRight(finalFilter, ",")
-	if finalFilter != "" {
-		newURL.PutParam(FilterKey, finalFilter)
-	}
+	newURL.PutParam(FilterKey, strings.Join(filterSet, ","))
 }
 
 func (c *Context) mergeGlobalFilter(newURL *URL) {
-	if c.AgentURL != nil {
-		finalFilterSet := make(map[string]bool)
-		globalFilterStr := c.AgentURL.GetStringParamsWithDefault(GlobalFilter, "")
-		// disable globalFilter
-		if globalFilterStr != "" {
-			finalFilterSet = TrimSplitSet(globalFilterStr, ",")
-			disableGlobalFilterStr := newURL.GetStringParamsWithDefault(DisableGlobalFilter, "")
-			if disableGlobalFilterStr != "" {
-				vlog.Infoln("disable global filter: " + disableGlobalFilterStr)
-				disableGlobalFilterArr := TrimSplit(disableGlobalFilterStr, ",")
-				for _, disableFilter := range disableGlobalFilterArr {
-					if _, ok := finalFilterSet[disableFilter]; ok {
-						delete(finalFilterSet, disableFilter)
-					}
-				}
-			}
-		}
-		// append filter
-		filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
-		if filterStr != "" {
-			filterArr := TrimSplit(filterStr, ",")
-			for _, filter := range filterArr {
-				finalFilterSet[filter] = true
-			}
-		}
-		// make new filter string
-		var finalFilter string
-		for filter := range finalFilterSet {
-			if filter != "" {
-				finalFilter += filter + ","
-			}
-		}
-		finalFilter = strings.TrimRight(finalFilter, ",")
-		if finalFilter != "" {
-			newURL.PutParam(FilterKey, finalFilter)
-		}
+	if c.AgentURL == nil {
+		return
 	}
+
+	globalFilterStr := c.AgentURL.GetStringParamsWithDefault(GlobalFilter, "")
+	disableGlobalFilterStr := newURL.GetStringParamsWithDefault(DisableGlobalFilter, "")
+
+	filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
+
+	globalFilterSet := c.getFilterSet(globalFilterStr, disableGlobalFilterStr)
+	filterSet := c.mergeFilterSet(globalFilterSet, c.getFilterSet(filterStr, ""))
+	if len(filterSet) == 0 {
+		return
+	}
+	newURL.PutParam(FilterKey, strings.Join(filterSet, ","))
 }
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
