@@ -43,8 +43,6 @@ const (
 	httpLocationPath     = "http/location/"
 	httpPoolPath         = "http/pools/"
 	poolNameSeparator    = "-"
-	GroupNameSeparator   = ","
-	GroupEnvironmentName = "MESH_SERVICE_ADDITIONAL_GROUP"
 )
 
 // Context for agent, client, server. context is created depends on  config file

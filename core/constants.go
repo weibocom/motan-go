@@ -83,6 +83,8 @@ const (
 
 const (
 	DefaultWriteTimeout = 5 * time.Second
+	GroupNameSeparator   = ","
+	GroupEnvironmentName = "MESH_SERVICE_ADDITIONAL_GROUP"
 )
 
 // meta keys
