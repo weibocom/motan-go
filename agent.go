@@ -124,6 +124,10 @@ func (a *Agent) RegisterCommandHandler(f CommandHandler) {
 	a.commandHandlers = append(a.commandHandlers, f)
 }
 
+func (a *Agent) GetDynamicRegistryInfo() *registrySnapInfoStorage {
+	return a.configurer.getRegistryInfo()
+}
+
 func (a *Agent) callAfterStart() {
 	time.AfterFunc(time.Second*5, func() {
 		for _, f := range a.onAfterStart {
@@ -800,7 +804,7 @@ func (a *Agent) doExportService(url *motan.URL) {
 		a.agentPortServer[url.Port] = server
 	} else if canShareChannel(*url, *server.GetURL()) {
 		server.GetMessageHandler().AddProvider(provider)
-	}else{
+	} else {
 		vlog.Errorf("service can't find a share channel , url:%v", url)
 		return
 	}
