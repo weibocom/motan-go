@@ -45,6 +45,7 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		info := &InfoHandler{}
 		defaultManageHandlers["/getConfig"] = info
 		defaultManageHandlers["/getReferService"] = info
+		defaultManageHandlers["/getRegisterService"] = info
 
 		debug := &DebugHandler{}
 		defaultManageHandlers["/debug/pprof/"] = debug

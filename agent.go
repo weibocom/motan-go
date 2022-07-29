@@ -206,6 +206,10 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	a.startAgent()
 }
 
+func (a *Agent) GetDynamicRegistryInfo() *registrySnapInfoStorage {
+	return a.configurer.getRegistryInfo()
+}
+
 func (a *Agent) registerStatusSampler() {
 	metrics.RegisterStatusSampleFunc("memory", func() int64 {
 		p, _ := process.NewProcess(int32(os.Getpid()))
@@ -800,7 +804,7 @@ func (a *Agent) doExportService(url *motan.URL) {
 		a.agentPortServer[url.Port] = server
 	} else if canShareChannel(*url, *server.GetURL()) {
 		server.GetMessageHandler().AddProvider(provider)
-	}else{
+	} else {
 		vlog.Errorf("service can't find a share channel , url:%v", url)
 		return
 	}

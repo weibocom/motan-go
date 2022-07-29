@@ -151,7 +151,18 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.Write(i.a.getConfigData())
 	case "/getReferService":
 		rw.Write(i.getReferService())
+	case "/getRegisterService":
+		rw.Write(i.getRegisterService())
 	}
+}
+
+func (i *InfoHandler) getRegisterService() []byte {
+	var serviceList []*motan.URL
+	for _, s := range i.a.agentPortServer {
+		serviceList = append(serviceList, s.GetURL())
+	}
+	b, _ := json.Marshal(serviceList)
+	return b
 }
 
 func (i *InfoHandler) getReferService() []byte {
