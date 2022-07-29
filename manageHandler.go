@@ -157,11 +157,14 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 func (i *InfoHandler) getRegisterService() []byte {
+	sMap := make(map[string][]*motan.URL)
 	var serviceList []*motan.URL
-	for _, s := range i.a.agentPortServer {
-		serviceList = append(serviceList, s.GetURL())
+	for _, s := range i.a.Context.ServiceURLs {
+		serviceList = append(serviceList, s)
 	}
-	b, _ := json.Marshal(serviceList)
+	sMap["service_list"] = serviceList
+	sMap["dynamic_service_list"] = i.a.GetDynamicRegistryInfo().RegisterNodes
+	b, _ := json.Marshal(sMap)
 	return b
 }
 
