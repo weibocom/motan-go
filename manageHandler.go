@@ -162,6 +162,7 @@ func (i *InfoHandler) getRegisterService() []byte {
 	for _, s := range i.a.Context.ServiceURLs {
 		serviceList = append(serviceList, s)
 	}
+
 	sMap["service_list"] = serviceList
 	sMap["dynamic_service_list"] = i.a.GetDynamicRegistryInfo().RegisterNodes
 	b, _ := json.Marshal(sMap)
