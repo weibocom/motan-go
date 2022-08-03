@@ -398,13 +398,13 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		}
 
 		//final filters: defaultFilter + globalFilter + filters
-		finalFilters := c.mergeFilterSet(
-			c.getDefaultFilterSet(newURL),
-			c.getGlobalFilterSet(newURL),
-			c.getFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
+		finalFilters := c.MergeFilterSet(
+			c.GetDefaultFilterSet(newURL),
+			c.GetGlobalFilterSet(newURL),
+			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
 		)
 		if len(finalFilters) > 0 {
-			newURL.PutParam(FilterKey, c.filterSetToStr(finalFilters))
+			newURL.PutParam(FilterKey, c.FilterSetToStr(finalFilters))
 		}
 
 		newURLs[key] = newURL
@@ -412,7 +412,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 	return newURLs
 }
 
-func (c *Context) filterSetToStr(f map[string]bool) string {
+func (c *Context) FilterSetToStr(f map[string]bool) string {
 	var dst []string
 	for k := range f {
 		dst = append(dst, k)
@@ -420,7 +420,7 @@ func (c *Context) filterSetToStr(f map[string]bool) string {
 	return strings.Join(dst, ",")
 }
 
-func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst map[string]bool) {
+func (c *Context) GetFilterSet(filterStr, disableFilterStr string) (dst map[string]bool) {
 	if filterStr == "" {
 		return
 	}
@@ -444,7 +444,7 @@ func (c *Context) getFilterSet(filterStr, disableFilterStr string) (dst map[stri
 	return
 }
 
-func (c *Context) mergeFilterSet(sets ...map[string]bool) (dst map[string]bool) {
+func (c *Context) MergeFilterSet(sets ...map[string]bool) (dst map[string]bool) {
 	dst = map[string]bool{}
 	for _, set := range sets {
 		for k := range set {
@@ -458,19 +458,19 @@ func (c *Context) mergeFilterSet(sets ...map[string]bool) (dst map[string]bool) 
 	return
 }
 
-func (c *Context) getDefaultFilterSet(newURL *URL) map[string]bool {
+func (c *Context) GetDefaultFilterSet(newURL *URL) map[string]bool {
 	if c.AgentURL == nil {
 		return nil
 	}
-	return c.getFilterSet(c.AgentURL.GetStringParamsWithDefault(DefaultFilter, ""),
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(DefaultFilter, ""),
 		newURL.GetStringParamsWithDefault(DisableDefaultFilter, ""))
 }
 
-func (c *Context) getGlobalFilterSet(newURL *URL) map[string]bool {
+func (c *Context) GetGlobalFilterSet(newURL *URL) map[string]bool {
 	if c.AgentURL == nil {
 		return nil
 	}
-	return c.getFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
 		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
 }
 

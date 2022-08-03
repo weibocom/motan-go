@@ -312,6 +312,16 @@ func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
 	if filters != "" {
 		url.PutParam(core.FilterKey, filters)
 	}
+
+	//final filters: defaultFilter + globalFilter + filters
+	finalFilters := h.agent.Context.MergeFilterSet(
+		h.agent.Context.GetDefaultFilterSet(url),
+		h.agent.Context.GetGlobalFilterSet(url),
+		h.agent.Context.GetFilterSet(url.GetStringParamsWithDefault(core.FilterKey, ""), ""),
+	)
+	if len(finalFilters) > 0 {
+		url.PutParam(core.FilterKey, h.agent.Context.FilterSetToStr(finalFilters))
+	}
 	return url, nil
 }
 
