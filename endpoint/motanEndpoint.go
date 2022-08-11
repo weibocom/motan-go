@@ -218,12 +218,15 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 }
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
-	errCount := atomic.AddUint32(&m.errorCount, 1)
-	// ensure trigger keepalive
-	if errCount >= uint32(m.errorCountThreshold) {
-		m.setAvailable(false)
-		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
-		go m.keepalive()
+	// errorCountThreshold == 0 means not trigger keepalive
+	if m.errorCountThreshold != 0 {
+		errCount := atomic.AddUint32(&m.errorCount, 1)
+		// ensure trigger keepalive
+		if errCount >= uint32(m.errorCountThreshold) {
+			m.setAvailable(false)
+			vlog.Infoln("Referer disable:" + m.url.GetIdentity())
+			go m.keepalive()
+		}
 	}
 }
 
