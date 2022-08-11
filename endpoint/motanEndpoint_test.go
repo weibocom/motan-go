@@ -54,7 +54,7 @@ func TestRecordErrEmptyThreshold(t *testing.T) {
 		ep.Call(request)
 		assert.True(t, ep.IsAvailable())
 	}
-
+	ep.Destroy()
 }
 
 func TestRecordErrWithErrThreshold(t *testing.T) {
@@ -78,6 +78,7 @@ func TestRecordErrWithErrThreshold(t *testing.T) {
 			assert.False(t, ep.IsAvailable())
 		}
 	}
+	ep.Destroy()
 }
 
 func TestMotanEndpoint_Call(t *testing.T) {
