@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/core"
 	"testing"
@@ -179,6 +180,36 @@ http-locations:
 		matcher := NewLocationMatcherFromContext("test.domain", context)
 		assert.Equal(s.T(), 0, len(matcher.exactLocations))
 	}
+}
+
+func (s *APITestSuite) TestMotanRequestToFasthttpRequest() {
+	method := "GET"
+	attachment := core.NewStringMap(0)
+	motanReq := &core.MotanRequest{
+		RequestID:   0,
+		ServiceName: "",
+		Method:      "",
+		MethodDesc:  "",
+		Arguments:   nil,
+		Attachment:  attachment,
+		RPCContext:  nil,
+	}
+	httpReq := fasthttp.AcquireRequest()
+
+	attachment.Store(HeaderContentType, "application/json")
+	attachment.Store(core.HostKey, "127.0.0.1")
+	attachment.Store(HeaderPrefix+"testKey", "testValue")
+
+	err := MotanRequestToFasthttpRequest(motanReq, httpReq, method)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []byte("testValue"), httpReq.Header.Peek("testKey"))
+	assert.Equal(s.T(), []byte(nil), httpReq.Header.Peek("Host"))
+	assert.Equal(s.T(), []byte("application/json"), httpReq.Header.ContentType())
+
+	attachment.Store(HeaderPrefix+core.HostKey, "test.com")
+	err = MotanRequestToFasthttpRequest(motanReq, httpReq, method)
+	assert.Nil(s.T(), err)
+	assert.Equal(s.T(), []byte("test.com"), httpReq.Header.Peek("Host"))
 }
 
 func (s *APITestSuite) TestNewRewriteRuleError() {

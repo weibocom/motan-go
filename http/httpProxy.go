@@ -21,6 +21,7 @@ const (
 )
 
 const (
+	HeaderPrefix      = "http_"
 	HeaderContentType = "Content-Type"
 )
 
@@ -58,7 +59,7 @@ const (
 var (
 	WhitespaceSplitPattern        = regexp.MustCompile(`\s+`)
 	findRewriteVarPattern         = regexp.MustCompile(`\{[0-9a-zA-Z_-]+\}`)
-	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString}
+	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString, core.HostKey}
 	rewriteVarFunc                = func(condType ProxyRewriteType, uri string, queryBytes []byte) string {
 		if condType != proxyRewriteTypeRegexpVar || len(queryBytes) == 0 {
 			return uri
@@ -435,7 +436,7 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 			}
 		}
 		// fasthttp will use a special field to store this header
-		if strings.EqualFold(k, core.HostKey) {
+		if strings.EqualFold(k, HeaderPrefix+core.HostKey) {
 			fasthttpRequest.Header.SetHost(v)
 			return true
 		}
@@ -444,6 +445,8 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 			return true
 		}
 		k = strings.Replace(k, "M_", "MOTAN-", -1)
+		// http header private prefix
+		k = strings.Replace(k, HeaderPrefix, "", -1)
 		fasthttpRequest.Header.Add(k, v)
 		return true
 	})
