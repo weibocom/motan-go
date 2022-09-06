@@ -151,7 +151,21 @@ func (i *InfoHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.Write(i.a.getConfigData())
 	case "/getReferService":
 		rw.Write(i.getReferService())
+	case "/getAllService":
+		rw.Write(i.getAllServices())
 	}
+}
+
+func (i *InfoHandler) getAllServices() []byte {
+	sMap := make(map[string][]*motan.URL)
+	var serviceList []*motan.URL
+	for _, s := range i.a.Context.ServiceURLs {
+		serviceList = append(serviceList, s)
+	}
+	sMap["services"] = serviceList
+	sMap["dynamic_services"] = i.a.GetDynamicRegistryInfo().RegisterNodes
+	b, _ := json.Marshal(sMap)
+	return b
 }
 
 func (i *InfoHandler) getReferService() []byte {

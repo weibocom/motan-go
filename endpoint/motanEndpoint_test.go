@@ -38,6 +38,49 @@ func TestGetName(t *testing.T) {
 	fmt.Printf("res:%+v\n", res)
 }
 
+func TestRecordErrEmptyThreshold(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	ep := &MotanEndpoint{}
+	ep.SetURL(url)
+	ep.SetProxy(true)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
+	for j := 0; j < 5; j++ {
+		request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
+		request.Attachment = motan.NewStringMap(0)
+		ep.Call(request)
+		assert.True(t, ep.IsAvailable())
+	}
+	ep.Destroy()
+}
+
+func TestRecordErrWithErrThreshold(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.ErrorCountThresholdKey, "5")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	ep := &MotanEndpoint{}
+	ep.SetURL(url)
+	ep.SetProxy(true)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
+	for j := 0; j < 10; j++ {
+		request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
+		request.Attachment = motan.NewStringMap(0)
+		ep.Call(request)
+		if j < 4 {
+			assert.True(t, ep.IsAvailable())
+		} else {
+			assert.False(t, ep.IsAvailable())
+		}
+	}
+	ep.Destroy()
+}
+
 func TestMotanEndpoint_Call(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")

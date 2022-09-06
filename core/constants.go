@@ -35,6 +35,8 @@ const (
 	FilterKey               = "filter"
 	GlobalFilter            = "globalFilter"
 	DisableGlobalFilter     = "disableGlobalFilter"
+	DefaultFilter           = "defaultFilter"
+	DisableDefaultFilter    = "disableDefaultFilter"
 	RegistryKey             = "registry"
 	WeightKey               = "weight"
 	SerializationKey        = "serialization"
@@ -85,6 +87,8 @@ const (
 const (
 	DefaultWriteTimeout     = 5 * time.Second
 	DefaultMaxContentLength = 10 * 1024 * 1024
+	GroupNameSeparator      = ","
+	GroupEnvironmentName    = "MESH_SERVICE_ADDITIONAL_GROUP"
 )
 
 // meta keys

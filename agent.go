@@ -124,6 +124,10 @@ func (a *Agent) RegisterCommandHandler(f CommandHandler) {
 	a.commandHandlers = append(a.commandHandlers, f)
 }
 
+func (a *Agent) GetDynamicRegistryInfo() *registrySnapInfoStorage {
+	return a.configurer.getRegistryInfo()
+}
+
 func (a *Agent) callAfterStart() {
 	time.AfterFunc(time.Second*5, func() {
 		for _, f := range a.onAfterStart {

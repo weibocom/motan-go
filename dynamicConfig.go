@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	URL "net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -211,7 +212,15 @@ func (h *DynamicConfigurerHandler) readURLsFromRequest(req *http.Request) ([]*co
 	if err != nil {
 		return nil, err
 	}
-	groups := strings.Split(url.Group, ",")
+	//add additional service group from environment
+	if v := os.Getenv(core.GroupEnvironmentName); v != "" {
+		if url.Group == "" {
+			url.Group = v
+		} else {
+			url.Group += "," + v
+		}
+	}
+	groups := core.SlicesUnique(core.TrimSplit(url.Group, core.GroupNameSeparator))
 	urls := []*core.URL{}
 	for _, group := range groups {
 		u := url.Copy()
@@ -299,11 +308,19 @@ func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
 	if len(agentFilter) > 0 {
 		filters = strings.Join(agentFilter, ",")
 	}
-	if filters == "" {
-		filters = h.agent.Context.AgentURL.GetParam(core.FilterKey, "")
-	}
+
 	if filters != "" {
 		url.PutParam(core.FilterKey, filters)
+	}
+
+	//final filters: defaultFilter + globalFilter + filters
+	finalFilters := h.agent.Context.MergeFilterSet(
+		h.agent.Context.GetDefaultFilterSet(url),
+		h.agent.Context.GetGlobalFilterSet(url),
+		h.agent.Context.GetFilterSet(url.GetStringParamsWithDefault(core.FilterKey, ""), ""),
+	)
+	if len(finalFilters) > 0 {
+		url.PutParam(core.FilterKey, h.agent.Context.FilterSetToStr(finalFilters))
 	}
 	return url, nil
 }

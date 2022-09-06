@@ -35,15 +35,14 @@ const (
 	basicServiceKey = "basicService"
 
 	// const for application pool
-	basicConfig        = "basic.yaml"
-	servicePath        = "services/"
-	applicationPath    = "applications/"
-	poolPath           = "pools/"
-	httpServicePath    = "http/service/"
-	httpLocationPath   = "http/location/"
-	httpPoolPath       = "http/pools/"
-	poolNameSeparator  = "-"
-	groupNameSeparator = ","
+	basicConfig       = "basic.yaml"
+	servicePath       = "services/"
+	applicationPath   = "applications/"
+	poolPath          = "pools/"
+	httpServicePath   = "http/service/"
+	httpLocationPath  = "http/location/"
+	httpPoolPath      = "http/pools/"
+	poolNameSeparator = "-"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -398,68 +397,109 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		// merge agent globalFilter, filter
-		c.mergeGlobalFilter(newURL)
+		//final filters: defaultFilter + globalFilter + filters
+		finalFilters := c.MergeFilterSet(
+			c.GetDefaultFilterSet(newURL),
+			c.GetGlobalFilterSet(newURL),
+			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
+		)
+		if len(finalFilters) > 0 {
+			newURL.PutParam(FilterKey, c.FilterSetToStr(finalFilters))
+		}
 
 		newURLs[key] = newURL
 	}
 	return newURLs
 }
 
-func (c *Context) mergeGlobalFilter(newURL *URL) {
-	if c.AgentURL != nil {
-		finalFilterSet := make(map[string]bool)
-		globalFilterStr := c.AgentURL.GetStringParamsWithDefault(GlobalFilter, "")
-		// disable globalFilter
-		if globalFilterStr != "" {
-			finalFilterSet = TrimSplitSet(globalFilterStr, ",")
-			disableGlobalFilterStr := newURL.GetStringParamsWithDefault(DisableGlobalFilter, "")
-			if disableGlobalFilterStr != "" {
-				vlog.Infoln("disable global filter: " + disableGlobalFilterStr)
-				disableGlobalFilterArr := TrimSplit(disableGlobalFilterStr, ",")
-				for _, disableFilter := range disableGlobalFilterArr {
-					if _, ok := finalFilterSet[disableFilter]; ok {
-						delete(finalFilterSet, disableFilter)
-					}
-				}
-			}
+func (c *Context) FilterSetToStr(f map[string]bool) string {
+	var dst []string
+	for k := range f {
+		dst = append(dst, k)
+	}
+	return strings.Join(dst, ",")
+}
+
+func (c *Context) GetFilterSet(filterStr, disableFilterStr string) (dst map[string]bool) {
+	if filterStr == "" {
+		return
+	}
+	dst = map[string]bool{}
+
+	for _, k := range strings.Split(filterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
 		}
-		// append filter
-		filterStr := newURL.GetStringParamsWithDefault(FilterKey, "")
-		if filterStr != "" {
-			filterArr := TrimSplit(filterStr, ",")
-			for _, filter := range filterArr {
-				finalFilterSet[filter] = true
-			}
+		dst[k] = true
+	}
+
+	for _, k := range strings.Split(disableFilterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
 		}
-		// make new filter string
-		var finalFilter string
-		for filter := range finalFilterSet {
-			if filter != "" {
-				finalFilter += filter + ","
+		delete(dst, k)
+	}
+	return
+}
+
+func (c *Context) MergeFilterSet(sets ...map[string]bool) (dst map[string]bool) {
+	dst = map[string]bool{}
+	for _, set := range sets {
+		for k := range set {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
 			}
-		}
-		finalFilter = strings.TrimRight(finalFilter, ",")
-		if finalFilter != "" {
-			newURL.PutParam(FilterKey, finalFilter)
+			dst[k] = true
 		}
 	}
+	return
+}
+
+func (c *Context) GetDefaultFilterSet(newURL *URL) map[string]bool {
+	if c.AgentURL == nil {
+		return nil
+	}
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(DefaultFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableDefaultFilter, ""))
+}
+
+func (c *Context) GetGlobalFilterSet(newURL *URL) map[string]bool {
+	if c.AgentURL == nil {
+		return nil
+	}
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
 }
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
 func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	addMotanServiceMap := map[string]*URL{}
 	for k, serviceURL := range motanServiceMap {
-		if !strings.Contains(serviceURL.Group, groupNameSeparator) {
+		//add additional service group from environment
+		if v := os.Getenv(GroupEnvironmentName); v != "" {
+			if serviceURL.Group == "" {
+				serviceURL.Group = v
+			} else {
+				serviceURL.Group += "," + v
+			}
+		}
+		if !strings.Contains(serviceURL.Group, GroupNameSeparator) {
 			continue
 		}
-		groups := TrimSplit(serviceURL.Group, groupNameSeparator)
+		groups := SlicesUnique(TrimSplit(serviceURL.Group, GroupNameSeparator))
 		serviceURL.Group = groups[0]
 		for idx, g := range groups[1:] {
 			key := fmt.Sprintf("%v-%v", k, idx)
 			newService := serviceURL.Copy()
 			newService.Group = g
-			motanServiceMap[key] = newService
+			addMotanServiceMap[key] = newService
 		}
+	}
+	for k, v := range addMotanServiceMap {
+		motanServiceMap[k] = v
 	}
 }
 

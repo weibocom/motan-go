@@ -101,3 +101,12 @@ func TestSplitTrim(t *testing.T) {
 		assert.Equal(t, tt.expect, ret)
 	}
 }
+
+func TestSlicesUnique(t *testing.T) {
+	a := []string{"a", "a", "b"}
+	b := []string{"a", "b"}
+	var c []string
+	assert.Equal(t, SlicesUnique(a), b)
+	assert.Equal(t, SlicesUnique(b), b)
+	assert.Equal(t, SlicesUnique(c), c)
+}

@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"flag"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -163,15 +164,98 @@ func TestContext_parseMultipleServiceGroup(t *testing.T) {
 			Group: "hello,hello1,hello2",
 		},
 	}
+	data3 := map[string]*URL{
+		"service1": {
+			Group: "hello,hello1",
+		},
+	}
+	data4 := map[string]*URL{
+		"service1": {
+			Group: "",
+		},
+	}
 	ctx := Context{}
 	ctx.parseMultipleServiceGroup(map[string]*URL{})
+
 	ctx.parseMultipleServiceGroup(data0)
 	assert.Len(t, data0, 1)
+
 	ctx.parseMultipleServiceGroup(data1)
 	assert.Len(t, data1, 1)
+
 	ctx.parseMultipleServiceGroup(data2)
 	assert.Len(t, data2, 3)
 	assert.Equal(t, data2["service1"].Group, "hello")
 	assert.Equal(t, data2["service1-0"].Group, "hello1")
 	assert.Equal(t, data2["service1-1"].Group, "hello2")
+
+	os.Setenv(GroupEnvironmentName, "hello2")
+	ctx.parseMultipleServiceGroup(data3)
+	assert.Len(t, data3, 3)
+	assert.Equal(t, data3["service1"].Group, "hello")
+	assert.Equal(t, data3["service1-0"].Group, "hello1")
+	assert.Equal(t, data3["service1-1"].Group, "hello2")
+
+	os.Setenv(GroupEnvironmentName, "hello")
+	ctx.parseMultipleServiceGroup(data4)
+	assert.Len(t, data4, 1)
+	assert.Equal(t, data3["service1"].Group, "hello")
+}
+
+func TestContext_mergeDefaultFilter(t *testing.T) {
+	c := Context{AgentURL: &URL{
+		Parameters: map[string]string{"defaultFilter": "a,b,d"},
+	}}
+	u1 := &URL{
+		Parameters: map[string]string{"filter": "a,c", "disableDefaultFilter": "b"},
+	}
+	u2 := &URL{
+		Parameters: map[string]string{"filter": "a,c", "disableDefaultFilter": "b"},
+	}
+
+	u1.Parameters[FilterKey] = c.FilterSetToStr(
+		c.MergeFilterSet(
+			c.GetDefaultFilterSet(u1), c.GetFilterSet(u1.Parameters[FilterKey], ""),
+		),
+	)
+
+	for _, v := range strings.Split("a,d,c", ",") {
+		assert.Contains(t, u1.Parameters["filter"], v)
+	}
+
+	c = Context{}
+	u2.Parameters[FilterKey] = c.FilterSetToStr(
+		c.MergeFilterSet(
+			c.GetDefaultFilterSet(u1), c.GetFilterSet(u2.Parameters[FilterKey], ""),
+		),
+	)
+	for _, v := range strings.Split("a,c", ",") {
+		assert.Contains(t, u1.Parameters["filter"], v)
+	}
+
+	c = Context{AgentURL: &URL{}}
+	u2.Parameters[FilterKey] = c.FilterSetToStr(
+		c.MergeFilterSet(
+			c.GetDefaultFilterSet(u1), c.GetFilterSet(u2.Parameters[FilterKey], ""),
+		),
+	)
+	for _, v := range strings.Split("a,c", ",") {
+		assert.Contains(t, u2.Parameters["filter"], v)
+	}
+}
+
+func TestContext_getFilterSet(t *testing.T) {
+	c := Context{}
+	a := "a,b,"
+	b := "b,"
+	assert.Equal(t, c.GetFilterSet("a", ""), c.GetFilterSet(a, b))
+}
+
+func TestContext_mergeFilterSet(t *testing.T) {
+	c := Context{}
+	a := c.GetFilterSet("a,b,c,", "")
+	b := c.GetFilterSet("b,", "")
+	for v := range c.MergeFilterSet(a, b) {
+		assert.Contains(t, "a,b,c", v)
+	}
 }
