@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	DefaultMetaSize = 16
+	DefaultMetaSize         = 16
+	DefaultMaxContentLength = 10 * 1024 * 1024
 )
 
 //message type
@@ -31,9 +32,11 @@ const (
 const (
 	MotanMagic      = 0xf1f1
 	HeaderLength    = 13
+	Version1        = 0
 	Version2        = 1
 	defaultProtocol = "motan2"
 )
+
 const (
 	MPath          = "M_p"
 	MMethod        = "M_m"
@@ -112,6 +115,8 @@ var (
 	ErrSerializeNum   = errors.New("message serialize number not correct")
 	ErrSerializeNil   = errors.New("message serialize not found")
 	ErrSerializedData = errors.New("message serialized data not correct")
+	ErrOverSize       = errors.New("content length over the limit")
+	ErrWrongSize      = errors.New("content length not correct")
 )
 
 // BuildRequestHeader build a proxy request header
@@ -307,21 +312,35 @@ func (msg *Message) Clone() interface{} {
 	return newMessage
 }
 
+func CheckMotanVersion(buf *bufio.Reader) (version int, err error) {
+	var b []byte
+	b, err = buf.Peek(4)
+	if err != nil {
+		return -1, err
+	}
+	mn := binary.BigEndian.Uint16(b[:2])
+	if mn != MotanMagic {
+		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
+		return -1, ErrMagicNum
+	}
+	return int(b[3] >> 3 & 0x1f), nil
+}
+
 func Decode(buf *bufio.Reader) (msg *Message, err error) {
-	msg, _, err = DecodeWithTime(buf)
+	msg, _, err = DecodeWithTime(buf, motan.DefaultMaxContentLength)
 	return msg, err
 }
 
-func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error) {
+func DecodeWithTime(buf *bufio.Reader, maxContentLength int) (msg *Message, start time.Time, err error) {
 	temp := make([]byte, HeaderLength, HeaderLength)
 
 	// decode header
 	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
-	start = time.Now()
+	start = time.Now() // record time when starting to read data
 	if err != nil {
 		return nil, start, err
 	}
-	mn := binary.BigEndian.Uint16(temp[:2])
+	mn := binary.BigEndian.Uint16(temp[:2]) // TODO 不再验证
 	if mn != MotanMagic {
 		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
@@ -331,7 +350,7 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 	header.MsgType = temp[2]
 	header.VersionStatus = temp[3]
 	version := header.GetVersion()
-	if version != Version2 {
+	if version != Version2 { // TODO 不再验证
 		vlog.Errorf("unsupported protocol version number: %d", version)
 		return nil, start, ErrVersion
 	}
@@ -344,6 +363,10 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 		return nil, start, err
 	}
 	metasize := int(binary.BigEndian.Uint32(temp[:4]))
+	if metasize > maxContentLength {
+		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
+		return nil, start, ErrOverSize
+	}
 	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
 		metadata, err := readBytes(buf, metasize)
@@ -376,6 +399,10 @@ func DecodeWithTime(buf *bufio.Reader) (msg *Message, start time.Time, err error
 		return nil, start, err
 	}
 	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
+	if bodysize > maxContentLength {
+		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
+		return nil, start, ErrOverSize
+	}
 	var body []byte
 	if bodysize > 0 {
 		body, err = readBytes(buf, bodysize)

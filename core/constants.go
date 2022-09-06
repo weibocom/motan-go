@@ -60,6 +60,7 @@ const (
 	ManagementPortRangeKey  = "managementPortRange"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 	MixGroups               = "mixGroups"
+	MaxContentLength        = "maxContentLength"
 )
 
 // nodeType
@@ -82,7 +83,8 @@ const (
 )
 
 const (
-	DefaultWriteTimeout = 5 * time.Second
+	DefaultWriteTimeout     = 5 * time.Second
+	DefaultMaxContentLength = 10 * 1024 * 1024
 )
 
 // meta keys
@@ -94,4 +96,6 @@ const (
 const (
 	ENoEndpoints = 1001
 	ENoChannel   = 1002
+	EUnkonwnMsg  = 1003
+	EConvertMsg  = 1004
 )

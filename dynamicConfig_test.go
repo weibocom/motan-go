@@ -25,5 +25,5 @@ func TestDynamicConfigurerHandler_readURLs(t *testing.T) {
 	assert.Equal(t, urls[1].Group, "hello1")
 	assert.Equal(t, urls[2].Group, "hello2")
 	_, err = d.readURLsFromRequest(req3)
- 	assert.NotNil(t, err)
+	assert.NotNil(t, err)
 }
