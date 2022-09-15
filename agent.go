@@ -841,7 +841,12 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("provider call panic. req:%s", motan.GetReqInfo(request))
 	})
-	serviceKey := getServiceKey(request.GetAttachment(mpro.MGroup), request.GetServiceName())
+	// todo: add GetGroup() method in Request
+	group := request.GetAttachment(mpro.MGroup)
+	if group == "" { // compatible with motan v1
+		group = request.GetAttachment(motan.GroupKey)
+	}
+	serviceKey := getServiceKey(group, request.GetServiceName())
 	if p := sa.providers.LoadOrNil(serviceKey); p != nil {
 		p := p.(motan.Provider)
 		res = p.Call(request)
