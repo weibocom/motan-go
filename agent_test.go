@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	"flag"
 	"github.com/weibocom/motan-go/config"
 	"io/ioutil"
 	"math/rand"
@@ -93,6 +94,21 @@ motan-agent:
 	assert.Nil(err)
 	assert.Equal(true, section["log_filter_caller"].(bool))
 	a.initParam()
+
+	logDirConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_dir: "./test/abcd"
+`)))
+	assert.Nil(err)
+	conf.Merge(logDirConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	a.initParam()
+	assert.Equal(a.logdir, "./test/abcd")
+	os.Args = append(os.Args, "-log_dir", "./test/cdef")
+	_ = flag.Set("log_dir", "./test/cdef")
+	a.initParam()
+	assert.Equal(a.logdir, "./test/cdef")
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
