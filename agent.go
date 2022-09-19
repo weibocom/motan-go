@@ -277,7 +277,16 @@ func (a *Agent) initParam() {
 		fmt.Println("get config of \"motan-agent\" fail! err " + err.Error())
 	}
 	logDir := ""
-	if section != nil && section["log_dir"] != nil {
+	isFound := false
+	for _, j := range os.Args {
+		if j == "-log_dir" {
+			isFound = true
+			break
+		}
+	}
+	if isFound {
+		logDir = flag.Lookup("log_dir").Value.String()
+	} else if section != nil && section["log_dir"] != nil {
 		logDir = section["log_dir"].(string)
 	}
 	if logDir == "" {
