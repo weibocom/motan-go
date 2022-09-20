@@ -122,6 +122,21 @@ func GetReqInfo(request Request) string {
 	return ""
 }
 
+func GetResInfo(response Response) string {
+	if response != nil {
+		var buffer bytes.Buffer
+		buffer.WriteString("res{")
+		buffer.WriteString(strconv.FormatUint(response.GetRequestID(), 10))
+		buffer.WriteString(",")
+		if response.GetException() != nil {
+			buffer.WriteString(response.GetException().ErrMsg)
+		}
+		buffer.WriteString("}")
+		return buffer.String()
+	}
+	return ""
+}
+
 func HandlePanic(f func()) {
 	if err := recover(); err != nil {
 		vlog.Errorf("recover panic. error:%v, stack: %s", err, debug.Stack())

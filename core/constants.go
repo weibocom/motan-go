@@ -35,8 +35,8 @@ const (
 	FilterKey               = "filter"
 	GlobalFilter            = "globalFilter"
 	DisableGlobalFilter     = "disableGlobalFilter"
-	DefaultFilter            = "defaultFilter"
-	DisableDefaultFilter     = "disableDefaultFilter"
+	DefaultFilter           = "defaultFilter"
+	DisableDefaultFilter    = "disableDefaultFilter"
 	RegistryKey             = "registry"
 	WeightKey               = "weight"
 	SerializationKey        = "serialization"
@@ -62,6 +62,7 @@ const (
 	ManagementPortRangeKey  = "managementPortRange"
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 	MixGroups               = "mixGroups"
+	MaxContentLength        = "maxContentLength"
 )
 
 // nodeType
@@ -84,9 +85,10 @@ const (
 )
 
 const (
-	DefaultWriteTimeout = 5 * time.Second
-	GroupNameSeparator   = ","
-	GroupEnvironmentName = "MESH_SERVICE_ADDITIONAL_GROUP"
+	DefaultWriteTimeout     = 5 * time.Second
+	DefaultMaxContentLength = 10 * 1024 * 1024
+	GroupNameSeparator      = ","
+	GroupEnvironmentName    = "MESH_SERVICE_ADDITIONAL_GROUP"
 )
 
 // meta keys
@@ -98,4 +100,6 @@ const (
 const (
 	ENoEndpoints = 1001
 	ENoChannel   = 1002
+	EUnkonwnMsg  = 1003
+	EConvertMsg  = 1004
 )

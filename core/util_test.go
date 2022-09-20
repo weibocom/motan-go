@@ -110,3 +110,17 @@ func TestSlicesUnique(t *testing.T) {
 	assert.Equal(t, SlicesUnique(b), b)
 	assert.Equal(t, SlicesUnique(c), c)
 }
+
+func TestGetReqInfo(t *testing.T) {
+	req := &MotanRequest{RequestID: 34789798073, ServiceName: "testServiceName", Method: "testMethod"}
+	assert.Equal(t, "", GetReqInfo(nil))
+	assert.Equal(t, "req{34789798073,testServiceName,testMethod}", GetReqInfo(req))
+}
+
+func TestGetResInfo(t *testing.T) {
+	res := &MotanResponse{RequestID: 374867809809}
+	resE := &MotanResponse{RequestID: 374867809809, Exception: &Exception{ErrType: ServiceException, ErrCode: 503, ErrMsg: "testErrMsg"}}
+	assert.Equal(t, "", GetResInfo(nil))
+	assert.Equal(t, "res{374867809809,}", GetResInfo(res))
+	assert.Equal(t, "res{374867809809,testErrMsg}", GetResInfo(resE))
+}
