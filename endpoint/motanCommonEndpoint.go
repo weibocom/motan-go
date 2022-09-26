@@ -774,6 +774,8 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, ser
 	switch connType {
 	case motan.Delay:
 		for i := 0; i < poolCap; i++ {
+			//delay logic just push nil into channelPool. when the first request comes in,
+			//endpoint will build a connection from factory
 			channelPool.channels <- nil
 		}
 	case motan.Async:
