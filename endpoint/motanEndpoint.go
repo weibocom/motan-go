@@ -47,6 +47,7 @@ type MotanEndpoint struct {
 	minRequestTimeoutMillisecond int64
 	maxRequestTimeoutMillisecond int64
 	clientConnection             int
+	clientConnectionType         string
 	maxContentLength             int
 
 	// for heartbeat requestID
@@ -78,11 +79,12 @@ func (m *MotanEndpoint) Initialize() {
 	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
+	m.clientConnectionType = m.url.GetParam(motan.ClientConnectionTypeKey, "")
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
 	}
 	config := &ChannelConfig{MaxContentLength: m.maxContentLength}
-	channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization)
+	channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.clientConnectionType)
 	if err != nil {
 		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
 		// retry connect
@@ -94,7 +96,7 @@ func (m *MotanEndpoint) Initialize() {
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization)
+					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.clientConnectionType)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
@@ -658,6 +660,7 @@ func (c *V2ChannelPool) Get() (*V2Channel, error) {
 		if err != nil {
 			vlog.Errorf("create channel failed. err:%s", err.Error())
 		}
+		_ = conn.(*net.TCPConn).SetNoDelay(true)
 		channel = buildV2Channel(conn, c.config, c.serialization)
 	}
 	if err := retV2ChannelPool(channels, channel); err != nil && channel != nil {
@@ -701,7 +704,7 @@ func (c *V2ChannelPool) Close() error {
 	return nil
 }
 
-func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, serialization motan.Serialization) (*V2ChannelPool, error) {
+func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, serialization motan.Serialization, connType string) (*V2ChannelPool, error) {
 	if poolCap <= 0 {
 		return nil, errors.New("invalid capacity settings")
 	}
@@ -711,14 +714,30 @@ func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, s
 		config:        config,
 		serialization: serialization,
 	}
-	for i := 0; i < poolCap; i++ {
-		conn, err := factory()
+	fillPool := func() error {
+		for i := 0; i < poolCap; i++ {
+			conn, err := factory()
+			if err != nil {
+				channelPool.Close()
+				return err
+			}
+			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			channelPool.channels <- buildV2Channel(conn, config, serialization)
+		}
+		return nil
+	}
+	switch connType {
+	case motan.Delay:
+		for i := 0; i < poolCap; i++ {
+			channelPool.channels <- nil
+		}
+	case motan.Async:
+		go fillPool()
+	default:
+		err := fillPool()
 		if err != nil {
-			channelPool.Close()
 			return nil, err
 		}
-		_ = conn.(*net.TCPConn).SetNoDelay(true)
-		channelPool.channels <- buildV2Channel(conn, config, serialization)
 	}
 	return channelPool, nil
 }

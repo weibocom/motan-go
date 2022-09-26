@@ -482,7 +482,10 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 
 func (a *Agent) initClusters() {
 	for _, url := range a.Context.RefersURLs {
-		a.initCluster(url)
+		// concurrently initialize cluster
+		go func(u *motan.URL) {
+			a.initCluster(u)
+		}(url)
 	}
 }
 
@@ -500,15 +503,16 @@ func (a *Agent) initCluster(url *motan.URL) {
 		cluster: c,
 	}
 	service := url.Path
-	var serviceMapItemArr []serviceMapItem
-	if v, exists := a.serviceMap.Load(service); exists {
-		serviceMapItemArr = v.([]serviceMapItem)
-		serviceMapItemArr = append(serviceMapItemArr, item)
-	} else {
-		serviceMapItemArr = []serviceMapItem{item}
-	}
-	a.serviceMap.Store(url.Path, serviceMapItemArr)
-
+	a.serviceMap.SafeDoFunc(func() {
+		var serviceMapItemArr []serviceMapItem
+		if v, exists := a.serviceMap.Load(service); exists {
+			serviceMapItemArr = v.([]serviceMapItem)
+			serviceMapItemArr = append(serviceMapItemArr, item)
+		} else {
+			serviceMapItemArr = []serviceMapItem{item}
+		}
+		a.serviceMap.UnsafeStore(url.Path, serviceMapItemArr)
+	})
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
 	a.clusterMap.Store(mapKey, c)
 }

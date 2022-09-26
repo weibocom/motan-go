@@ -122,6 +122,10 @@ func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
 func (m *CopyOnWriteMap) Store(key, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.UnsafeStore(key, value)
+}
+
+func (m *CopyOnWriteMap) UnsafeStore(key, value interface{}) {
 	lastMap := m.data()
 	copiedMap := make(map[interface{}]interface{}, len(lastMap)+1)
 	for k, v := range lastMap {
@@ -160,4 +164,10 @@ func (m *CopyOnWriteMap) Swap(newMap map[interface{}]interface{}) map[interface{
 	lastMap := m.data()
 	m.innerMap.Store(newMap)
 	return lastMap
+}
+
+func (m *CopyOnWriteMap) SafeDoFunc(f func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f()
 }
