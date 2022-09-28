@@ -55,7 +55,8 @@ const (
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"
-	ClientConnectionTypeKey = "clientConnectionType"
+	LazyInit                = "lazyInit"
+	AsyncInitConnection     = "asyncInitConnection"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"
@@ -71,12 +72,6 @@ const (
 	NodeTypeService = "service"
 	NodeTypeReferer = "referer"
 	NodeTypeAgent   = "agent"
-)
-
-// client connection type
-const (
-	Delay = "delay"
-	Async = "async"
 )
 
 // trace span name

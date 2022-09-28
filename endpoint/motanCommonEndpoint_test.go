@@ -1,32 +1,21 @@
 package endpoint
 
 import (
-	"bufio"
 	"fmt"
-	"github.com/weibocom/motan-go/protocol"
-	"net"
-	"runtime"
-	"strconv"
-	"testing"
-	"time"
-
 	"github.com/stretchr/testify/assert"
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/protocol"
 	"github.com/weibocom/motan-go/serialize"
+	"net"
+	"runtime"
+	"testing"
+	"time"
 )
 
-func TestMain(m *testing.M) {
-	server := StartTestServer(8989)
-	defer server.Close()
-	m.Run()
-}
-
-//TODO more UT
-func TestGetName(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestGetV1Name(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "100")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -40,11 +29,11 @@ func TestGetName(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestRecordErrEmptyThreshold(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestV1RecordErrEmptyThreshold(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -59,12 +48,12 @@ func TestRecordErrEmptyThreshold(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestRecordErrWithErrThreshold(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestV1RecordErrWithErrThreshold(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "5")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -84,18 +73,18 @@ func TestRecordErrWithErrThreshold(t *testing.T) {
 	conn, err := ep.channels.factory()
 	assert.Nil(t, err)
 	_ = conn.(*net.TCPConn).SetNoDelay(true)
-	ep.channels.channels <- buildV2Channel(conn, ep.channels.config, ep.channels.serialization)
+	ep.channels.channels <- buildChannel(conn, ep.channels.config, ep.channels.serialization)
 	time.Sleep(time.Second * 2)
 	assert.True(t, ep.IsAvailable())
 	ep.Destroy()
 }
 
-func TestMotanEndpoint_SuccessCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestMotanCommonEndpoint_SuccessCall(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
@@ -110,12 +99,12 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	assert.Equal(t, s, "hello")
 }
 
-func TestMotanEndpoint_AsyncCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestMotanCommonEndpoint_AsyncCall(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
@@ -130,12 +119,12 @@ func TestMotanEndpoint_AsyncCall(t *testing.T) {
 	assert.Equal(t, resStr, "hello")
 }
 
-func TestMotanEndpoint_ErrorCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestMotanCommonEndpoint_ErrorCall(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -154,12 +143,12 @@ func TestMotanEndpoint_ErrorCall(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestMotanEndpoint_RequestTimeout(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+func TestMotanCommonEndpoint_RequestTimeout(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -179,12 +168,12 @@ func TestMotanEndpoint_RequestTimeout(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestLazyInit(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2", Parameters: map[string]string{"lazyInit": "true"}}
+func TestV1LazyInit(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"lazyInit": "true"}}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -205,12 +194,12 @@ func TestLazyInit(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestAsyncInit(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2", Parameters: map[string]string{"asyncInitConnection": "true"}}
+func TestV1AsyncInit(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"asyncInitConnection": "true"}}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
-	ep := &MotanEndpoint{}
+	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -229,87 +218,4 @@ func TestAsyncInit(t *testing.T) {
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
 	ep.Destroy()
-}
-
-func StartTestServer(port int) *MockServer {
-	m := &MockServer{Port: port}
-	m.Start()
-	return m
-}
-
-type MockServer struct {
-	Port int
-	lis  net.Listener
-}
-
-func (m *MockServer) Start() (err error) {
-	//async
-	m.lis, err = net.Listen("tcp", ":"+strconv.Itoa(m.Port))
-	if err != nil {
-		vlog.Errorf("listen port:%d fail. err: %v", m.Port, err)
-		return err
-	}
-	go handle(m.lis)
-	return nil
-}
-
-func (m *MockServer) Close() {
-	if m.lis != nil {
-		m.lis.Close()
-	}
-}
-
-func handle(netListen net.Listener) {
-	for {
-		conn, err := netListen.Accept()
-		if err != nil {
-			fmt.Printf("accept connection fail. err:%v", err)
-			return
-		}
-
-		go handleConnection(conn, 5000)
-	}
-}
-
-func handleConnection(conn net.Conn, timeout int) {
-	buf := bufio.NewReader(conn)
-	msg, _, err := protocol.DecodeWithTime(buf, 10*1024*1024)
-	if err != nil {
-		time.Sleep(time.Millisecond * 1000)
-		conn.Close()
-		return
-	}
-	processMsg(msg, conn)
-}
-
-func processMsg(msg *protocol.Message, conn net.Conn) {
-	var res *protocol.Message
-	var tc *motan.TraceContext
-	var err error
-	lastRequestID := msg.Header.RequestID
-	if msg.Header.IsHeartbeat() {
-		res = protocol.BuildHeartbeat(msg.Header.RequestID, protocol.Res)
-	} else {
-		time.Sleep(time.Millisecond * 1000)
-		serialization := &serialize.SimpleSerialization{}
-		resp := &motan.MotanResponse{
-			RequestID:   lastRequestID,
-			Value:       "hello",
-			ProcessTime: 1000,
-		}
-		res, err = protocol.ConvertToResMessage(resp, serialization)
-		if err != nil {
-			conn.Close()
-		}
-	}
-	res.Header.RequestID = lastRequestID
-	resBuf := res.Encode()
-	if tc != nil {
-		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
-	}
-	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-	_, err = conn.Write(resBuf.Bytes())
-	if err != nil {
-		conn.Close()
-	}
 }

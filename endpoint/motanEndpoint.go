@@ -47,7 +47,7 @@ type MotanEndpoint struct {
 	minRequestTimeoutMillisecond int64
 	maxRequestTimeoutMillisecond int64
 	clientConnection             int
-	clientConnectionType         string
+	lazyInit                     bool
 	maxContentLength             int
 
 	// for heartbeat requestID
@@ -79,39 +79,16 @@ func (m *MotanEndpoint) Initialize() {
 	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
-	m.clientConnectionType = m.url.GetParam(motan.ClientConnectionTypeKey, "")
+	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, false)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, false)
 	factory := func() (net.Conn, error) {
 		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
 	}
 	config := &ChannelConfig{MaxContentLength: m.maxContentLength}
-	channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.clientConnectionType)
-	if err != nil {
-		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
-		// retry connect
-		go func() {
-			defer motan.HandlePanic(nil)
-			// TODO: retry after 2^n * timeUnit
-			ticker := time.NewTicker(connectRetryInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.clientConnectionType)
-					if err == nil {
-						m.channels = channels
-						m.setAvailable(true)
-						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
-						return
-					}
-				case <-m.destroyCh:
-					return
-				}
-			}
-		}()
+	if asyncInitConnection {
+		go m.initChannelPoolWithRetry(factory, config, connectRetryInterval)
 	} else {
-		m.channels = channels
-		m.setAvailable(true)
-		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+		m.initChannelPoolWithRetry(factory, config, connectRetryInterval)
 	}
 }
 
@@ -221,6 +198,38 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		}
 	}
 	return response
+}
+
+func (m *MotanEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *ChannelConfig, retryInterval time.Duration) {
+	channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+	if err != nil {
+		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
+		// retry connect
+		go func() {
+			defer motan.HandlePanic(nil)
+			// TODO: retry after 2^n * timeUnit
+			ticker := time.NewTicker(retryInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+					if err == nil {
+						m.channels = channels
+						m.setAvailable(true)
+						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+						return
+					}
+				case <-m.destroyCh:
+					return
+				}
+			}
+		}()
+	} else {
+		m.channels = channels
+		m.setAvailable(true)
+		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+	}
 }
 
 func (m *MotanEndpoint) recordErrAndKeepalive() {
@@ -704,7 +713,7 @@ func (c *V2ChannelPool) Close() error {
 	return nil
 }
 
-func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, serialization motan.Serialization, connType string) (*V2ChannelPool, error) {
+func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, serialization motan.Serialization, lazyInit bool) (*V2ChannelPool, error) {
 	if poolCap <= 0 {
 		return nil, errors.New("invalid capacity settings")
 	}
@@ -726,16 +735,13 @@ func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, s
 		}
 		return nil
 	}
-	switch connType {
-	case motan.Delay:
+	if lazyInit {
 		for i := 0; i < poolCap; i++ {
 			//delay logic just push nil into channelPool. when the first request comes in,
 			//endpoint will build a connection from factory
 			channelPool.channels <- nil
 		}
-	case motan.Async:
-		go fillPool()
-	default:
+	} else {
 		err := fillPool()
 		if err != nil {
 			return nil, err
