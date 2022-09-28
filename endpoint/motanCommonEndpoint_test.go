@@ -17,6 +17,7 @@ func TestGetV1Name(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "100")
 	ep := &MotanCommonEndpoint{}
 	ep.SetURL(url)
+
 	ep.SetProxy(true)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
