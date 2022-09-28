@@ -195,27 +195,15 @@ func TestV1LazyInit(t *testing.T) {
 	ep.Destroy()
 }
 
-//func TestV1AsyncInit(t *testing.T) {
-//	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"asyncInitConnection": "true"}}
-//	url.PutParam(motan.TimeOutKey, "100")
-//	url.PutParam(motan.ErrorCountThresholdKey, "1")
-//	url.PutParam(motan.ClientConnectionKey, "1")
-//	ep := &MotanCommonEndpoint{}
-//	ep.SetURL(url)
-//	ep.SetProxy(true)
-//	ep.SetSerialization(&serialize.SimpleSerialization{})
-//	ep.Initialize()
-//	time.Sleep(time.Second * 5)
-//	assert.NotNil(t, ep.channels)
-//	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-//	request.Attachment = motan.NewStringMap(0)
-//	res := ep.Call(request)
-//	fmt.Println(res.GetException().ErrMsg)
-//	assert.False(t, ep.IsAvailable())
-//	time.Sleep(1 * time.Millisecond)
-//	beforeNGoroutine := runtime.NumGoroutine()
-//	ep.Call(request)
-//	time.Sleep(1 * time.Millisecond)
-//	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
-//	ep.Destroy()
-//}
+func TestV1AsyncInit(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"asyncInitConnection": "true"}}
+	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	ep := &MotanCommonEndpoint{}
+	ep.SetURL(url)
+	ep.SetProxy(true)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	time.Sleep(time.Second * 5)
+}

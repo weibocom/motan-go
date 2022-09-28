@@ -107,6 +107,7 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	s, ok := v.(string)
 	assert.True(t, ok)
 	assert.Equal(t, s, "hello")
+	ep.Destroy()
 }
 
 func TestMotanEndpoint_AsyncCall(t *testing.T) {
@@ -127,6 +128,7 @@ func TestMotanEndpoint_AsyncCall(t *testing.T) {
 	resp := <-request.GetRPCContext(false).Result.Done
 	assert.Nil(t, resp.Error)
 	assert.Equal(t, resStr, "hello")
+	ep.Destroy()
 }
 
 func TestMotanEndpoint_ErrorCall(t *testing.T) {
@@ -204,29 +206,18 @@ func TestLazyInit(t *testing.T) {
 	ep.Destroy()
 }
 
-//func TestAsyncInit(t *testing.T) {
-//	url := &motan.URL{Port: 8989, Protocol: "motan2", Parameters: map[string]string{"asyncInitConnection": "true"}}
-//	url.PutParam(motan.TimeOutKey, "100")
-//	url.PutParam(motan.ErrorCountThresholdKey, "1")
-//	url.PutParam(motan.ClientConnectionKey, "1")
-//	ep := &MotanEndpoint{}
-//	ep.SetURL(url)
-//	ep.SetProxy(true)
-//	ep.SetSerialization(&serialize.SimpleSerialization{})
-//	ep.Initialize()
-//	time.Sleep(time.Second * 5)
-//	request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
-//	request.Attachment = motan.NewStringMap(0)
-//	res := ep.Call(request)
-//	fmt.Println(res.GetException().ErrMsg)
-//	assert.False(t, ep.IsAvailable())
-//	time.Sleep(1 * time.Millisecond)
-//	beforeNGoroutine := runtime.NumGoroutine()
-//	ep.Call(request)
-//	time.Sleep(1 * time.Millisecond)
-//	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
-//	ep.Destroy()
-//}
+func TestAsyncInit(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan2", Parameters: map[string]string{"asyncInitConnection": "true"}}
+	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	ep := &MotanEndpoint{}
+	ep.SetURL(url)
+	ep.SetProxy(true)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	time.Sleep(time.Second * 5)
+}
 
 func StartTestServer(port int) *MockServer {
 	m := &MockServer{Port: port}
