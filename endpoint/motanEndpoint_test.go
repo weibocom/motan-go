@@ -3,17 +3,16 @@ package endpoint
 import (
 	"bufio"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/protocol"
+	"github.com/weibocom/motan-go/serialize"
 	"net"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
-	"github.com/weibocom/motan-go/serialize"
 )
 
 func TestMain(m *testing.M) {
