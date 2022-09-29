@@ -484,6 +484,7 @@ func (a *Agent) initClusters() {
 	for _, url := range a.Context.RefersURLs {
 		// concurrently initialize cluster
 		go func(u *motan.URL) {
+			defer motan.HandlePanic(nil)
 			a.initCluster(u)
 		}(url)
 	}

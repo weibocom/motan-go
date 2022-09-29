@@ -172,6 +172,7 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 }
 
 func (m *MotanCommonEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *ChannelConfig, retryInterval time.Duration) {
+	defer motan.HandlePanic(nil)
 	channels, err := NewChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
 	if err != nil {
 		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
@@ -768,18 +769,6 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, ser
 		config:        config,
 		serialization: serialization,
 	}
-	fillPool := func() error {
-		for i := 0; i < poolCap; i++ {
-			conn, err := factory()
-			if err != nil {
-				channelPool.Close()
-				return err
-			}
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
-			channelPool.channels <- buildChannel(conn, config, serialization)
-		}
-		return nil
-	}
 	if lazyInit {
 		for i := 0; i < poolCap; i++ {
 			//delay logic just push nil into channelPool. when the first request comes in,
@@ -787,9 +776,14 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, ser
 			channelPool.channels <- nil
 		}
 	} else {
-		err := fillPool()
-		if err != nil {
-			return nil, err
+		for i := 0; i < poolCap; i++ {
+			conn, err := factory()
+			if err != nil {
+				channelPool.Close()
+				return nil, err
+			}
+			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			channelPool.channels <- buildChannel(conn, config, serialization)
 		}
 	}
 	return channelPool, nil
