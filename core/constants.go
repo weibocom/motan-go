@@ -55,6 +55,8 @@ const (
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"
+	LazyInit                = "lazyInit"
+	AsyncInitConnection     = "asyncInitConnection"
 	ErrorCountThresholdKey  = "errorCountThreshold"
 	KeepaliveIntervalKey    = "keepaliveInterval"
 	UnixSockKey             = "unixSock"

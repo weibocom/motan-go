@@ -55,6 +55,16 @@ func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
 	return intvalue
 }
 
+func (u *URL) GetBoolValue(key string, defaultValue bool) bool {
+	if v, ok := u.Parameters[key]; ok {
+		boolValue, err := strconv.ParseBool(v)
+		if err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
 func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
 	result, b := u.GetInt(key)
 	if b {
