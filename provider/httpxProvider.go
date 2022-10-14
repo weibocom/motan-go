@@ -52,7 +52,7 @@ func (h *HTTPXProvider) Initialize() {
 				for _, method := range methodArr {
 					sconf := make(sConfT)
 					for k, v := range getSrvConf.(map[interface{}]interface{}) {
-						// @TODO gracful panic when got a conf err, like more %s in URL_FORMAT
+						// @TODO graceful panic when got a conf err, like more %s in URL_FORMAT
 						sconf[k.(string)] = v.(string)
 					}
 					srvConf[method] = sconf

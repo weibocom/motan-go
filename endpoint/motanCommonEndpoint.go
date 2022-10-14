@@ -714,8 +714,9 @@ func (c *ChannelPool) Get() (*Channel, error) {
 		conn, err := c.factory()
 		if err != nil {
 			vlog.Errorf("create channel failed. err:%s", err.Error())
+		} else {
+			_ = conn.(*net.TCPConn).SetNoDelay(true)
 		}
-		_ = conn.(*net.TCPConn).SetNoDelay(true)
 		channel = buildChannel(conn, c.config, c.serialization)
 	}
 	if err := retChannelPool(channels, channel); err != nil && channel != nil {
