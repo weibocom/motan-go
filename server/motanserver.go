@@ -18,7 +18,7 @@ import (
 )
 
 var currentConnections int64
-
+var HeartbeatDisabled bool
 var motanServerOnce sync.Once
 
 func incrConnections() {
@@ -191,6 +191,10 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	var tc *motan.TraceContext
 	lastRequestID := msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
+		if HeartbeatDisabled {
+			conn.Close()
+			return
+		}
 		res = mpro.BuildHeartbeat(msg.Header.RequestID, mpro.Res)
 	} else {
 		tc = motan.TracePolicy(msg.Header.RequestID, msg.Metadata)
@@ -278,6 +282,10 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 		reqCtx.ExtFactory = m.extFactory
 		reqCtx.RequestReceiveTime = start
 		if mpro.IsV1HeartbeatReq(req) {
+			if HeartbeatDisabled {
+				conn.Close()
+				return
+			}
 			result = mpro.BuildV1HeartbeatRes(req.GetRequestID())
 		} else {
 			// TraceContext Currently not supported in protocol v1
