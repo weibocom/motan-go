@@ -14,6 +14,7 @@ import (
 	"time"
 
 	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/provider"
 	"gopkg.in/yaml.v2"
 
 	"github.com/shirou/gopsutil/v3/process"
@@ -195,6 +196,7 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	a.configurer = NewDynamicConfigurer(a)
 	go a.startMServer()
 	go a.registerAgent()
+	go a.startAllServerStatusDaemon()
 	f, err := os.Create(a.pidfile)
 	if err != nil {
 		vlog.Errorf("create file %s fail.", a.pidfile)
@@ -1117,4 +1119,35 @@ func (a *Agent) UnexportService(url *motan.URL) error {
 		exporter.(motan.Exporter).Unexport()
 	}
 	return nil
+}
+func (a *Agent) startAllServerStatusDaemon() {
+	defer motan.HandlePanic(nil)
+	var addr string
+	var timeout = 2 * time.Second
+	timer := time.NewTicker(time.Second * 30)
+	defer timer.Stop()
+	for {
+		<-timer.C
+		if len(a.Context.ServiceURLs) == 0 {
+			mserver.HeartbeatDisabled = false
+			continue
+		}
+		var alive = false
+		for _, s := range a.Context.ServiceURLs {
+			if v := s.GetParam(mhttp.ProxyAddressKey, ""); v != "" {
+				addr = v
+			} else {
+				_, port, _ := motan.ParseExportInfo(s.GetParam(motan.ProxyKey, ""))
+				addr = net.JoinHostPort(s.GetParam(provider.ProxyHostKey, provider.DefaultHost), strconv.FormatInt(int64(port), 10))
+			}
+			c, e := net.DialTimeout("tcp", addr, timeout)
+			if e != nil {
+				continue
+			}
+			c.Close()
+			alive = true
+			break
+		}
+		mserver.HeartbeatDisabled = !alive
+	}
 }
