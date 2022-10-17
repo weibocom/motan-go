@@ -52,6 +52,11 @@ func TestEncodeMotanV1Request(t *testing.T) {
 		t.Fatalf("read v1 req msg fail. err:%v", err)
 	}
 	checkBaseReq(req2, rid, t)
+
+	// test request clone
+	cloneReq := req2.Clone().(motan.Request)
+	checkBaseReq(cloneReq, rid, t)
+	assertTrue(cloneReq.GetRPCContext(true).OriginalMessage == v1Msg, "request originMessage", t)
 }
 
 func checkBaseReq(req motan.Request, rid uint64, t *testing.T) {

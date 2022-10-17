@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/weibocom/motan-go/serialize"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -183,6 +184,64 @@ func assertTrue(b bool, msg string, t *testing.T) {
 }
 
 //TODO convert
+func TestConvertToRequest(t *testing.T) {
+	h := &Header{}
+	h.SetVersion(Version2)
+	h.SetStatus(6)
+	h.SetOneWay(true)
+	h.SetSerialize(6)
+	h.SetGzip(true)
+	h.SetHeartbeat(true)
+	h.SetProxy(true)
+	h.SetRequest(true)
+	h.Magic = MotanMagic
+	h.RequestID = 2349789
+	meta := core.NewStringMap(0)
+	meta.Store("k1", "v1")
+	meta.Store(MGroup, "group")
+	meta.Store(MMethod, "method")
+	meta.Store(MPath, "path")
+	body := []byte("testbody")
+	msg := &Message{Header: h, Metadata: meta, Body: body}
+	req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
+	assertTrue(err == nil, "conver to request err", t)
+	assertTrue(req.GetAttachment(MGroup) == "group", "request group", t)
+	assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
+	assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
+
+	// test request clone
+	cloneReq := req.Clone().(core.Request)
+	assertTrue(err == nil, "conver to request err", t)
+	assertTrue(cloneReq.GetAttachment(MGroup) == "group", "clone request group", t)
+	assertTrue(cloneReq.GetAttachment(MMethod) == "method", "clone request method", t)
+	assertTrue(cloneReq.GetAttachment(MPath) == "path", "clone request path", t)
+	assertTrue(cloneReq.GetRPCContext(true).OriginalMessage.(*Message).Header.Serialize == msg.Header.Serialize, "clone request originMessage", t)
+	testCloneOriginMeta := []map[string]interface{}{
+		{
+			"key":    MMethod,
+			"expect": "method",
+			"msg":    "clone originMessage meta method",
+		},
+		{
+			"key":    MGroup,
+			"expect": "group",
+			"msg":    "clone originMessage meta group",
+		},
+		{
+			"key":    MPath,
+			"expect": "path",
+			"msg":    "clone originMessage meta path",
+		},
+	}
+	for _, m := range testCloneOriginMeta {
+		key := m["key"].(string)
+		expect := m["expect"].(string)
+		tips := m["msg"].(string)
+		value, ok := cloneReq.GetRPCContext(true).OriginalMessage.(*Message).Metadata.Load(key)
+		assertTrue(ok == true, "load clone originMessage meta "+key, t)
+		assertTrue(expect == value, tips, t)
+	}
+}
 
 func BenchmarkEncodeGzip(b *testing.B) {
 	DefaultGzipLevel = gzip.BestSpeed
