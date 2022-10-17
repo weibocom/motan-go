@@ -18,6 +18,7 @@ import (
 )
 
 var currentConnections int64
+// heartbeat downgrade in case of all backend servers invalid when agent proxy mode
 var HeartbeatDisabled bool
 var motanServerOnce sync.Once
 
