@@ -524,7 +524,7 @@ func (m *MotanRequest) Clone() interface{} {
 			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
 				newRequest.RPCContext.OriginalMessage = oldMessage.Clone()
 			} else {
-				newRequest.RPCContext.OriginalMessage = oldMessage
+				newRequest.RPCContext.OriginalMessage = m.RPCContext.OriginalMessage
 			}
 		}
 	}
