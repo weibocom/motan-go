@@ -245,6 +245,7 @@ type Server interface {
 	SetMessageHandler(mh MessageHandler)
 	GetMessageHandler() MessageHandler
 	Open(block bool, proxy bool, handler MessageHandler, extFactory ExtensionFactory) error
+	SetHeartbeat(b bool)
 }
 
 // Exporter : export and manage a service. one exporter bind with a service

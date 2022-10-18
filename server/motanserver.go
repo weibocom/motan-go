@@ -18,8 +18,6 @@ import (
 )
 
 var currentConnections int64
-// heartbeat downgrade in case of all backend servers invalid when agent proxy mode
-var HeartbeatDisabled bool
 var motanServerOnce sync.Once
 
 func incrConnections() {
@@ -42,6 +40,8 @@ type MotanServer struct {
 	proxy            bool
 	isDestroyed      chan bool
 	maxContextLength int
+	// heartbeat downgrade in case of all backend servers invalid when agent proxy mode
+	heartbeatDisabled bool
 }
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
@@ -192,7 +192,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	var tc *motan.TraceContext
 	lastRequestID := msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
-		if HeartbeatDisabled {
+		if m.heartbeatDisabled {
 			conn.Close()
 			return
 		}
@@ -283,7 +283,7 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 		reqCtx.ExtFactory = m.extFactory
 		reqCtx.RequestReceiveTime = start
 		if mpro.IsV1HeartbeatReq(req) {
-			if HeartbeatDisabled {
+			if m.heartbeatDisabled {
 				conn.Close()
 				return
 			}
@@ -324,6 +324,10 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 		resCtx := res.GetRPCContext(true)
 		resCtx.OnFinish()
 	}
+}
+
+func (m *MotanServer) SetHeartbeat(b bool) {
+	m.heartbeatDisabled=b
 }
 
 func getRemoteIP(address string) string {
