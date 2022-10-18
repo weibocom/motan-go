@@ -40,12 +40,13 @@ type MotanServer struct {
 	proxy            bool
 	isDestroyed      chan bool
 	maxContextLength int
-	// heartbeat downgrade in case of all backend servers invalid when agent proxy mode
-	heartbeatDisabled bool
+
+	heartbeatEnabled bool
 }
 
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
+	m.heartbeatEnabled = true
 
 	motanServerOnce.Do(func() {
 		metrics.RegisterStatusSampleFunc("motan_server_connection_count", getConnections)
@@ -192,7 +193,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	var tc *motan.TraceContext
 	lastRequestID := msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
-		if m.heartbeatDisabled {
+		if !m.heartbeatEnabled {
 			conn.Close()
 			return
 		}
@@ -283,7 +284,7 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 		reqCtx.ExtFactory = m.extFactory
 		reqCtx.RequestReceiveTime = start
 		if mpro.IsV1HeartbeatReq(req) {
-			if m.heartbeatDisabled {
+			if !m.heartbeatEnabled {
 				conn.Close()
 				return
 			}
@@ -326,8 +327,9 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 	}
 }
 
-func (m *MotanServer) SetHeartbeat(b bool) {
-	m.heartbeatDisabled=b
+// SetHeartbeat true: enable heartbeat, false: disable heartbeat
+func (m *MotanServer) SetHeartbeat(enabled bool) {
+	m.heartbeatEnabled = enabled
 }
 
 func getRemoteIP(address string) string {
