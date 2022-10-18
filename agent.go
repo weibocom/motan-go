@@ -75,7 +75,7 @@ type Agent struct {
 
 	commandHandlers []CommandHandler
 
-	heartbeatDowngrade bool
+	backendServerAliveStatus bool
 }
 
 type CommandHandler interface {
@@ -1074,12 +1074,16 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 	vlog.Infof("add manage server handle path:%s", k)
 }
 
-func (a *Agent) HeartbeatDowngrade(b bool) {
-	if a.heartbeatDowngrade != b {
-		a.heartbeatDowngrade = b
-		for _, s := range a.agentPortServer {
-			s.SetHeartbeat(b)
-		}
+func (a *Agent) heartbeatDowngrade(b bool) {
+	for _, s := range a.agentPortServer {
+		s.SetHeartbeat(b)
+	}
+}
+
+func (a *Agent) BackendStatusChanged(alive bool) {
+	if a.backendServerAliveStatus != alive {
+		a.backendServerAliveStatus = alive
+		a.heartbeatDowngrade(alive)
 	}
 }
 
