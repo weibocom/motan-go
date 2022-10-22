@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"github.com/weibocom/motan-go/config"
+	vlog "github.com/weibocom/motan-go/log"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -109,6 +110,8 @@ motan-agent:
 	_ = flag.Set("log_dir", "./test/cdef")
 	a.initParam()
 	assert.Equal(a.logdir, "./test/cdef")
+	// test export log dir
+	assert.Equal(vlog.GetLogDir(), "./test/cdef")
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {

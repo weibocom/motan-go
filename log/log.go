@@ -244,6 +244,10 @@ func SetMetricsLogAvailable(status bool) {
 	}
 }
 
+func GetLogDir() string {
+	return *logDir
+}
+
 func newDefaultLog() Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:      "time",
