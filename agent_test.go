@@ -112,6 +112,45 @@ motan-agent:
 	assert.Equal(a.logdir, "./test/cdef")
 	// test export log dir
 	assert.Equal(vlog.GetLogDir(), "./test/cdef")
+
+
+	mportConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	a.initParam()
+	assert.Equal(a.mport, 8003)
+
+	mportConfigENV, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfigENV)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	err = os.Setenv("mport", "8006")
+	a.initParam()
+	assert.Equal(a.mport, 8006)
+
+	mportConfigENVParam, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfigENVParam)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	err = os.Setenv("mport", "8006")
+	_ = flag.Set("mport", "8007")
+	a.initParam()
+	assert.Equal(a.mport, 8007)
+
+
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
