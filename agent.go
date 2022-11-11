@@ -325,9 +325,16 @@ func (a *Agent) initParam() {
 	}
 
 	mPort := *motan.Mport
-	if mPort == 0 && section != nil && section["mport"] != nil {
-		mPort = section["mport"].(int)
+	if mPort == 0 {
+		if envMPort, ok := os.LookupEnv("mport"); ok {
+			if envMPortInt, err := strconv.Atoi(envMPort); err == nil {
+				mPort = envMPortInt
+			}
+		} else if section != nil && section["mport"] != nil {
+			mPort = section["mport"].(int)
+		}
 	}
+
 	if mPort == 0 {
 		mPort = defaultManagementPort
 	}
