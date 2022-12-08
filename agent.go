@@ -1118,7 +1118,7 @@ func urlWithRegistryExist(url *motan.URL, urls map[string]*motan.URL) bool {
 
 func (a *Agent) SubscribeService(url *motan.URL) error {
 	if urlExist(url, a.Context.RefersURLs) {
-		return nil
+		return fmt.Errorf("url exist, ignore subscribe, url: %s", url.GetIdentity())
 	}
 	a.initCluster(url)
 	return nil

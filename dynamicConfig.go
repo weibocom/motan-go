@@ -139,7 +139,10 @@ func (c *DynamicConfigurer) doSubscribe(url *core.URL) error {
 		return nil
 	}
 	c.subscribeNodes[url.GetIdentity()] = url
-	c.agent.SubscribeService(url)
+	err := c.agent.SubscribeService(url)
+	if err != nil {
+		vlog.Warningf("dynamic subscribe url failed, error: %s, url: %s", err.Error(), url.GetIdentity())
+	}
 	return nil
 }
 
