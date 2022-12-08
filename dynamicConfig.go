@@ -91,11 +91,15 @@ func (c *DynamicConfigurer) Register(url *core.URL) error {
 func (c *DynamicConfigurer) doRegister(url *core.URL) error {
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
-	if _, ok := c.registerNodes[url.GetIdentity()]; ok {
+	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
 		return nil
 	}
-	c.agent.ExportService(url)
-	c.registerNodes[url.GetIdentity()] = url
+	err := c.agent.ExportService(url)
+	if err != nil {
+		vlog.Warningln(err.Error())
+	} else {
+		c.registerNodes[url.GetIdentityWithRegistry()] = url
+	}
 	return nil
 }
 

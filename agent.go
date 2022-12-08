@@ -1107,6 +1107,15 @@ func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
 	return false
 }
 
+func urlWithRegistryExist(url *motan.URL, urls map[string]*motan.URL) bool {
+	for _, u := range urls {
+		if url.GetIdentityWithRegistry() == u.GetIdentityWithRegistry() {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Agent) SubscribeService(url *motan.URL) error {
 	if urlExist(url, a.Context.RefersURLs) {
 		return nil
@@ -1116,8 +1125,8 @@ func (a *Agent) SubscribeService(url *motan.URL) error {
 }
 
 func (a *Agent) ExportService(url *motan.URL) error {
-	if urlExist(url, a.Context.ServiceURLs) {
-		return nil
+	if urlWithRegistryExist(url, a.Context.ServiceURLs) {
+		return fmt.Errorf("url exist, ignore export. url: %s", url.GetIdentityWithRegistry())
 	}
 	a.doExportService(url)
 	return nil
