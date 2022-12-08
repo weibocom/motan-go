@@ -835,10 +835,10 @@ func (a *Agent) doExportService(url *motan.URL) {
 		return
 	}
 
-	a.serviceExporters.Store(url.GetIdentity(), exporter)
+	a.serviceExporters.Store(url.GetIdentityWithRegistry(), exporter)
 	vlog.Infof("service export success. url:%v", url)
 	for _, r := range exporter.Registries {
-		rid := r.GetURL().GetIdentity()
+		rid := r.GetURL().GetIdentityWithRegistry()
 		if _, ok := a.serviceRegistries.Load(rid); !ok {
 			a.serviceRegistries.Store(rid, r)
 		}
@@ -1100,7 +1100,7 @@ func (a *Agent) getConfigData() []byte {
 
 func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
 	for _, u := range urls {
-		if url.GetIdentityWithRegistry() == u.GetIdentityWithRegistry() {
+		if url.GetIdentity() == u.GetIdentity() {
 			return true
 		}
 	}
