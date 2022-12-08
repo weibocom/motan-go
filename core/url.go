@@ -19,9 +19,8 @@ type URL struct {
 	Parameters map[string]string `json:"parameters"`
 
 	// cached info
-	address              string
-	identity             string
-	identityWithRegistry string
+	address  string
+	identity string
 }
 
 var (
@@ -44,15 +43,9 @@ func (u *URL) GetIdentity() string {
 }
 
 func (u *URL) GetIdentityWithRegistry() string {
-	if u.identity != "" {
-		return u.identityWithRegistry
-	}
+	id := u.GetIdentity()
 	registryId := u.GetParam(RegistryKey, "")
-	u.identityWithRegistry = u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group + "&registry=" + registryId
-	if u.Protocol == "direct" {
-		u.identityWithRegistry += "&address=" + u.GetParam("address", "")
-	}
-	return u.identityWithRegistry
+	return id + "&registry=" + registryId
 }
 
 func (u *URL) ClearCachedInfo() {

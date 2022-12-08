@@ -1100,15 +1100,6 @@ func (a *Agent) getConfigData() []byte {
 
 func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
 	for _, u := range urls {
-		if url.GetIdentity() == u.GetIdentity() {
-			return true
-		}
-	}
-	return false
-}
-
-func urlWithRegistryExist(url *motan.URL, urls map[string]*motan.URL) bool {
-	for _, u := range urls {
 		if url.GetIdentityWithRegistry() == u.GetIdentityWithRegistry() {
 			return true
 		}
@@ -1125,7 +1116,7 @@ func (a *Agent) SubscribeService(url *motan.URL) error {
 }
 
 func (a *Agent) ExportService(url *motan.URL) error {
-	if urlWithRegistryExist(url, a.Context.ServiceURLs) {
+	if urlExist(url, a.Context.ServiceURLs) {
 		return fmt.Errorf("url exist, ignore export. url: %s", url.GetIdentityWithRegistry())
 	}
 	a.doExportService(url)
