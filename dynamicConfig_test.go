@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	motan "github.com/weibocom/motan-go/core"
 	"net/http/httptest"
 	"testing"
 
@@ -26,4 +27,77 @@ func TestDynamicConfigurerHandler_readURLs(t *testing.T) {
 	assert.Equal(t, urls[2].Group, "hello2")
 	_, err = d.readURLsFromRequest(req3)
 	assert.NotNil(t, err)
+}
+
+func TestDynamicConfigurerMultiRegistry(t *testing.T) {
+	a := NewAgent(nil)
+	a.Context = &motan.Context{
+		RegistryURLs:     make(map[string]*motan.URL),
+		RefersURLs:       make(map[string]*motan.URL),
+		BasicReferURLs:   make(map[string]*motan.URL),
+		ServiceURLs:      make(map[string]*motan.URL),
+		BasicServiceURLs: make(map[string]*motan.URL),
+	}
+	configurer := &DynamicConfigurer{
+		agent:          a,
+		registerNodes:  make(map[string]*motan.URL),
+		subscribeNodes: make(map[string]*motan.URL),
+	}
+	urls := []*motan.URL{
+		{
+			Protocol: "motan2",
+			Host:     "127.0.0.1",
+			Port:     1910,
+			Path:     "test_path",
+			Group:    "test_group",
+			Parameters: map[string]string{
+				"registry": "r1",
+			},
+		},
+		{
+			Protocol: "motan2",
+			Host:     "127.0.0.1",
+			Port:     1910,
+			Path:     "test_path",
+			Group:    "test_group",
+			Parameters: map[string]string{
+				"registry": "r2",
+			},
+		},
+		{
+			Protocol: "motan2",
+			Host:     "127.0.0.1",
+			Port:     1910,
+			Path:     "test_path",
+			Group:    "test_group1",
+			Parameters: map[string]string{
+				"registry": "r1",
+			},
+		},
+		{
+			Protocol: "motan2",
+			Host:     "127.0.0.1",
+			Port:     1910,
+			Path:     "test_path",
+			Group:    "test_group1",
+			Parameters: map[string]string{
+				"registry": "r2",
+			},
+		},
+		// 增加一个重复的
+		{
+			Protocol: "motan2",
+			Host:     "127.0.0.1",
+			Port:     1910,
+			Path:     "test_path",
+			Group:    "test_group1",
+			Parameters: map[string]string{
+				"registry": "r2",
+			},
+		},
+	}
+	for _, j := range urls {
+		configurer.doRegister(j)
+	}
+	assert.Equal(t, len(configurer.registerNodes), 4)
 }

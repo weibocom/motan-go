@@ -91,11 +91,15 @@ func (c *DynamicConfigurer) Register(url *core.URL) error {
 func (c *DynamicConfigurer) doRegister(url *core.URL) error {
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
-	if _, ok := c.registerNodes[url.GetIdentity()]; ok {
+	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
 		return nil
 	}
-	c.agent.ExportService(url)
-	c.registerNodes[url.GetIdentity()] = url
+	err := c.agent.ExportService(url)
+	if err != nil {
+		vlog.Warningf("dynamic register failed, error: %s", err.Error())
+	} else {
+		c.registerNodes[url.GetIdentityWithRegistry()] = url
+	}
 	return nil
 }
 
@@ -112,9 +116,9 @@ func (c *DynamicConfigurer) doUnregister(url *core.URL) error {
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
 
-	if _, ok := c.registerNodes[url.GetIdentity()]; ok {
+	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
 		c.agent.UnexportService(url)
-		delete(c.registerNodes, url.GetIdentity())
+		delete(c.registerNodes, url.GetIdentityWithRegistry())
 	}
 	return nil
 }
@@ -135,7 +139,10 @@ func (c *DynamicConfigurer) doSubscribe(url *core.URL) error {
 		return nil
 	}
 	c.subscribeNodes[url.GetIdentity()] = url
-	c.agent.SubscribeService(url)
+	err := c.agent.SubscribeService(url)
+	if err != nil {
+		vlog.Warningf("dynamic subscribe failed, error: %s", err.Error())
+	}
 	return nil
 }
 

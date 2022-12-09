@@ -42,6 +42,12 @@ func (u *URL) GetIdentity() string {
 	return u.identity
 }
 
+func (u *URL) GetIdentityWithRegistry() string {
+	id := u.GetIdentity()
+	registryId := u.GetParam(RegistryKey, "")
+	return id + "&registry=" + registryId
+}
+
 func (u *URL) ClearCachedInfo() {
 	u.address = ""
 	u.identity = ""
