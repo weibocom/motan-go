@@ -59,7 +59,9 @@ func (m *MotanProvider) Initialize() {
 func (m *MotanProvider) Call(request motan.Request) motan.Response {
 	if m.IsAvailable() {
 		// x-forwared-for
-		request.SetAttachment("x-forwarded-for", request.GetAttachment(motan.HostKey))
+		if request.GetAttachment("x-forwarded-for") == "" && request.GetAttachment("X-Forwarded-For") == "" {
+			request.SetAttachment("x-forwarded-for", request.GetAttachment(motan.HostKey))
+		}
 		return m.ep.Call(request)
 	}
 	t := time.Now().UnixNano()

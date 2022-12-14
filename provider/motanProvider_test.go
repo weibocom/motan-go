@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -43,4 +44,34 @@ func TestGetName(t *testing.T) {
 		t.Errorf("Incorrect error response! response:%+v", responseErr)
 	}
 
+}
+
+func TestXForwardedFor(t *testing.T) {
+	//init factory
+	factory := &motan.DefaultExtensionFactory{}
+	factory.Initialize()
+	endpoint.RegistDefaultEndpoint(factory)
+	RegistDefaultProvider(factory)
+
+	//init motanProvider
+	mContext := motan.Context{}
+	mContext.ConfigFile = confFilePath
+	mContext.Initialize()
+	request := &motan.MotanRequest{}
+	request.SetAttachment("x-forwarded-for", "test")
+	url := mContext.ServiceURLs[serviceName]
+
+	//call correct
+	providerCorr := MotanProvider{url: url, extFactory: factory}
+	providerCorr.Initialize()
+	providerCorr.Call(request)
+	assert.Equal(t, request.GetAttachment("x-forwarded-for"), "test")
+	request = &motan.MotanRequest{}
+	request.SetAttachment("X-Forwarded-For", "test")
+	providerCorr.Call(request)
+	assert.Equal(t, request.GetAttachment("x-forwarded-for"), "")
+	request = &motan.MotanRequest{}
+	request.SetAttachment("x-Forwarded-For", "test")
+	providerCorr.Call(request)
+	assert.NotEqual(t, request.GetAttachment("x-forwarded-for"), "test")
 }
