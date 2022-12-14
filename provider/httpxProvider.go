@@ -174,8 +174,9 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 	} else {
 		ip = request.GetAttachment(motan.HostKey)
 	}
-	req.Header.Add("x-forwarded-for", ip)
-
+	if req.Header.Peek("x-forwarded-for") == nil {
+		req.Header.Add("x-forwarded-for", ip)
+	}
 	err = h.httpClient.Do(req, httpResp)
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Do HTTP Call, request:%+v, err: %v", req, err)
