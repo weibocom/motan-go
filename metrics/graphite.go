@@ -76,6 +76,7 @@ func (g *graphite) Write(snapshots []Snapshot) error {
 	messages := GenGraphiteMessages(g.localIP, snapshots)
 	for _, message := range messages {
 		if message != "" {
+			vlog.Trace(vlog.EntrypointMetricsCall)
 			vlog.MetricsLog("\n" + message)
 			if _, err := g.conn.Write([]byte(message)); err != nil {
 				vlog.Warningln("Write graphite error, reconnect. err:", err.Error())

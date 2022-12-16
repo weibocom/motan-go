@@ -650,6 +650,18 @@ func (l *LogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else if available := r.FormValue("metrics"); available != "" {
 			setLogStatus(jsonEncoder, "metricsLog", available)
 		}
+	case "/log/trace":
+		sec, _ := strconv.ParseInt(r.FormValue("seconds"), 10, 64)
+		if sec == 0 {
+			sec = 30
+		}
+		oldTrace := vlog.TracePolicy
+		newTrace := vlog.NewIndicatorTrace()
+		vlog.TracePolicy = newTrace.Trace
+		sleep(w, time.Duration(sec)*time.Second)
+		vlog.TracePolicy = oldTrace
+		b, _ := json.Marshal(newTrace.Format())
+		w.Write(b)
 	}
 }
 

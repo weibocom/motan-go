@@ -68,6 +68,7 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		log := &LogHandler{}
 		defaultManageHandlers["/logConfig/get"] = log
 		defaultManageHandlers["/logConfig/set"] = log
+		defaultManageHandlers["/log/trace"] = log
 
 		dynamicConfigurer := &DynamicConfigurerHandler{}
 		defaultManageHandlers["/registry/register"] = dynamicConfigurer

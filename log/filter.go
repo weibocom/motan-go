@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"golang.org/x/time/rate"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -22,7 +23,47 @@ const (
 	EntrypointFatalf
 	EntrypointAccessLog
 	EntrypointMetricsLog
+	EntryPointAccessFilterDoLog
+	EntryPointAccessFilterProviderCall
+	EntryPointAccessFilterNotProviderCall
+	EntryPointAccessClusterFilter
+	EntrypointMetricsCall
 )
+
+func (e Entrypoint) String() string {
+	switch e {
+	case EntrypointInfoln:
+		return "motan_infoln"
+	case EntrypointInfof:
+		return "motan_infof"
+	case EntrypointWarningln:
+		return "motan_warningln"
+	case EntrypointWarningf:
+		return "motan_warningf"
+	case EntrypointErrorln:
+		return "motan_errorln"
+	case EntrypointErrorf:
+		return "motan_errorf"
+	case EntrypointFatalln:
+		return "motan_fatalln"
+	case EntrypointFatalf:
+		return "motan_fatalf"
+	case EntrypointAccessLog:
+		return "access"
+	case EntrypointMetricsLog:
+		return "metrics"
+	case EntryPointAccessFilterDoLog:
+		return "access_filter_do_log"
+	case EntryPointAccessFilterProviderCall:
+		return "access_provider_call"
+	case EntryPointAccessFilterNotProviderCall:
+		return "access_not_provider_call"
+	case EntryPointAccessClusterFilter:
+		return "access_cluster"
+	default:
+		return strconv.Itoa(int(e))
+	}
+}
 
 var (
 	asyncFilterItemChan = make(chan *FilterItem, 5000)
@@ -92,6 +133,7 @@ func callAsyncFilter(filterName string, filter AsyncFilter, item *FilterItem) {
 }
 
 func doAsyncFilters(level LogLevel, entrypoint Entrypoint, format string, fields ...interface{}) {
+	Trace(entrypoint)
 	if len(asyncFilters) == 0 {
 		return
 	}

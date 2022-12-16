@@ -1,6 +1,7 @@
 package filter
 
 import (
+	vlog "github.com/weibocom/motan-go/log"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -25,6 +26,7 @@ func (t *ClusterAccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 func (t *ClusterAccessLogFilter) Filter(haStrategy motan.HaStrategy, loadBalance motan.LoadBalance, request motan.Request) motan.Response {
 	start := time.Now()
 	response := t.GetNext().Filter(haStrategy, loadBalance, request)
+	vlog.Trace(vlog.EntryPointAccessClusterFilter)
 	doAccessLog(t.GetName(), clientAgentRole, "", time.Now().Sub(start).Nanoseconds()/1e6, request, response)
 	return response
 }

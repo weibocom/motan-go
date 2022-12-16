@@ -46,6 +46,7 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 	response := t.GetNext().Filter(caller, request)
 	address := ip + ":" + caller.GetURL().GetPortStr()
 	if _, ok := caller.(motan.Provider); ok {
+		vlog.Trace(vlog.EntryPointAccessFilterProviderCall)
 		reqCtx := request.GetRPCContext(true)
 		resCtx := response.GetRPCContext(true)
 		resCtx.AddFinishHandler(motan.FinishHandleFunc(func() {
@@ -53,6 +54,7 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 			doAccessLog(t.GetName(), role, address, totalTime, request, response)
 		}))
 	} else {
+		vlog.Trace(vlog.EntryPointAccessFilterNotProviderCall)
 		doAccessLog(t.GetName(), role, address, time.Now().Sub(start).Nanoseconds()/1e6, request, response)
 	}
 	return response
@@ -75,6 +77,7 @@ func (t *AccessLogFilter) GetType() int32 {
 }
 
 func doAccessLog(filterName string, role string, address string, totalTime int64, request motan.Request, response motan.Response) {
+	vlog.Trace(vlog.EntryPointAccessFilterDoLog)
 	exception := response.GetException()
 	reqCtx := request.GetRPCContext(true)
 	resCtx := response.GetRPCContext(true)
