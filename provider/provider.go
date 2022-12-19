@@ -13,6 +13,7 @@ const (
 	HTTP    = "http"
 	HTTPX   = "httpx"
 	MOTAN2  = "motan2"
+	MOTAN   = "motan"
 	Mock    = "mockProvider"
 	Default = "default"
 )
@@ -32,6 +33,10 @@ func RegistDefaultProvider(extFactory motan.ExtensionFactory) {
 	})
 
 	extFactory.RegistExtProvider(MOTAN2, func(url *motan.URL) motan.Provider {
+		return &MotanProvider{url: url, extFactory: extFactory}
+	})
+
+	extFactory.RegistExtProvider(MOTAN, func(url *motan.URL) motan.Provider {
 		return &MotanProvider{url: url, extFactory: extFactory}
 	})
 

@@ -11,6 +11,7 @@ import (
 
 const (
 	Motan2 = "motan2"
+	Motan  = "motan"
 	CGI    = "cgi"
 )
 
@@ -20,6 +21,9 @@ const (
 
 func RegistDefaultServers(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtServer(Motan2, func(url *motan.URL) motan.Server {
+		return &MotanServer{URL: url}
+	})
+	extFactory.RegistExtServer(Motan, func(url *motan.URL) motan.Server {
 		return &MotanServer{URL: url}
 	})
 	extFactory.RegistExtServer(CGI, func(url *motan.URL) motan.Server {
