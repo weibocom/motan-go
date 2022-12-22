@@ -234,6 +234,7 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 	}
 	fep.StatusFilters = statusFilters
 	fep.Filter = lastf
+	vlog.Infof("MotanCluster add ep filters. url:%+v, filters:%s", ep.GetURL(), motan.GetEPFilterInfo(fep.Filter))
 	return fep
 }
 
@@ -312,6 +313,7 @@ func (m *MotanCluster) initFilters() {
 	if len(endpointFilters) > 0 {
 		m.Filters = endpointFilters
 	}
+	vlog.Infof("MotanCluster init filter. url:%+v, cluster filter:%#v, ep filter size:%d, ep filters:%#v", m.GetURL(), m.clusterFilter, len(m.Filters), m.Filters)
 }
 
 func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {

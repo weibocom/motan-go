@@ -137,6 +137,23 @@ func GetResInfo(response Response) string {
 	return ""
 }
 
+func GetEPFilterInfo(filter EndPointFilter) string {
+	if filter != nil {
+		var buffer bytes.Buffer
+		writeEPFilter(filter, &buffer)
+		return buffer.String()
+	}
+	return ""
+}
+
+func writeEPFilter(filter EndPointFilter, buffer *bytes.Buffer) {
+	buffer.WriteString(filter.GetName())
+	if filter.GetNext() != nil {
+		buffer.WriteString("->")
+		writeEPFilter(filter.GetNext(), buffer)
+	}
+}
+
 func HandlePanic(f func()) {
 	if err := recover(); err != nil {
 		vlog.Errorf("recover panic. error:%v, stack: %s", err, debug.Stack())

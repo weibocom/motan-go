@@ -124,3 +124,13 @@ func TestGetResInfo(t *testing.T) {
 	assert.Equal(t, "res{374867809809,}", GetResInfo(res))
 	assert.Equal(t, "res{374867809809,testErrMsg}", GetResInfo(resE))
 }
+
+func TestGetEPFilterInfo(t *testing.T) {
+	filter1 := &TestEndPointFilter{Index: 1}
+	filter2 := &TestEndPointFilter{Index: 2}
+	filter3 := &TestEndPointFilter{Index: 3}
+	filter1.SetNext(filter2)
+	filter2.SetNext(filter3)
+	str := GetEPFilterInfo(filter1)
+	assert.Equal(t, "TestEndPointFilter->TestEndPointFilter->TestEndPointFilter", str)
+}

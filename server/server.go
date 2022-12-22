@@ -226,5 +226,7 @@ func WrapWithFilter(provider motan.Provider, extFactory motan.ExtensionFactory, 
 			}
 		}
 	}
-	return &FilterProviderWrapper{provider: provider, filter: lastf}
+	fpw := &FilterProviderWrapper{provider: provider, filter: lastf}
+	vlog.Infof("FilterProviderWrapper url: %+v, filter size:%d, filters:%s", provider.GetURL(), len(filters), motan.GetEPFilterInfo(fpw.filter))
+	return fpw
 }
