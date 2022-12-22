@@ -80,7 +80,7 @@ func TestBackupRequestHA_Call2(t *testing.T) {
 	nlb.OnRefresh([]motan.EndPoint{getEP(1)})
 	res := ha.Call(request, nlb)
 	time.Sleep(10*time.Millisecond + 1*time.Second)
-	ep1 := getEP(1)  // third round
+	ep1 := getEP(1) // third round
 	testEndpoints := []motan.EndPoint{ep1}
 	nlb.OnRefresh(testEndpoints)
 	res = ha.Call(request, nlb)
@@ -111,7 +111,7 @@ func TestBackupRequestHA_Call3(t *testing.T) {
 	nlb.OnRefresh([]motan.EndPoint{getEP(1)})
 	res := ha.Call(request, nlb)
 	time.Sleep(10*time.Millisecond + 1*time.Second)
-	ep1 := getEP(1)  // third round
+	ep1 := getEP(1) // third round
 	testEndpoints := []motan.EndPoint{ep1}
 	nlb.OnRefresh(testEndpoints)
 	res = ha.Call(request, nlb)

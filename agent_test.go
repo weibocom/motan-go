@@ -113,7 +113,6 @@ motan-agent:
 	// test export log dir
 	assert.Equal(vlog.GetLogDir(), "./test/cdef")
 
-
 	mportConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
 motan-agent:
   mport: 8003
@@ -149,7 +148,6 @@ motan-agent:
 	_ = flag.Set("mport", "8007")
 	a.initParam()
 	assert.Equal(a.mport, 8007)
-
 
 }
 
