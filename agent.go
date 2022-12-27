@@ -430,6 +430,10 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 	serviceItemKeep := make(map[string]bool)
 	clusterMap := make(map[interface{}]interface{})
 	serviceMap := make(map[interface{}]interface{})
+	//keep all dynamic refers
+	for _, url := range a.configurer.subscribeNodes {
+		serviceItemKeep[url.ToExtInfo()] = true
+	}
 	for _, url := range a.Context.RefersURLs {
 		if url.Parameters[motan.ApplicationKey] == "" {
 			url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
