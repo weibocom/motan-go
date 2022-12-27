@@ -87,7 +87,7 @@ func (h *HTTPProvider) Initialize() {
 	h.locationMatcher = mhttp.NewLocationMatcherFromContext(h.domain, h.gctx)
 	h.proxyAddr = h.url.GetParam(mhttp.ProxyAddressKey, "")
 	h.proxySchema = h.url.GetParam(mhttp.ProxySchemaKey, "http")
-	h.maxConnections = int(h.url.GetPositiveIntValue(mhttp.MaxConnectionsKey, 512))
+	h.maxConnections = int(h.url.GetPositiveIntValue(mhttp.MaxConnectionsKey, 1024))
 	h.enableRewrite = true
 	enableRewriteStr := h.url.GetParam(mhttp.EnableRewriteKey, "true")
 	if enableRewrite, err := strconv.ParseBool(enableRewriteStr); err != nil {
