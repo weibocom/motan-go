@@ -339,9 +339,17 @@ func TestAgent_InitCall(t *testing.T) {
 		"test4-1": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
 		"test5":   {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
+	dynamicURLs := map[string]*core.URL{
+		"test6": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test6", Group: "g1", Protocol: ""},
+	}
+	agent.serviceMap.Store("test6", []serviceMapItem{
+		{url: dynamicURLs["test6"], cluster: nil},
+	})
+	agent.configurer = NewDynamicConfigurer(agent)
+	agent.configurer.subscribeNodes = dynamicURLs
 	ctx.RefersURLs = reloadUrls
 	agent.reloadClusters(ctx)
-	assert.Equal(t, agent.serviceMap.Len(), 2, "hot-load serviceMap except length error")
+	assert.Equal(t, agent.serviceMap.Len(), 3, "hot-load serviceMap except length error")
 
 	for _, v := range []struct {
 		service  string
