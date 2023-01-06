@@ -29,6 +29,8 @@ jobs:
 
       - name: Install Go Dependencies
         run: |
+          go env
+          mkdir -p $GOPATH/src
           go get -d -v -t $(go list ./... | grep -v main)
 
       - name: Run tests
