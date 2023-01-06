@@ -31,6 +31,7 @@ jobs:
         run: |
           mkdir -p /home/runner/go/src
           cd ../ && mv motan-go /home/runner/go/src
+          mkdir motan-go
           cd /home/runner/go/src/motan-go && go get -d -v -t $(go list ./... | grep -v main)
 
       - name: Run tests
