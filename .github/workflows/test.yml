@@ -37,6 +37,7 @@ jobs:
           cp -R ../motan-go /home/runner/go/src/
           cd /home/runner/go/src/motan-go
           export GO111MODULE=on
+          export GOPATH=/home/runner/go/src
           go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
