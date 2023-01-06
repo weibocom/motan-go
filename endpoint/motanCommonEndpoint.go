@@ -8,6 +8,7 @@ import (
 	mpro "github.com/weibocom/motan-go/protocol"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -67,7 +68,11 @@ func (m *MotanCommonEndpoint) Initialize() {
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
 	factory := func() (net.Conn, error) {
-		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
+		address := m.url.GetAddressStr()
+		if strings.HasPrefix(address, "unix://") {
+			return net.DialTimeout("unix", address[7:], connectTimeout)
+		}
+		return net.DialTimeout("tcp", address, connectTimeout)
 	}
 	config := &ChannelConfig{MaxContentLength: m.maxContentLength, Serialization: m.serialization}
 	if asyncInitConnection {
@@ -718,7 +723,9 @@ func (c *ChannelPool) Get() (*Channel, error) {
 		if err != nil {
 			vlog.Errorf("create channel failed. err:%s", err.Error())
 		} else {
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
 		}
 		channel = buildChannel(conn, c.config, c.serialization)
 	}
@@ -786,7 +793,9 @@ func NewChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, ser
 				channelPool.Close()
 				return nil, err
 			}
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
 			channelPool.channels <- buildChannel(conn, config, serialization)
 		}
 	}

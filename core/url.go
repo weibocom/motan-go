@@ -216,6 +216,10 @@ func (u *URL) GetAddressStr() string {
 	if u.address != "" {
 		return u.address
 	}
+	if strings.HasPrefix(u.Host, "unix://") {
+		u.address = u.Host
+		return u.address
+	}
 	u.address = u.Host + ":" + u.GetPortStr()
 	return u.address
 }
