@@ -3,6 +3,7 @@ package motan
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	_ "fmt"
 	"github.com/weibocom/motan-go/config"
 	vlog "github.com/weibocom/motan-go/log"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	gtest "github.com/snail007/gmc/util/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/core"
 	mhttp "github.com/weibocom/motan-go/http"
@@ -37,11 +39,12 @@ var agent *Agent
 
 func Test_unixClientCall1(t *testing.T) {
 	t.Parallel()
-	startServer(t, "helloService", 22991)
-	time.Sleep(time.Second * 3)
-	// start client mesh
-	ext := GetDefaultExtFactory()
-	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`motan-agent:
+	if gtest.RunProcess(t, func() {
+		startServer(t, "helloService", 22991)
+		time.Sleep(time.Second * 3)
+		// start client mesh
+		ext := GetDefaultExtFactory()
+		config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`motan-agent:
   mport: 12500
   unixSock: agent.sock
   log_dir: "stdout"
@@ -60,25 +63,37 @@ motan-refer:
       protocol: motan2
       registry: direct
       serialization: breeze`)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config)
-	time.Sleep(time.Second * 3)
-	c1 := NewMeshClient()
-	c1.SetAddress("unix://./agent.sock")
-	c1.Initialize()
-	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
-	req.SetAttachment("print_trace_log", "true")
-	resp := c1.BaseCall(req, nil)
-	assert.Nil(t, resp.GetException())
-	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
+		agent := NewAgent(ext)
+		go agent.StartMotanAgentFromConfig(config)
+		time.Sleep(time.Second * 3)
+		c1 := NewMeshClient()
+		c1.SetAddress("unix://./agent.sock")
+		c1.Initialize()
+		req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
+		req.SetAttachment("print_trace_log", "true")
+		resp := c1.BaseCall(req, nil)
+		if resp.GetException() != nil {
+			return
+		}
+		if "Hello jack from motan server" != resp.GetValue() {
+			return
+		}
+		fmt.Println("check_pass")
+	}) {
+		return
+	}
+	out, _, err := gtest.NewProcess(t).Wait()
+	assert.Nil(t, err)
+	assert.Contains(t, out, "check_pass")
 }
 func Test_unixClientCall2(t *testing.T) {
 	t.Parallel()
-	startServer(t, "helloService", 22992)
-	time.Sleep(time.Second * 3)
-	// start client mesh
-	ext := GetDefaultExtFactory()
-	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+	if gtest.RunProcess(t, func() {
+		startServer(t, "helloService", 22992)
+		time.Sleep(time.Second * 3)
+		// start client mesh
+		ext := GetDefaultExtFactory()
+		config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
 motan-agent:
   mport: 12501
   unixSock: ./agent2.sock
@@ -99,12 +114,12 @@ motan-refer:
       registry: direct
       serialization: breeze
 `)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config1)
-	time.Sleep(time.Second * 3)
+		agent := NewAgent(ext)
+		go agent.StartMotanAgentFromConfig(config1)
+		time.Sleep(time.Second * 3)
 
-	ext1 := GetDefaultExtFactory()
-	cfg, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+		ext1 := GetDefaultExtFactory()
+		cfg, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
 motan-client:
   log_dir: stdout
   application: client-test
@@ -121,13 +136,24 @@ motan-refer:
     path: helloService
     requestTimeout: 3000
 `)))
-	mccontext := NewClientContextFromConfig(cfg)
-	mccontext.Start(ext1)
-	mclient := mccontext.GetClient("test-refer")
-	var reply string
-	err := mclient.Call("Hello", []interface{}{"jack"}, &reply)
+		mccontext := NewClientContextFromConfig(cfg)
+		mccontext.Start(ext1)
+		mclient := mccontext.GetClient("test-refer")
+		var reply string
+		err := mclient.Call("Hello", []interface{}{"jack"}, &reply)
+		if err != nil {
+			return
+		}
+		if "Hello jack from motan server" != reply {
+			return
+		}
+		fmt.Println("check_pass")
+	}) {
+		return
+	}
+	out, _, err := gtest.NewProcess(t).Wait()
 	assert.Nil(t, err)
-	assert.Equal(t, "Hello jack from motan server", reply)
+	assert.Contains(t, out, "check_pass")
 }
 func TestMain(m *testing.M) {
 	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
