@@ -10,6 +10,11 @@ on:
       - dev
 
 name: build
+
+env:
+  GOAPTH: /home/runner/go
+  GO111MODULE: on
+
 jobs:
   testing:
     strategy:
@@ -29,17 +34,18 @@ jobs:
 
       - name: Install Go Dependencies
         run: |
+          mkdir -p $GOAPTH/github.com/weibocom/
+          echo "GOAPTH >>> $GOAPTH"
+          echo "pwd >>> $PWD"
           go env
-          mkdir -p $GOPATH/src
           go get -d -v -t $(go list ./... | grep -v main)
 
       - name: Run tests
         run: |
-          mkdir -p /home/runner/go/src
-          cp -R ../motan-go /home/runner/go/src/
-          cd /home/runner/go/src/motan-go
-          export GO111MODULE=on
-          export GOPATH=/home/runner/go/src
+          echo "GOAPTH >>> $GOAPTH"
+          echo "pwd >>> $PWD"
+          cp -R ../motan-go $GOAPTH/src/github.com/weibocom/
+          cd $GOAPTH/src/github.com/weibocom/motan-go
           go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
