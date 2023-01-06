@@ -29,7 +29,8 @@ jobs:
 
       - name: Install Go Dependencies
         run: |
-          mkdir -p /home/runner/go && cd ../ && mv motan-go /home/runner/go
+          mkdir -p /home/runner/go/src
+          cd ../ && mv motan-go /home/runner/go/src
           cd /home/runner/go/src/motan-go && go get -d -v -t $(go list ./... | grep -v main)
 
       - name: Run tests
