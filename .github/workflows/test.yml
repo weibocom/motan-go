@@ -32,20 +32,14 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Install Go Dependencies
-        run: |
-          mkdir -p $GOAPTH/github.com/weibocom/
-          echo "GOAPTH >>> $GOAPTH"
-          echo "pwd >>> $PWD"
-          go env
-          go get -d -v -t $(go list ./... | grep -v main)
-
       - name: Run tests
         run: |
           echo "GOAPTH >>> $GOAPTH"
           echo "pwd >>> $PWD"
+          mkdir -p $GOAPTH/src/github.com/weibocom/
           cp -R ../motan-go $GOAPTH/src/github.com/weibocom/
           cd $GOAPTH/src/github.com/weibocom/motan-go
+          go mod tidy
           go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
