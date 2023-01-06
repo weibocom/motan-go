@@ -12,7 +12,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec
 	github.com/shirou/gopsutil/v3 v3.21.9
-	github.com/snail007/gmc v0.0.0-20230106074328-d8a86413941d
+	github.com/snail007/gmc v0.0.0-20230106082404-d4f23fc26759
 	github.com/stretchr/testify v1.7.0
 	github.com/valyala/fasthttp v1.2.0
 	github.com/weibreeze/breeze-go v0.1.1
