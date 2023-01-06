@@ -29,10 +29,12 @@ jobs:
 
       - name: Install Go Dependencies
         run: |
-          go get -d -v -t $(go list ./... | grep -v main)
+          mkdir -p /home/runner/go && cd ../ && mv motan-go /home/runner/go
+          cd /home/runner/go/src/motan-go && go get -d -v -t $(go list ./... | grep -v main)
 
       - name: Run tests
-        run: go test -v -race $(go list ./... | grep -v main)
+        run: |
+          cd /home/runner/go/src/motan-go &&  go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
     runs-on: ubuntu-latest
