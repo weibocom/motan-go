@@ -12,7 +12,7 @@ on:
 name: build
 
 env:
-  GOAPTH: /home/runner/go
+  GOPATH: /home/runner/go
   GO111MODULE: on
 
 jobs:
@@ -34,11 +34,11 @@ jobs:
 
       - name: Run tests
         run: |
-          echo "GOAPTH >>> $GOAPTH"
+          echo "GOPATH >>> $GOPATH"
           echo "pwd >>> $PWD"
-          mkdir -p $GOAPTH/src/github.com/weibocom/
-          cp -R ../motan-go $GOAPTH/src/github.com/weibocom/
-          cd $GOAPTH/src/github.com/weibocom/motan-go
+          mkdir -p $GOPATH/src/github.com/weibocom/
+          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
+          cd $GOPATH/src/github.com/weibocom/motan-go
           go mod tidy
           go test -v -race $(go list ./... | grep -v main)
   codecov:
@@ -54,12 +54,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Get dependencies
-        run: |
-          go get -d -v -t $(go list ./... | grep -v main)
-
       - name: Generate coverage report
         run: |
+          echo "GOPATH >>> $GOPATH"
+          echo "pwd >>> $PWD"
+          mkdir -p $GOPATH/src/github.com/weibocom/
+          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
+          cd $GOPATH/src/github.com/weibocom/motan-go
+          go mod tidy
           go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
 
       - name: Upload coverage report
