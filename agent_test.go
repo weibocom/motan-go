@@ -81,6 +81,7 @@ motan-refer:
 	}) {
 		return
 	}
+	fmt.Println("os.Environ >>> ", os.Environ())
 	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
@@ -150,6 +151,7 @@ motan-refer:
 	}) {
 		return
 	}
+	fmt.Println("os.Environ >>> ", os.Environ())
 	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
@@ -270,7 +272,6 @@ motan-agent:
 	_ = flag.Set("mport", "8007")
 	a.initParam()
 	assert.Equal(a.mport, 8007)
-
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
