@@ -70,7 +70,6 @@ motan-refer:
 		c1.SetAddress("unix://./agent.sock")
 		c1.Initialize()
 		req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
-		req.SetAttachment("print_trace_log", "true")
 		resp := c1.BaseCall(req, nil)
 		if resp.GetException() != nil {
 			return
@@ -82,7 +81,7 @@ motan-refer:
 	}) {
 		return
 	}
-	out, _, err := gtest.NewProcess(t).Wait()
+	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
 }
@@ -151,7 +150,7 @@ motan-refer:
 	}) {
 		return
 	}
-	out, _, err := gtest.NewProcess(t).Wait()
+	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
 }
