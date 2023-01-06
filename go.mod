@@ -5,7 +5,6 @@ go 1.11
 require (
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5
 	github.com/beberlei/fastcgi-serve v0.0.0-20151230120321-4676005f65b7
-	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/golang/protobuf v1.3.2
 	github.com/juju/ratelimit v1.0.1
 	github.com/mitchellh/mapstructure v1.1.2
