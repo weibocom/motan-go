@@ -137,7 +137,7 @@ motan-service:
     unixSock: "%s"
 `
 	unixSock0 := ""
-	if unixSock[0] != "" {
+	if len(unixSock) > 0 && unixSock[0] != "" {
 		unixSock0 = unixSock[0]
 		port = 0
 	}
