@@ -11,6 +11,7 @@ import (
 	_ "golang.org/x/net/context"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -44,6 +45,7 @@ func Test_unixClientCall1(t *testing.T) {
 		time.Sleep(time.Second * 3)
 		// start client mesh
 		ext := GetDefaultExtFactory()
+		os.Remove("agent.sock")
 		config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`motan-agent:
   mport: 12500
   unixSock: agent.sock
@@ -81,7 +83,6 @@ motan-refer:
 	}) {
 		return
 	}
-	fmt.Println("os.Environ >>> ", os.Environ())
 	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
@@ -93,6 +94,7 @@ func Test_unixClientCall2(t *testing.T) {
 		time.Sleep(time.Second * 3)
 		// start client mesh
 		ext := GetDefaultExtFactory()
+		os.Remove("agent2.sock")
 		config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
 motan-agent:
   mport: 12501
@@ -151,7 +153,6 @@ motan-refer:
 	}) {
 		return
 	}
-	fmt.Println("os.Environ >>> ", os.Environ())
 	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
 	assert.Nil(t, err)
 	assert.Contains(t, out, "check_pass")
@@ -550,4 +551,76 @@ func (l *LocalTestServiceProvider) Destroy() {
 
 func (l *LocalTestServiceProvider) GetPath() string {
 	return l.url.Path
+}
+
+func Test_unixHTTPClientCall2(t *testing.T) {
+	t.Parallel()
+	//gtest.DebugRunProcess(t)
+	if gtest.RunProcess(t, func() {
+		go func() {
+			http.HandleFunc("/unixclient", func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte("okay"))
+			})
+			os.Remove("http2.sock")
+			addr, _ := net.ResolveUnixAddr("unix", "http2.sock")
+			l, err := net.ListenUnix("unix", addr)
+			if err != nil {
+				panic(err)
+			}
+			err = http.Serve(l, nil)
+			if err != nil {
+				panic(err)
+			}
+		}()
+		// start client mesh
+		ext := GetDefaultExtFactory()
+		config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  port: 12821
+  mport: 12503
+  eport: 23281
+  htport: 23282
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      provider: http
+      proxyAddress: unix://./http2.sock
+      enableRewrite: false
+      export: motan2:23281
+`)))
+		agent := NewAgent(ext)
+		go agent.StartMotanAgentFromConfig(config1)
+		time.Sleep(time.Second * 3)
+		c1 := NewMeshClient()
+		c1.SetAddress("127.0.0.1:23281")
+		c1.Initialize()
+		var reply []byte
+		req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
+		req.SetAttachment("HTTP_HOST", "test.com")
+		resp := c1.BaseCall(req, &reply)
+		if resp.GetException() != nil {
+			return
+		}
+		if "okay" != string(reply) {
+			return
+		}
+		fmt.Println("check_pass")
+	}) {
+		return
+	}
+	out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
+	assert.Nil(t, err)
+	assert.Contains(t, out, "check_pass")
 }

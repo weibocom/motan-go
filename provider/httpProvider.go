@@ -99,6 +99,9 @@ func (h *HTTPProvider) Initialize() {
 		Name: "motan",
 		Addr: h.proxyAddr,
 		Dial: func(addr string) (net.Conn, error) {
+			if strings.HasPrefix(addr, "unix://") {
+				return net.DialTimeout("unix", addr[7:], timeout)
+			}
 			c, err := fasthttp.DialTimeout(addr, timeout)
 			if err != nil {
 				return c, err
