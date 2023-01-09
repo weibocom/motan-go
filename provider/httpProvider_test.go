@@ -44,8 +44,8 @@ func TestHTTPProvider_Call(t *testing.T) {
 	context.Config, _ = config.NewConfigFromReader(bytes.NewReader([]byte(httpProviderTestData)))
 	providerURL := &core.URL{Protocol: "http", Path: "test4"}
 	providerURL.PutParam(mhttp.DomainKey, "test.domain")
+	providerURL.PutParam("requestTimeout", "2000")
 	providerURL.PutParam("proxyAddress", "localhost:9090")
-
 	provider := &HTTPProvider{url: providerURL, gctx: context}
 	provider.Initialize()
 	req := &core.MotanRequest{}
