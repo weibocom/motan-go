@@ -627,7 +627,7 @@ motan-service:
 }
 func Test_unixRPCClientCall(t *testing.T) {
 	t.Parallel()
-	gtest.DebugRunProcess(t)
+	//gtest.DebugRunProcess(t)
 	if gtest.RunProcess(t, func() {
 		os.Remove("server.sock")
 		startServer(t, "helloService", 0,"server.sock")
