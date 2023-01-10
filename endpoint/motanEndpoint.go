@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -82,7 +83,11 @@ func (m *MotanEndpoint) Initialize() {
 	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, false)
 	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, false)
 	factory := func() (net.Conn, error) {
-		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
+		address := m.url.GetAddressStr()
+		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
+			return net.DialTimeout("unix", address[len(motan.UnixSockProtocolFlag):], connectTimeout)
+		}
+		return net.DialTimeout("tcp", address, connectTimeout)
 	}
 	config := &ChannelConfig{MaxContentLength: m.maxContentLength}
 	if asyncInitConnection {
@@ -670,7 +675,9 @@ func (c *V2ChannelPool) Get() (*V2Channel, error) {
 		if err != nil {
 			vlog.Errorf("create channel failed. err:%s", err.Error())
 		} else {
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
 		}
 		channel = buildV2Channel(conn, c.config, c.serialization)
 	}
@@ -738,7 +745,10 @@ func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, s
 				channelPool.Close()
 				return nil, err
 			}
-			_ = conn.(*net.TCPConn).SetNoDelay(true)
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
+
 			channelPool.channels <- buildV2Channel(conn, config, serialization)
 		}
 	}

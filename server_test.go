@@ -113,7 +113,7 @@ func TestNewMotanServerContextFromConfig(t *testing.T) {
 	assert.Equal("Hello Ray from motan server", resp.GetValue())
 }
 
-func startServer(t *testing.T, path string, port int) motan.ExtensionFactory {
+func startServer(t *testing.T, path string, port int, unixSock ...string) motan.ExtensionFactory {
 	cfgText := `
 motan-server:
   log_dir: "stdout"
@@ -129,12 +129,19 @@ motan-service:
     path: %s
     group: bj
     protocol: motan2
+    provider: default
     registry: direct
     serialization: simple
     ref : "serviceID"
     export: "motan2:%d"
+    unixSock: "%s"
 `
-	cfgText = fmt.Sprintf(cfgText, path, port)
+	unixSock0 := ""
+	if len(unixSock) > 0 && unixSock[0] != "" {
+		unixSock0 = unixSock[0]
+		port = 0
+	}
+	cfgText = fmt.Sprintf(cfgText, path, port, unixSock0)
 	assert := assert2.New(t)
 	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
 	assert.Nil(err)

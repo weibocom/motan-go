@@ -5,8 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/provider"
+	"hash/fnv"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -122,6 +125,11 @@ func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	}
 }
 
+func (m *MSContext) hashInt(s string) int {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return int(h.Sum32())
+}
 func (m *MSContext) export(url *motan.URL) {
 	defer motan.HandlePanic(nil)
 	service := m.serviceImpls[url.Parameters[motan.RefKey]]
@@ -142,10 +150,18 @@ func (m *MSContext) export(url *motan.URL) {
 			}
 		}
 		url.Protocol = protocol
-		porti, err := strconv.Atoi(port)
-		if err != nil {
-			vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
-			return
+		var porti int
+		var err error
+		if v := url.GetParam(provider.ProxyHostKey, ""); strings.HasPrefix(v, motan.UnixSockProtocolFlag) {
+			porti = m.hashInt(v)
+		} else if v := url.GetParam(motan.UnixSockKey, ""); v != "" {
+			porti = m.hashInt(v)
+		} else {
+			porti, err = strconv.Atoi(port)
+			if err != nil {
+				vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
+				return
+			}
 		}
 		url.Port = porti
 		if url.Host == "" {

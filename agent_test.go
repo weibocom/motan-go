@@ -3,10 +3,14 @@ package motan
 import (
 	"bytes"
 	"flag"
+	_ "fmt"
 	"github.com/weibocom/motan-go/config"
 	vlog "github.com/weibocom/motan-go/log"
+	_ "github.com/weibocom/motan-go/server"
+	_ "golang.org/x/net/context"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +36,109 @@ var proxyClient *http.Client
 var meshClient *MeshClient
 var agent *Agent
 
+func Test_unixClientCall1(t *testing.T) {
+	t.Parallel()
+	startServer(t, "helloService", 22991)
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	ext := GetDefaultExtFactory()
+	os.Remove("agent.sock")
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 12500
+  port: 13821
+  eport: 13281
+  htport: 24282
+  unixSock: agent.sock
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+    address: 127.0.0.1:22991
+
+motan-refer:
+    recom-engine-refer:
+      group: hello
+      path: helloService
+      protocol: motan2
+      registry: direct
+      serialization: breeze`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("unix://./agent.sock")
+	c1.Initialize()
+	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
+	resp := c1.BaseCall(req, nil)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
+}
+func Test_unixClientCall2(t *testing.T) {
+	t.Parallel()
+	startServer(t, "helloService", 22992)
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	ext := GetDefaultExtFactory()
+	os.Remove("agent2.sock")
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 12501
+  port: 12921
+  mport: 12903
+  eport: 12981
+  htport: 23982
+  unixSock: ./agent2.sock
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+    address: 127.0.0.1:22992
+
+motan-refer:
+    test-refer:
+      group: hello
+      path: helloService
+      protocol: motanV1Compatible
+      registry: direct
+      serialization: breeze
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+
+	ext1 := GetDefaultExtFactory()
+	cfg, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-client:
+  log_dir: stdout
+  application: client-test
+motan-registry:
+  local:
+    protocol: direct
+    address: unix://./agent2.sock
+motan-refer:
+  test-refer:
+    registry: local
+    serialization: breeze
+    protocol: motanV1Compatible
+    group: hello
+    path: helloService
+    requestTimeout: 3000
+`)))
+	mccontext := NewClientContextFromConfig(cfg)
+	mccontext.Start(ext1)
+	mclient := mccontext.GetClient("test-refer")
+	var reply string
+	err := mclient.Call("Hello", []interface{}{"jack"}, &reply)
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello jack from motan server", reply)
+}
 func TestMain(m *testing.M) {
 	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	cfgFile := filepath.Join("testdata", "agent.yaml")
@@ -148,7 +255,6 @@ motan-agent:
 	_ = flag.Set("mport", "8007")
 	a.initParam()
 	assert.Equal(a.mport, 8007)
-
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
@@ -427,4 +533,108 @@ func (l *LocalTestServiceProvider) Destroy() {
 
 func (l *LocalTestServiceProvider) GetPath() string {
 	return l.url.Path
+}
+
+func Test_unixHTTPClientCall(t *testing.T) {
+	t.Parallel()
+	go func() {
+		http.HandleFunc("/unixclient", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("okay"))
+		})
+		os.Remove("http2.sock")
+		addr, _ := net.ResolveUnixAddr("unix", "http2.sock")
+		l, err := net.ListenUnix("unix", addr)
+		if err != nil {
+			panic(err)
+		}
+		err = http.Serve(l, nil)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	// start unix server mesh
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  port: 12822
+  mport: 12504
+  eport: 23282
+  htport: 23283
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: http
+      proxyAddress: unix://./http2.sock
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      enableRewrite: false
+      export: motan2:23282
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("127.0.0.1:23282")
+	c1.Initialize()
+	var reply []byte
+	req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
+	req.SetAttachment("HTTP_HOST", "test.com")
+	resp := c1.BaseCall(req, &reply)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "okay", string(reply))
+}
+func Test_unixRPCClientCall(t *testing.T) {
+	t.Parallel()
+	os.Remove("server.sock")
+	startServer(t, "helloService", 0, "server.sock")
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	// start unix server mesh
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  port: 12821
+  mport: 12503
+  eport: 12281
+  htport: 23282
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: motan2
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      proxy.host: unix://./server.sock
+      export: motan2:12281
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("127.0.0.1:12281")
+	c1.Initialize()
+	var reply []byte
+	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
+	resp := c1.BaseCall(req, &reply)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", string(reply))
 }
