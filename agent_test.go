@@ -3,7 +3,6 @@ package motan
 import (
 	"bytes"
 	"flag"
-	"fmt"
 	_ "fmt"
 	"github.com/weibocom/motan-go/config"
 	vlog "github.com/weibocom/motan-go/log"
@@ -39,7 +38,6 @@ var agent *Agent
 
 func Test_unixClientCall1(t *testing.T) {
 	t.Parallel()
-	//if gtest.RunProcess(t, func() {
 	startServer(t, "helloService", 22991)
 	time.Sleep(time.Second * 3)
 	// start client mesh
@@ -76,23 +74,11 @@ motan-refer:
 	c1.Initialize()
 	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
 	resp := c1.BaseCall(req, nil)
-	if resp.GetException() != nil {
-		return
-	}
-	if "Hello jack from motan server" != resp.GetValue() {
-		return
-	}
-	fmt.Println("check_pass")
-	//}) {
-	//	return
-	//}
-	//out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
-	//assert.Nil(t, err)
-	//assert.Contains(t, out, "check_pass")
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
 }
 func Test_unixClientCall2(t *testing.T) {
-	//t.Parallel()
-	//if gtest.RunProcess(t, func() {
+	t.Parallel()
 	startServer(t, "helloService", 22992)
 	time.Sleep(time.Second * 3)
 	// start client mesh
@@ -150,19 +136,8 @@ motan-refer:
 	mclient := mccontext.GetClient("test-refer")
 	var reply string
 	err := mclient.Call("Hello", []interface{}{"jack"}, &reply)
-	if err != nil {
-		return
-	}
-	if "Hello jack from motan server" != reply {
-		return
-	}
-	fmt.Println("check_pass")
-	//}) {
-	//	return
-	//}
-	//out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
-	//assert.Nil(t, err)
-	//assert.Contains(t, out, "check_pass")
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello jack from motan server", reply)
 }
 func TestMain(m *testing.M) {
 	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
@@ -562,8 +537,6 @@ func (l *LocalTestServiceProvider) GetPath() string {
 
 func Test_unixHTTPClientCall(t *testing.T) {
 	t.Parallel()
-	//gtest.DebugRunProcess(t)
-	//if gtest.RunProcess(t, func() {
 	go func() {
 		http.HandleFunc("/unixclient", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("okay"))
@@ -617,24 +590,11 @@ motan-service:
 	req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
 	req.SetAttachment("HTTP_HOST", "test.com")
 	resp := c1.BaseCall(req, &reply)
-	if resp.GetException() != nil {
-		return
-	}
-	if "okay" != string(reply) {
-		return
-	}
-	fmt.Println("check_pass")
-	//}) {
-	//	return
-	//}
-	//out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
-	//assert.Nil(t, err)
-	//assert.Contains(t, out, "check_pass")
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "okay", string(reply))
 }
 func Test_unixRPCClientCall(t *testing.T) {
 	t.Parallel()
-	//gtest.DebugRunProcess(t)
-	//if gtest.RunProcess(t, func() {
 	os.Remove("server.sock")
 	startServer(t, "helloService", 0, "server.sock")
 	time.Sleep(time.Second * 3)
@@ -675,17 +635,6 @@ motan-service:
 	var reply []byte
 	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
 	resp := c1.BaseCall(req, &reply)
-	if resp.GetException() != nil {
-		return
-	}
-	if "Hello jack from motan server" != string(reply) {
-		return
-	}
-	fmt.Println("check_pass")
-	//}) {
-	//	return
-	//}
-	//out, _, err := gtest.NewProcess(t).Verbose(true).Wait()
-	//assert.Nil(t, err)
-	//assert.Contains(t, out, "check_pass")
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", string(reply))
 }

@@ -17,6 +17,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -42,11 +43,13 @@ type SetAgent interface {
 // StatusHandler can change http status, such as 200, 503
 // the registed services will not available when status is 503, and will available when status change to 200
 type StatusHandler struct {
-	a *Agent
+	a    *Agent
+	lock sync.Mutex
 }
 
 func (s *StatusHandler) SetAgent(agent *Agent) {
-
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.a = agent
 }
 
