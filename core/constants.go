@@ -65,6 +65,7 @@ const (
 	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
 	MixGroups               = "mixGroups"
 	MaxContentLength        = "maxContentLength"
+	UnixSockProtocolFlag    = "unix://"
 )
 
 // nodeType

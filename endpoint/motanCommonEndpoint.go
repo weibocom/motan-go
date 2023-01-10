@@ -69,8 +69,8 @@ func (m *MotanCommonEndpoint) Initialize() {
 	m.DefaultVersion = mpro.Version2
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
-		if strings.HasPrefix(address, "unix://") {
-			return net.DialTimeout("unix", address[7:], connectTimeout)
+		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
+			return net.DialTimeout("unix", address[len(motan.UnixSockProtocolFlag):], connectTimeout)
 		}
 		return net.DialTimeout("tcp", address, connectTimeout)
 	}

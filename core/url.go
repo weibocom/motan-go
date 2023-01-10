@@ -216,7 +216,7 @@ func (u *URL) GetAddressStr() string {
 	if u.address != "" {
 		return u.address
 	}
-	if strings.HasPrefix(u.Host, "unix://") {
+	if strings.HasPrefix(u.Host, UnixSockProtocolFlag) {
 		u.address = u.Host
 		return u.address
 	}

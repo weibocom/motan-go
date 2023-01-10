@@ -152,7 +152,7 @@ func (m *MSContext) export(url *motan.URL) {
 		url.Protocol = protocol
 		var porti int
 		var err error
-		if v := url.GetParam(provider.ProxyHostKey, ""); strings.HasPrefix(v, "unix://") {
+		if v := url.GetParam(provider.ProxyHostKey, ""); strings.HasPrefix(v, motan.UnixSockProtocolFlag) {
 			porti = m.hashInt(v)
 		} else if v := url.GetParam(motan.UnixSockKey, ""); v != "" {
 			porti = m.hashInt(v)
