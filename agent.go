@@ -72,8 +72,9 @@ type Agent struct {
 
 	manageHandlers map[string]http.Handler
 
-	svcLock sync.Mutex
-	clsLock sync.Mutex
+	svcLock          sync.Mutex
+	clsLock          sync.Mutex
+	startMServerLock sync.Mutex
 
 	configurer *DynamicConfigurer
 
@@ -1007,6 +1008,8 @@ func (a *Agent) RegisterManageHandler(path string, handler http.Handler) {
 }
 
 func (a *Agent) startMServer() {
+	a.startMServerLock.Lock()
+	defer a.startMServerLock.Unlock()
 	handlers := make(map[string]http.Handler, 16)
 	for k, v := range GetDefaultManageHandlers() {
 		handlers[k] = v
