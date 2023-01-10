@@ -46,6 +46,7 @@ type StatusHandler struct {
 }
 
 func (s *StatusHandler) SetAgent(agent *Agent) {
+
 	s.a = agent
 }
 

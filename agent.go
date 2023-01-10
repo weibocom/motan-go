@@ -39,6 +39,10 @@ const (
 	defaultStatusSnap       = "status"
 )
 
+var (
+	initParamLock sync.Mutex
+)
+
 type Agent struct {
 	ConfigFile   string
 	extFactory   motan.ExtensionFactory
@@ -272,6 +276,8 @@ func (a *Agent) recoverStatus() {
 }
 
 func (a *Agent) initParam() {
+	initParamLock.Lock()
+	defer initParamLock.Unlock()
 	section, err := a.Context.Config.GetSection("motan-agent")
 	if err != nil {
 		fmt.Println("get config of \"motan-agent\" fail! err " + err.Error())

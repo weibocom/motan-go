@@ -186,9 +186,12 @@ func (c *DynamicConfigurer) getRegistryInfo() *registrySnapInfoStorage {
 
 type DynamicConfigurerHandler struct {
 	agent *Agent
+	lock  sync.Mutex
 }
 
 func (h *DynamicConfigurerHandler) SetAgent(agent *Agent) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	h.agent = agent
 }
 
