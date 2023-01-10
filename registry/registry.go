@@ -29,6 +29,10 @@ const (
 	Mesh   = "mesh"
 )
 
+var (
+	setSnapshotConfLock sync.Mutex
+)
+
 type SnapshotNodeInfo struct {
 	ExtInfo string `json:"extInfo"`
 	Addr    string `json:"address"`
@@ -87,6 +91,8 @@ func flushSnapshot() {
 }
 
 func SetSnapshotConf(snapshotInterval time.Duration, snapshotDir string) {
+	setSnapshotConfLock.Lock()
+	defer setSnapshotConfLock.Unlock()
 	snapshotConf.SnapshotDir = snapshotDir
 	snapshotConf.SnapshotInterval = snapshotInterval
 }
