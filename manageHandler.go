@@ -142,10 +142,13 @@ func (s *StatusHandler) getStatus() []byte {
 }
 
 type InfoHandler struct {
-	a *Agent
+	a    *Agent
+	lock sync.Mutex
 }
 
 func (i *InfoHandler) SetAgent(agent *Agent) {
+	i.lock.Lock()
+	defer i.lock.Unlock()
 	i.a = agent
 }
 
