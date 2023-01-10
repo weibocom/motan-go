@@ -23,7 +23,7 @@ type MSContext struct {
 	context      *motan.Context
 	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
-	portServer   map[int]motan.Server
+	portServer   map[string]motan.Server
 	serviceImpls map[string]interface{}
 	registries   map[string]motan.Registry // all registries used for services
 
@@ -151,17 +151,21 @@ func (m *MSContext) export(url *motan.URL) {
 		}
 		url.Protocol = protocol
 		var porti int
+		var serverKey string
 		var err error
 		if v := url.GetParam(provider.ProxyHostKey, ""); strings.HasPrefix(v, motan.UnixSockProtocolFlag) {
-			porti = m.hashInt(v)
+			porti = 0
+			serverKey = v
 		} else if v := url.GetParam(motan.UnixSockKey, ""); v != "" {
-			porti = m.hashInt(v)
+			porti = 0
+			serverKey = v
 		} else {
 			porti, err = strconv.Atoi(port)
 			if err != nil {
 				vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
 				return
 			}
+			serverKey = port
 		}
 		url.Port = porti
 		if url.Host == "" {
@@ -176,7 +180,7 @@ func (m *MSContext) export(url *motan.URL) {
 		exporter := &mserver.DefaultExporter{}
 		exporter.SetProvider(provider)
 
-		server := m.portServer[url.Port]
+		server := m.portServer[serverKey]
 
 		if server == nil {
 			server = m.extFactory.GetServer(url)
@@ -184,7 +188,7 @@ func (m *MSContext) export(url *motan.URL) {
 			motan.Initialize(handler)
 			handler.AddProvider(provider)
 			server.Open(false, false, handler, m.extFactory)
-			m.portServer[url.Port] = server
+			m.portServer[serverKey] = server
 		} else if canShareChannel(*url, *server.GetURL()) {
 			server.GetMessageHandler().AddProvider(provider)
 		} else {
@@ -212,7 +216,7 @@ func (m *MSContext) Initialize() {
 	if !m.inited {
 		m.context = motan.NewContextFromConfig(m.config, "", "")
 		m.portService = make(map[int]motan.Exporter, 32)
-		m.portServer = make(map[int]motan.Server, 32)
+		m.portServer = make(map[string]motan.Server, 32)
 		m.serviceImpls = make(map[string]interface{}, 32)
 		m.registries = make(map[string]motan.Registry)
 		m.inited = true
