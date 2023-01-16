@@ -60,6 +60,8 @@ const (
 	HEARTBEAT_RESPONSE_STRING = HEARTBEAT_METHOD_NAME
 )
 
+const MAX_BLOCK_SIZE = 1024
+
 // base binary arrays
 var (
 	baseV1HeartbeatReq     = []byte{241, 241, 0, 0, 24, 44, 223, 176, 126, 80, 0, 96, 0, 0, 0, 78, 240, 240, 1, 0, 24, 44, 223, 176, 126, 80, 0, 96, 0, 0, 0, 62, 172, 237, 0, 5, 119, 56, 0, 33, 99, 111, 109, 46, 119, 101, 105, 98, 111, 46, 97, 112, 105, 46, 109, 111, 116, 97, 110, 46, 114, 112, 99, 46, 104, 101, 97, 114, 116, 98, 101, 97, 116, 0, 9, 104, 101, 97, 114, 116, 98, 101, 97, 116, 0, 4, 118, 111, 105, 100, 0, 0, 0, 0}
@@ -72,10 +74,11 @@ var (
 )
 
 var (
-	ErrWrongMotanVersion = errors.New("unsupported motan version")
-	ErrOSVersion         = errors.New("object stream magic number or version not correct")
-	ErrUnsupported       = errors.New("unsupported object stream type")
-	ErrNotHasV1Msg       = errors.New("not has MotanV1Message")
+	ErrWrongMotanVersion    = errors.New("unsupported motan version")
+	ErrOSVersion            = errors.New("object stream magic number or version not correct")
+	ErrUnsupported          = errors.New("unsupported object stream type")
+	ErrNotHasV1Msg          = errors.New("not has MotanV1Message")
+	ErrParseV1MsgAttachment = errors.New("parse MotanV1Message attachment fail")
 )
 
 type MotanV1Message struct {
@@ -84,6 +87,7 @@ type MotanV1Message struct {
 	Flag           byte
 	Rid            uint64
 	InnerLength    int
+	objStream      *simpleObjectStream //only for request encode
 }
 
 func DecodeMotanV1Request(msg *MotanV1Message) (motan.Request, error) {
@@ -95,6 +99,7 @@ func DecodeMotanV1Request(msg *MotanV1Message) (motan.Request, error) {
 	if err != nil {
 		return nil, err
 	}
+	msg.objStream = objStream
 	request := &motan.MotanRequest{
 		RequestID:   msg.Rid,
 		ServiceName: objStream.service,
@@ -107,8 +112,7 @@ func DecodeMotanV1Request(msg *MotanV1Message) (motan.Request, error) {
 
 func EncodeMotanV1Request(req motan.Request, sendId uint64) ([]byte, error) {
 	if msg, ok := req.GetRPCContext(true).OriginalMessage.(*MotanV1Message); ok {
-		writeV1Rid(msg.OriginBytes, sendId) // replace rid with sendId for send
-		return msg.OriginBytes, nil
+		return encodeMotanV1(msg, req.GetAttachments(), sendId), nil
 	}
 	return nil, ErrNotHasV1Msg
 }
@@ -257,6 +261,63 @@ func BuildV1ExceptionResponse(rid uint64, errMsg string) []byte {
 	return result
 }
 
+func encodeMotanV1(msg *MotanV1Message, att *motan.StringMap, rid uint64) []byte {
+	stream := msg.objStream
+	// re-encode attachment
+	attBytes := encodeMotanV1Attachment(att, msg.V1InnerVersion)
+	var preSize int
+	if stream.isGzip {
+		preSize = len(stream.bytes) + len(attBytes)
+	} else {
+		preSize = len(msg.OriginBytes) + len(attBytes)
+	}
+	buf := motan.NewBytesBuffer(preSize)
+	// write header
+	buf.Write(msg.OriginBytes[:V1AllHeaderLength])
+	buf.Write(stream.bytes[:4]) // object stream magic num
+
+	// write body
+	if stream.argSize == 0 { // no params
+		writeBlock(buf, stream.sBlock.bytes[:stream.attachmentPos], attBytes) // write service info  && attachments
+	} else {
+		writeBlock(buf, stream.sBlock.bytes)                   // write service info
+		buf.Write(stream.bytes[stream.argStart:stream.argEnd]) // write params
+		writeBlock(buf, attBytes)                              // write attachments
+	}
+
+	// re-write rid and length
+	ret := buf.Bytes()
+	writeV1Rid(ret, rid) // replace rid with sendId for send
+	writeV1InnerLength(ret, uint32(len(ret)-V1AllHeaderLength))
+	return ret
+}
+
+// att should not nil
+func encodeMotanV1Attachment(att *motan.StringMap, v1InnerVersion byte) []byte {
+	size := att.Len()
+	buf := motan.NewBytesBuffer(25 * size)
+	// write size
+	if v1InnerVersion == versionV1Compress {
+		buf.WriteUint16(uint16(size))
+	} else {
+		buf.WriteUint32(uint32(size))
+	}
+	if size > 0 {
+		// write KV
+		att.Range(func(k, v string) bool {
+			writeUtfStr(k, buf)
+			writeUtfStr(v, buf)
+			return true
+		})
+	}
+	return buf.Bytes()
+}
+
+func writeUtfStr(str string, buf *motan.BytesBuffer) {
+	buf.WriteUint16(uint16(len(str)))
+	buf.Write([]byte(str))
+}
+
 func writeV1Rid(v1Msg []byte, rid uint64) {
 	if len(v1Msg) >= V1AllHeaderLength {
 		index := 4 // l1 header rid
@@ -266,16 +327,85 @@ func writeV1Rid(v1Msg []byte, rid uint64) {
 	}
 }
 
+func writeV1InnerLength(v1Msg []byte, innerLength uint32) {
+	if len(v1Msg) >= V1AllHeaderLength {
+		index := 12 // l1 header length
+		binary.BigEndian.PutUint32(v1Msg[index:index+4], innerLength+16)
+		index = 28 // l2 header length
+		binary.BigEndian.PutUint32(v1Msg[index:index+4], innerLength)
+	}
+}
+
+func writeBlock(buf *motan.BytesBuffer, bs ...[]byte) {
+	var tRemain int // total remain
+	for _, b := range bs {
+		tRemain += len(b)
+	}
+	first := true
+	lastBlock := false
+	blockPos := 0 // block pos
+	wPos := 0     // bytes pos
+	var ws int    // write size
+	for _, b := range bs {
+		if lastBlock { // last block
+			buf.Write(b)
+			tRemain -= len(b)
+		} else {
+			r := len(b) // current bytes remain
+			for r > 0 {
+				if first || blockPos >= MAX_BLOCK_SIZE { // new block
+					writeBlockHeader(buf, minInt(tRemain, MAX_BLOCK_SIZE))
+					blockPos = 0 // reset block pos for new block
+					if tRemain <= MAX_BLOCK_SIZE {
+						lastBlock = true
+					}
+					if first {
+						first = false
+					}
+				}
+				ws = minInt(r, MAX_BLOCK_SIZE-blockPos) // should write size
+				if ws > 0 {
+					wPos = len(b) - r
+					buf.Write(b[wPos : wPos+ws])
+					r -= ws
+					blockPos += ws
+					tRemain -= ws
+				}
+			}
+		}
+	}
+}
+
+func writeBlockHeader(buf *motan.BytesBuffer, l int) {
+	if l <= 0xFF {
+		buf.WriteByte(TC_BLOCKDATA)
+		buf.WriteByte(byte(l))
+	} else {
+		buf.WriteByte(TC_BLOCKDATALONG)
+		buf.WriteUint32(uint32(l))
+	}
+}
+
+func minInt(a, b int) int {
+	if a <= b {
+		return a
+	}
+	return b
+}
+
 type simpleObjectStream struct {
-	bytes            []byte
-	pos              int
-	len              int
-	inBlock          bool
-	blockRemain      int
-	flag             byte
-	parsed           bool
-	maxContentLength int
-	v1InnerVersion   byte
+	bytes          []byte
+	pos            int
+	len            int
+	flag           byte
+	parsed         bool
+	v1InnerVersion byte
+	isGzip         bool
+	attachmentPos  int    // attachment position in sBlock if no params
+	sBlock         *block // service info block
+	aBlock         *block // attachment block. maybe nil
+	argStart       int    // args start index in bytes
+	argEnd         int    // args end index in bytes
 
 	// for request
 	service    string
@@ -298,7 +428,7 @@ func newObjectStream(msg *MotanV1Message) (*simpleObjectStream, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &simpleObjectStream{bytes: decodedBytes, flag: msg.Flag, len: len(decodedBytes), v1InnerVersion: msg.V1InnerVersion}, nil
+		return &simpleObjectStream{bytes: decodedBytes, flag: msg.Flag, len: len(decodedBytes), v1InnerVersion: msg.V1InnerVersion, isGzip: true}, nil
 	}
 	return &simpleObjectStream{bytes: msg.OriginBytes[V1AllHeaderLength:], flag: msg.Flag, len: len(msg.OriginBytes) - V1AllHeaderLength, v1InnerVersion: msg.V1InnerVersion}, nil
 }
@@ -308,17 +438,16 @@ func (s *simpleObjectStream) parseReq() error {
 	if err != nil {
 		return err
 	}
-	blockStartPos := s.pos
 	// service infos
 	infos := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		infos[i], err = s.readUtf()
+		infos[i], err = s.readUtfFromBlock(s.sBlock)
 		if err != nil {
 			return err
 		}
 		if i == 0 && infos[0] == "1" { // v1 compress method info
 			var methodSign string
-			methodSign, err = s.readUtf()
+			methodSign, err = s.readUtfFromBlock(s.sBlock)
 			if err != nil {
 				return err
 			}
@@ -331,13 +460,14 @@ func (s *simpleObjectStream) parseReq() error {
 	s.service = infos[0]
 	s.method = infos[1]
 	s.paramDesc = infos[2]
-	s.blockRemain -= s.pos - blockStartPos
+
 	// arguments.
-	if s.blockRemain == 0 { //skip arguments bytes
-		s.inBlock = false // not block mode
+	if s.sBlock.remain() == 0 { //has args, should skip arguments bytes
+		s.argStart = s.pos
 		checkNext := true
 		var t byte
 		for checkNext {
+			s.argSize++
 			t, err = s.peekType()
 			if err != nil {
 				return err
@@ -348,8 +478,10 @@ func (s *simpleObjectStream) parseReq() error {
 			case TC_ARRAY:
 				_, err = s.skipByteArray(false)
 			case TC_BLOCKDATA, TC_BLOCKDATALONG: // arguments end
-				err = s.setBlock()
+				s.argEnd = s.pos
+				s.aBlock, err = s.getBlock() // attachment block
 				checkNext = false
+				s.argSize--
 			default:
 				vlog.Errorf("unsupported object stream type, type:%d", t)
 				return ErrUnsupported
@@ -358,8 +490,16 @@ func (s *simpleObjectStream) parseReq() error {
 				return err
 			}
 		}
+	} else {
+		s.attachmentPos = s.sBlock.pos
 	}
-	err = s.readAttachments()
+	if s.sBlock.remain() > 0 {
+		err = s.readAttachments(s.sBlock)
+	} else if s.aBlock != nil {
+		err = s.readAttachments(s.aBlock)
+	} else {
+		return ErrParseV1MsgAttachment
+	}
 	if err != nil {
 		return err
 	}
@@ -373,16 +513,16 @@ func (s *simpleObjectStream) parseRes() error {
 		return err
 	}
 
-	s.processTime, err = s.readLong()
+	s.processTime, err = s.readLongFromBlock(s.sBlock)
 	if err != nil {
 		return err
 	}
 	switch s.flag {
 	case FLAG_RESPONSE_EXCEPTION:
 		s.hasException = true
-		s.cName, _ = s.readUtf() // parse exception class name
+		s.cName, _ = s.readUtfFromBlock(s.sBlock) // parse exception class name
 	case FLAG_RESPONSE:
-		s.cName, err = s.readUtf()
+		s.cName, err = s.readUtfFromBlock(s.sBlock)
 		if err == nil && s.cName == "java.lang.String" {
 			var c []byte
 			c, err = s.skipByteArray(true)
@@ -420,7 +560,12 @@ func (s *simpleObjectStream) checkObjectStream() error {
 		return ErrOSVersion
 	}
 	s.pos += 4
-	return s.setBlock() // init with block mode
+	block, err := s.getBlock()
+	if err != nil {
+		return err
+	}
+	s.sBlock = block
+	return nil
 }
 
 func (s *simpleObjectStream) readUtf() (string, error) {
@@ -439,12 +584,37 @@ func (s *simpleObjectStream) readUtf() (string, error) {
 	return str, nil
 }
 
+func (s *simpleObjectStream) readUtfFromBlock(block *block) (string, error) {
+	l, err := s.readInt16FromBlock(block)
+	if err != nil {
+		return "", err
+	}
+	var str string
+	if l > 0 {
+		if block.remain() < int(l) {
+			return str, io.EOF
+		}
+		str = string(block.bytes[block.pos : block.pos+int(l)])
+		block.pos += int(l)
+	}
+	return str, nil
+}
+
 func (s *simpleObjectStream) readInt16() (int16, error) {
 	if s.remain() < 2 {
 		return 0, io.EOF
 	}
 	i := int16(binary.BigEndian.Uint16(s.bytes[s.pos : s.pos+2]))
 	s.pos += 2
+	return i, nil
+}
+
+func (s *simpleObjectStream) readInt16FromBlock(block *block) (int16, error) {
+	if block.remain() < 2 {
+		return 0, io.EOF
+	}
+	i := int16(binary.BigEndian.Uint16(block.bytes[block.pos : block.pos+2]))
+	block.pos += 2
 	return i, nil
 }
 
@@ -457,6 +627,15 @@ func (s *simpleObjectStream) readInt() (int, error) {
 	return i, nil
 }
 
+func (s *simpleObjectStream) readIntFromBlock(block *block) (int, error) {
+	if block.remain() < 4 {
+		return 0, io.EOF
+	}
+	i := int(binary.BigEndian.Uint32(block.bytes[block.pos : block.pos+4]))
+	block.pos += 4
+	return i, nil
+}
+
 func (s *simpleObjectStream) readLong() (int64, error) {
 	if s.remain() < 8 {
 		return 0, io.EOF
@@ -466,15 +645,24 @@ func (s *simpleObjectStream) readLong() (int64, error) {
 	return i, nil
 }
 
-func (s *simpleObjectStream) readAttachments() (err error) {
-	// attachments. already in block mode
+func (s *simpleObjectStream) readLongFromBlock(block *block) (int64, error) {
+	if block.remain() < 8 {
+		return 0, io.EOF
+	}
+	i := int64(binary.BigEndian.Uint64(block.bytes[block.pos : block.pos+8]))
+	block.pos += 8
+	return i, nil
+}
+
+// read attachment from block。
+func (s *simpleObjectStream) readAttachments(block *block) (err error) {
 	var size int
 	if s.v1InnerVersion == versionV1Compress {
 		var size16 int16
-		size16, err = s.readInt16()
+		size16, err = s.readInt16FromBlock(block)
 		size = int(size16)
 	} else {
-		size, err = s.readInt()
+		size, err = s.readIntFromBlock(block)
 	}
 	if err != nil {
 		vlog.Errorf("read v1 attachment size fail. err:%v", err)
@@ -484,12 +672,12 @@ func (s *simpleObjectStream) readAttachments() (err error) {
 	if size > 0 { // has attachments
 		for i := 0; i < size; i++ {
 			var k, v string
-			k, err = s.readUtf()
+			k, err = s.readUtfFromBlock(block)
 			if err != nil {
 				vlog.Errorf("read v1 attachment key fail. err:%v", err)
 				return err
 			}
-			v, err = s.readUtf()
+			v, err = s.readUtfFromBlock(block)
 			if err != nil {
 				vlog.Errorf("read v1 attachment value fail. err:%v", err)
 				return err
@@ -518,7 +706,7 @@ func (s *simpleObjectStream) skipByteArray(withContent bool) ([]byte, error) {
 	case TC_REFERENCE:
 		s.pos += 6 // skip TC_REFERENCE
 	default:
-		vlog.Errorf("unsupported object stream type, type:%d", t)
+		vlog.Errorf("unsupported object stream type in skipByteArray, type:%d", t)
 		return nil, ErrUnsupported
 	}
 	length, err := s.readInt()
@@ -536,27 +724,81 @@ func (s *simpleObjectStream) skipByteArray(withContent bool) ([]byte, error) {
 	return content, nil
 }
 
-func (s *simpleObjectStream) setBlock() error {
+// get data bytes from blocks
+func (s *simpleObjectStream) getBlock() (*block, error) {
 	if s.remain() < 2 {
-		return io.EOF
+		return nil, io.EOF
 	}
 	t := s.bytes[s.pos]
 	s.pos++
+	b := &block{}
+	var l int
 	switch t {
 	case TC_BLOCKDATA:
-		s.blockRemain = int(s.bytes[s.pos])
+		l = int(s.bytes[s.pos])
 		s.pos++
 	case TC_BLOCKDATALONG:
 		if s.remain() < 4 {
-			return io.EOF
+			return nil, io.EOF
 		}
-		s.blockRemain = int(binary.BigEndian.Uint32(s.bytes[s.pos : s.pos+4]))
+		l = int(binary.BigEndian.Uint32(s.bytes[s.pos : s.pos+4]))
 		s.pos += 4
 	default:
 		vlog.Errorf("unsupported object stream type, type:%d", t)
-		return ErrUnsupported
+		return nil, ErrUnsupported
 	}
-	s.inBlock = true
+
+	if s.remain() < l {
+		return nil, io.EOF
+	}
+	b.bytes = s.bytes[s.pos:(s.pos + l)]
+	s.pos += l
+	if l == MAX_BLOCK_SIZE {
+		nt, err := s.peekType()
+		if err == nil && (nt == TC_BLOCKDATA || nt == TC_BLOCKDATALONG) { // has next block
+			buf := motan.NewBytesBuffer(MAX_BLOCK_SIZE * 2)
+			buf.Write(b.bytes) // first block
+			err = s.appendBlockBytes(buf)
+			if err != nil {
+				return nil, err
+			}
+			b.bytes = buf.Bytes()
+		}
+	}
+	return b, nil
+}
+
+func (s *simpleObjectStream) appendBlockBytes(buf *motan.BytesBuffer) error {
+	checkNext := true
+	var l int
+	for checkNext {
+		if s.remain() < 1 { // no more data
+			return nil
+		}
+		t := s.bytes[s.pos]
+		s.pos++
+		switch t {
+		case TC_BLOCKDATA:
+			l = int(s.bytes[s.pos])
+			s.pos++
+		case TC_BLOCKDATALONG:
+			if s.remain() < 4 {
+				return io.EOF
+			}
+			l = int(binary.BigEndian.Uint32(s.bytes[s.pos : s.pos+4]))
+			s.pos += 4
+		default: // no more blocks
+			return nil
+		}
+		if s.remain() < l {
+			return io.EOF
+		}
+		buf.Write(s.bytes[s.pos:(s.pos + l)])
+		s.pos += l
+		if l != MAX_BLOCK_SIZE {
+			checkNext = false
+		}
+	}
 	return nil
 }
 
@@ -569,6 +811,19 @@ func (s *simpleObjectStream) peekType() (byte, error) {
 
 func (s *simpleObjectStream) remain() int {
 	return s.len - s.pos
+}
+
+type block struct {
+	bytes []byte
+	pos   int
+}
+
+func (b block) len() int {
+	return len(b.bytes)
+}
+
+func (b block) remain() int {
+	return len(b.bytes) - b.pos
 }
 
 func writeHessianString(str string, buf *motan.BytesBuffer) {
