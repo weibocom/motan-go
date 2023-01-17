@@ -6,6 +6,7 @@ import (
 	_ "fmt"
 	"github.com/weibocom/motan-go/config"
 	vlog "github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/serialize"
 	_ "github.com/weibocom/motan-go/server"
 	_ "golang.org/x/net/context"
 	"io/ioutil"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -476,6 +478,35 @@ func TestAgent_InitCall(t *testing.T) {
 		ret = agentHandler.Call(request)
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
+}
+
+func TestNotFoundProvider(t *testing.T) {
+	notFoundService := "notFoundService"
+	request := meshClient.BuildRequest(notFoundService, "test", []interface{}{})
+	epUrl := &core.URL{
+		Protocol: "motanV1Compatible",
+		Host:     "127.0.0.1",
+		Port:     9982,
+		Path:     "notFoundService",
+		Group:    "test",
+		Parameters: map[string]string{
+			core.TimeOutKey:              "3000",
+			core.ApplicationKey:          "testep",
+			core.ConnectRetryIntervalKey: "5000",
+			core.ErrorCountThresholdKey:  "0",
+		},
+	}
+	ext := GetDefaultExtFactory()
+	ep := ext.GetEndPoint(epUrl)
+	assert.NotNil(t, ep)
+	ep.SetSerialization(ext.GetSerialization(serialize.Simple, serialize.SimpleNumber))
+	core.Initialize(ep)
+	ep.SetProxy(true)
+	resp := ep.Call(request)
+	assert.NotNil(t, resp.GetException())
+	assert.Contains(t, "not found provider for test_notFoundService", resp.GetException().ErrMsg)
+	assert.Equal(t, int64(1), atomic.LoadInt64(&notFoundProviderCount))
+	ep.Destroy()
 }
 
 func newRequest(serviceName string, method string, argments ...interface{}) *core.MotanRequest {

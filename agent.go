@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	cfg "github.com/weibocom/motan-go/config"
@@ -42,6 +43,7 @@ const (
 var (
 	initParamLock sync.Mutex
 	setAgentLock  sync.Mutex
+	notFoundProviderCount int64 = 0
 )
 
 type Agent struct {
@@ -234,6 +236,9 @@ func (a *Agent) registerStatusSampler() {
 	})
 	metrics.RegisterStatusSampleFunc("goroutine_count", func() int64 {
 		return int64(runtime.NumGoroutine())
+	})
+	metrics.RegisterStatusSampleFunc("not_found_provider_count", func() int64 {
+		return atomic.SwapInt64(&notFoundProviderCount, 0)
 	})
 }
 
@@ -892,6 +897,7 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		return res
 	}
 	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
+	atomic.AddInt64(&notFoundProviderCount, 1)
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
 }
 
