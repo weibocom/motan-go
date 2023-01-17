@@ -333,7 +333,6 @@ func (m *MotanEndpoint) IsAvailable() bool {
 // ChannelConfig : ChannelConfig
 type ChannelConfig struct {
 	MaxContentLength int
-	Serialization    motan.Serialization
 }
 
 func DefaultConfig() *ChannelConfig {

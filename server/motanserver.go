@@ -280,6 +280,7 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 		vlog.Errorf("decode v1 request fail. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		result = mpro.BuildV1ExceptionResponse(msg.Rid, err.Error())
 	} else {
+		req.SetAttachment(motan.HostKey, ip)
 		reqCtx = req.GetRPCContext(true)
 		reqCtx.ExtFactory = m.extFactory
 		reqCtx.RequestReceiveTime = start

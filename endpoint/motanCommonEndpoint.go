@@ -74,7 +74,7 @@ func (m *MotanCommonEndpoint) Initialize() {
 		}
 		return net.DialTimeout("tcp", address, connectTimeout)
 	}
-	config := &ChannelConfig{MaxContentLength: m.maxContentLength, Serialization: m.serialization}
+	config := &ChannelConfig{MaxContentLength: m.maxContentLength}
 	if asyncInitConnection {
 		go m.initChannelPoolWithRetry(factory, config, connectRetryInterval)
 	} else {
@@ -361,7 +361,7 @@ func (s *Stream) Send() (err error) {
 				return err
 			}
 		} else { // encode motan v2
-			msg, err = mpro.ConvertToReqMessage(s.req, s.channel.config.Serialization)
+			msg, err = mpro.ConvertToReqMessage(s.req, s.channel.serialization)
 			if err != nil {
 				vlog.Errorf("convert motan request fail! ep: %s, req: %s, err:%s", s.channel.address, motan.GetReqInfo(s.req), err.Error())
 				return err
