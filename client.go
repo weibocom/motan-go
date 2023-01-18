@@ -134,8 +134,11 @@ func NewClientContextFromConfig(conf *config.Config) (mc *MCContext) {
 	if section != nil && section["log_filter_caller"] != nil {
 		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
 	}
-
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller)
+	accessForbidDispose := ""
+	if section != nil && section["access_forbid_dispose"] != nil {
+		accessForbidDispose = strconv.FormatBool(section["access_forbid_dispose"].(bool))
+	}
+	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, accessForbidDispose)
 	registerSwitchers(mc.context)
 	return mc
 }

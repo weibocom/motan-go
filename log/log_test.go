@@ -2,15 +2,18 @@ package vlog
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"os"
 	"strconv"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 var logObject *AccessLogEntity
 var expectString string
+
+var testLogger Logger
 
 func init() {
 	expectString = "FilterName|Role|100|Service|Method|Desc|RemoteAddress|100|100|100|100|false|Exception"
@@ -28,6 +31,13 @@ func init() {
 		TotalTime:     100,
 		Success:       false,
 		Exception:     "Exception"}
+}
+
+func TestMain(m *testing.M) {
+	testLogger = newDefaultLog()
+	testLogger.SetAsync(true)
+	code := m.Run()
+	os.Exit(code)
 }
 
 //BenchmarkLogSprintf: 736 ns/op
@@ -134,4 +144,26 @@ func TestAccessLog(t *testing.T) {
 	buffer.WriteString("|")
 	buffer.WriteString(logObject.Exception)
 	assert.Equal(t, buffer.String(), expectString)
+}
+
+func TestDiscardAccess(t *testing.T) {
+	_ = flag.Set("log_dir", "./test_logs")
+	testAccessEntity := &AccessLogEntity{
+		FilterName:    "test-access",
+		Role:          "client-agent",
+		RequestID:     123,
+		Service:       "test-service",
+		Method:        "test-method",
+		RemoteAddress: "1.1.1.1",
+		Desc:          "",
+		ReqSize:       0,
+		ResSize:       0,
+		BizTime:       100, //ms
+		TotalTime:     200, //ms
+		ResponseCode:  "200",
+		Success:       true,
+		Exception:     ""}
+	for i := 0; i < defaultAsyncLogLen+500; i++ {
+		testLogger.AccessLog(testAccessEntity)
+	}
 }
