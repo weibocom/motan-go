@@ -3,7 +3,7 @@ package vlog
 import (
 	"bytes"
 	"flag"
-	"fmt"
+	"github.com/weibocom/motan-go/metrics/metrics_callback"
 	"log"
 	"os"
 	"path/filepath"
@@ -30,14 +30,13 @@ var (
 )
 
 const (
-	defaultAsyncLogLen                 = 5000
-	defaultAccessDiscardOutputInterval = 5 //s
-	defaultLogSuffix                   = ".log"
-	defaultAccessLogName               = "access"
-	defaultMetricsLogName              = "metrics"
-	defaultLogSeparator                = "-"
-	defaultLogLevel                    = InfoLevel
-	defaultFlushInterval               = time.Second
+	defaultAsyncLogLen    = 5000
+	defaultLogSuffix      = ".log"
+	defaultAccessLogName  = "access"
+	defaultMetricsLogName = "metrics"
+	defaultLogSeparator   = "-"
+	defaultLogLevel       = InfoLevel
+	defaultFlushInterval  = time.Second
 )
 
 type AccessLogEntity struct {
@@ -443,29 +442,13 @@ func (d *defaultLogger) SetAsync(value bool) {
 				}
 			}()
 			for {
-				select {
-				case l := <-d.outputChan:
-					d.doAccessLog(l)
-				}
+				l := <-d.outputChan
+				d.doAccessLog(l)
 			}
 		}()
-		go func() {
-			defer func() {
-				if err := recover(); err != nil {
-					log.Printf("logs discard count output failed. err:%v", err)
-					debug.PrintStack()
-				}
-			}()
-			ticker := time.NewTicker(time.Second * time.Duration(defaultAccessDiscardOutputInterval))
-			for {
-				select {
-				case <-ticker.C:
-					discardCount := atomic.LoadInt64(&d.accessDiscardCount)
-					d.metricsLogger.Info(fmt.Sprintf("accessLog discard count: %d", discardCount))
-					atomic.StoreInt64(&d.accessDiscardCount, 0)
-				}
-			}
-		}()
+		metrics_callback.RegisterStatusSampleFunc("accesslog_discard_count", func() int64 {
+			return atomic.SwapInt64(&d.accessDiscardCount, 0)
+		})
 	}
 }
 
