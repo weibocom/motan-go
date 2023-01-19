@@ -134,8 +134,11 @@ func NewClientContextFromConfig(conf *config.Config) (mc *MCContext) {
 	if section != nil && section["log_filter_caller"] != nil {
 		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
 	}
-
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller)
+	logBufferSize := ""
+	if section != nil && section["log_buffer_size"] != nil {
+		logBufferSize = strconv.Itoa(section["log_buffer_size"].(int))
+	}
+	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize)
 	registerSwitchers(mc.context)
 	return mc
 }

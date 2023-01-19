@@ -41,8 +41,8 @@ const (
 )
 
 var (
-	initParamLock sync.Mutex
-	setAgentLock  sync.Mutex
+	initParamLock         sync.Mutex
+	setAgentLock          sync.Mutex
 	notFoundProviderCount int64 = 0
 )
 
@@ -324,8 +324,11 @@ func (a *Agent) initParam() {
 	if section != nil && section["log_filter_caller"] != nil {
 		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
 	}
-
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller)
+	logBufferSize := ""
+	if section != nil && section["log_buffer_size"] != nil {
+		logBufferSize = strconv.Itoa(section["log_buffer_size"].(int))
+	}
+	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize)
 	registerSwitchers(a.Context)
 
 	port := *motan.Port
@@ -922,7 +925,7 @@ func getClusterKey(group, version, protocol, path string) string {
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
-func initLog(logDir, logAsync, logStructured, rotatePerHour string, logLevel string, logFilterCaller string) {
+func initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize string) {
 	// TODO: remove after a better handle
 	if logDir == "stdout" {
 		return
@@ -943,6 +946,9 @@ func initLog(logDir, logAsync, logStructured, rotatePerHour string, logLevel str
 	}
 	if logFilterCaller != "" {
 		_ = flag.Set("log_filter_caller", logFilterCaller)
+	}
+	if logBufferSize != "" {
+		_ = flag.Set("log_buffer_size", logBufferSize)
 	}
 	vlog.LogInit(nil)
 }
