@@ -1,4 +1,4 @@
-package metrics_callback
+package callback
 
 import (
 	"sync"

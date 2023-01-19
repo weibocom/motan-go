@@ -3,7 +3,7 @@ package vlog
 import (
 	"bytes"
 	"flag"
-	"github.com/weibocom/motan-go/metrics/metrics_callback"
+	metrics_callback "github.com/weibocom/motan-go/metrics/callback"
 	"log"
 	"os"
 	"path/filepath"
