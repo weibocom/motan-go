@@ -1,4 +1,4 @@
-package callback
+package sampler
 
 import (
 	"sync"
@@ -35,7 +35,7 @@ func UnregisterStatusSampler(key string) {
 	delete(statusSamplers, key)
 }
 
-func SamplerRangeDo(f func(key string, value StatusSampler) bool) {
+func RangeDo(f func(key string, value StatusSampler) bool) {
 	statusSamplerRegisterLock.Lock()
 	defer statusSamplerRegisterLock.Unlock()
 	for k, e := range statusSamplers {

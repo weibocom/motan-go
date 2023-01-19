@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	metrics_callback "github.com/weibocom/motan-go/metrics/callback"
+	"github.com/weibocom/motan-go/metrics/sampler"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -217,12 +217,12 @@ func ElapseTimeSuffix(t int64) string {
 }
 
 func RegisterStatusSampleFunc(key string, sf func() int64) {
-	metrics_callback.RegisterStatusSampleFunc(key, sf)
+	sampler.RegisterStatusSampleFunc(key, sf)
 }
 
 func sampleStatus(application string) {
 	defer motan.HandlePanic(nil)
-	metrics_callback.SamplerRangeDo(func(key string, value metrics_callback.StatusSampler) bool {
+	sampler.RangeDo(func(key string, value sampler.StatusSampler) bool {
 		AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, value.Sample())
 		return true
 	})

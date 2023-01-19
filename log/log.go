@@ -3,7 +3,7 @@ package vlog
 import (
 	"bytes"
 	"flag"
-	metrics_callback "github.com/weibocom/motan-go/metrics/callback"
+	"github.com/weibocom/motan-go/metrics/sampler"
 	"log"
 	"os"
 	"path/filepath"
@@ -445,7 +445,7 @@ func (d *defaultLogger) SetAsync(value bool) {
 				d.doAccessLog(<-d.outputChan)
 			}
 		}()
-		metrics_callback.RegisterStatusSampleFunc("accesslog_discard_count", func() int64 {
+		sampler.RegisterStatusSampleFunc("accesslog_discard_count", func() int64 {
 			return atomic.SwapInt64(&d.accessDiscardCount, 0)
 		})
 	}
