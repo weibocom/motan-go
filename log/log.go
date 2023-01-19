@@ -442,8 +442,7 @@ func (d *defaultLogger) SetAsync(value bool) {
 				}
 			}()
 			for {
-				l := <-d.outputChan
-				d.doAccessLog(l)
+				d.doAccessLog(<-d.outputChan)
 			}
 		}()
 		metrics_callback.RegisterStatusSampleFunc("accesslog_discard_count", func() int64 {
