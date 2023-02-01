@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/weibocom/motan-go/config"
 	vlog "github.com/weibocom/motan-go/log"
-	"strconv"
 	"sync"
 
 	"github.com/weibocom/motan-go/cluster"
@@ -114,31 +113,7 @@ func NewClientContextFromConfig(conf *config.Config) (mc *MCContext) {
 	if logDir == "" {
 		logDir = "."
 	}
-	logAsync := ""
-	if section != nil && section["log_async"] != nil {
-		logAsync = strconv.FormatBool(section["log_async"].(bool))
-	}
-	logStructured := ""
-	if section != nil && section["log_structured"] != nil {
-		logStructured = strconv.FormatBool(section["log_structured"].(bool))
-	}
-	rotatePerHour := ""
-	if section != nil && section["rotate_per_hour"] != nil {
-		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-	}
-	logLevel := ""
-	if section != nil && section["log_level"] != nil {
-		logLevel = section["log_level"].(string)
-	}
-	logFilterCaller := ""
-	if section != nil && section["log_filter_caller"] != nil {
-		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
-	}
-	logBufferSize := ""
-	if section != nil && section["log_buffer_size"] != nil {
-		logBufferSize = strconv.Itoa(section["log_buffer_size"].(int))
-	}
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize)
+	initLog(logDir, section)
 	registerSwitchers(mc.context)
 	return mc
 }

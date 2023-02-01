@@ -304,31 +304,7 @@ func (a *Agent) initParam() {
 	if logDir == "" {
 		logDir = "."
 	}
-	logAsync := ""
-	if section != nil && section["log_async"] != nil {
-		logAsync = strconv.FormatBool(section["log_async"].(bool))
-	}
-	logStructured := ""
-	if section != nil && section["log_structured"] != nil {
-		logStructured = strconv.FormatBool(section["log_structured"].(bool))
-	}
-	rotatePerHour := ""
-	if section != nil && section["rotate_per_hour"] != nil {
-		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-	}
-	logLevel := ""
-	if section != nil && section["log_level"] != nil {
-		logLevel = section["log_level"].(string)
-	}
-	logFilterCaller := ""
-	if section != nil && section["log_filter_caller"] != nil {
-		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
-	}
-	logBufferSize := ""
-	if section != nil && section["log_buffer_size"] != nil {
-		logBufferSize = strconv.Itoa(section["log_buffer_size"].(int))
-	}
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize)
+	initLog(logDir, section)
 	registerSwitchers(a.Context)
 
 	port := *motan.Port
@@ -925,31 +901,49 @@ func getClusterKey(group, version, protocol, path string) string {
 	return group + "_" + version + "_" + protocol + "_" + path
 }
 
-func initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller, logBufferSize string) {
-	// TODO: remove after a better handle
+func initLog(logDir string, section map[interface{}]interface{}) {
+	if section != nil && section["log_async"] != nil {
+		logAsync := strconv.FormatBool(section["log_async"].(bool))
+		if logAsync != "" {
+			_ = flag.Set("log_async", logAsync)
+		}
+	}
+
+	if section != nil && section["log_structured"] != nil {
+		logStructured := strconv.FormatBool(section["log_structured"].(bool))
+		if logStructured != "" {
+			_ = flag.Set("log_structured", logStructured)
+		}
+	}
+	if section != nil && section["rotate_per_hour"] != nil {
+		rotatePerHour := strconv.FormatBool(section["rotate_per_hour"].(bool))
+		if rotatePerHour != "" {
+			_ = flag.Set("rotate_per_hour", rotatePerHour)
+		}
+	}
+	if section != nil && section["log_level"] != nil {
+		logLevel := section["log_level"].(string)
+		if logLevel != "" {
+			_ = flag.Set("log_level", logLevel)
+		}
+	}
+	if section != nil && section["log_filter_caller"] != nil {
+		logFilterCaller := strconv.FormatBool(section["log_filter_caller"].(bool))
+		if logFilterCaller != "" {
+			_ = flag.Set("log_filter_caller", logFilterCaller)
+		}
+	}
+	if section != nil && section["log_buffer_size"] != nil {
+		logBufferSize := strconv.Itoa(section["log_buffer_size"].(int))
+		if logBufferSize != "" {
+			_ = flag.Set("log_buffer_size", logBufferSize)
+		}
+	}
 	if logDir == "stdout" {
 		return
 	}
 	fmt.Printf("use log dir:%s\n", logDir)
 	_ = flag.Set("log_dir", logDir)
-	if logAsync != "" {
-		_ = flag.Set("log_async", logAsync)
-	}
-	if logStructured != "" {
-		_ = flag.Set("log_structured", logStructured)
-	}
-	if rotatePerHour != "" {
-		_ = flag.Set("rotate_per_hour", rotatePerHour)
-	}
-	if logLevel != "" {
-		_ = flag.Set("log_level", logLevel)
-	}
-	if logFilterCaller != "" {
-		_ = flag.Set("log_filter_caller", logFilterCaller)
-	}
-	if logBufferSize != "" {
-		_ = flag.Set("log_buffer_size", logBufferSize)
-	}
 	vlog.LogInit(nil)
 }
 
