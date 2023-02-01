@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"github.com/weibocom/motan-go/metrics/sampler"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -53,8 +54,6 @@ var (
 		writers:   make(map[string]StatWriter),
 		evtBuf:    &sync.Pool{New: func() interface{} { return new(event) }},
 	}
-	statusSamplerRegisterLock sync.Mutex
-	statusSamplers            = make(map[string]StatusSampler)
 )
 
 type StatItem interface {
@@ -96,16 +95,6 @@ type Snapshot interface {
 
 type StatWriter interface {
 	Write(snapshots []Snapshot) error
-}
-
-type StatusSampler interface {
-	Sample() int64
-}
-
-type StatusSampleFunc func() int64
-
-func (f StatusSampleFunc) Sample() int64 {
-	return f()
 }
 
 func GetOrRegisterStatItem(group string, service string) StatItem {
@@ -228,28 +217,15 @@ func ElapseTimeSuffix(t int64) string {
 }
 
 func RegisterStatusSampleFunc(key string, sf func() int64) {
-	RegisterStatusSampler(key, StatusSampleFunc(sf))
-}
-
-func RegisterStatusSampler(key string, sampler StatusSampler) {
-	statusSamplerRegisterLock.Lock()
-	defer statusSamplerRegisterLock.Unlock()
-	statusSamplers[key] = sampler
-}
-
-func UnregisterStatusSampler(key string) {
-	statusSamplerRegisterLock.Lock()
-	defer statusSamplerRegisterLock.Unlock()
-	delete(statusSamplers, key)
+	sampler.RegisterStatusSampleFunc(key, sf)
 }
 
 func sampleStatus(application string) {
-	statusSamplerRegisterLock.Lock()
-	defer statusSamplerRegisterLock.Unlock()
 	defer motan.HandlePanic(nil)
-	for key, s := range statusSamplers {
-		AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, s.Sample())
-	}
+	sampler.RangeDo(func(key string, value sampler.StatusSampler) bool {
+		AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, value.Sample())
+		return true
+	})
 }
 
 func startSampleStatus(application string) {

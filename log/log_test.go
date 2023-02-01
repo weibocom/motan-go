@@ -2,6 +2,7 @@ package vlog
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"strconv"
 	"testing"
@@ -134,4 +135,14 @@ func TestAccessLog(t *testing.T) {
 	buffer.WriteString("|")
 	buffer.WriteString(logObject.Exception)
 	assert.Equal(t, buffer.String(), expectString)
+}
+
+func TestChangeLogBufferSize(t *testing.T) {
+	testLogger := newDefaultLog()
+	testLogger.SetAsync(true)
+	assert.Equal(t, cap(testLogger.(*defaultLogger).outputChan), 5000)
+	_ = flag.Set("log_buffer_size", "1")
+	testLogger = newDefaultLog()
+	testLogger.SetAsync(true)
+	assert.Equal(t, cap(testLogger.(*defaultLogger).outputChan), 1)
 }

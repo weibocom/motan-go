@@ -57,28 +57,7 @@ func NewMotanServerContextFromConfig(conf *config.Config) (ms *MSContext) {
 	if logDir == "" {
 		logDir = "."
 	}
-	logAsync := ""
-	if section != nil && section["log_async"] != nil {
-		logAsync = strconv.FormatBool(section["log_async"].(bool))
-	}
-	logStructured := ""
-	if section != nil && section["log_structured"] != nil {
-		logStructured = strconv.FormatBool(section["log_structured"].(bool))
-	}
-	rotatePerHour := ""
-	if section != nil && section["rotate_per_hour"] != nil {
-		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-	}
-	logLevel := ""
-	if section != nil && section["log_level"] != nil {
-		logLevel = section["log_level"].(string)
-	}
-	logFilterCaller := ""
-	if section != nil && section["log_filter_caller"] != nil {
-		logFilterCaller = strconv.FormatBool(section["log_filter_caller"].(bool))
-	}
-
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel, logFilterCaller)
+	initLog(logDir, section)
 	registerSwitchers(ms.context)
 
 	return ms
