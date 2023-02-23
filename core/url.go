@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/weibocom/motan-go/log"
@@ -19,8 +20,8 @@ type URL struct {
 	Parameters map[string]string `json:"parameters"`
 
 	// cached info
-	address  string
-	identity string
+	address  atomic.Value
+	identity atomic.Value
 }
 
 var (
@@ -32,14 +33,16 @@ var (
 // GetIdentity return the identity of url. identity info includes protocol, host, port, path, group
 // the identity will cached, so must clear cached info after update above info by calling ClearCachedInfo()
 func (u *URL) GetIdentity() string {
-	if u.identity != "" {
-		return u.identity
+	temp := u.identity.Load()
+	if temp != nil && temp != "" {
+		return temp.(string)
 	}
-	u.identity = u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
+	idt := u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
 	if u.Protocol == "direct" {
-		u.identity += "&address=" + u.GetParam("address", "")
+		idt += "&address=" + u.GetParam("address", "")
 	}
-	return u.identity
+	u.identity.Store(idt)
+	return idt
 }
 
 func (u *URL) GetIdentityWithRegistry() string {
@@ -49,8 +52,8 @@ func (u *URL) GetIdentityWithRegistry() string {
 }
 
 func (u *URL) ClearCachedInfo() {
-	u.address = ""
-	u.identity = ""
+	u.address.Store("")
+	u.identity.Store("")
 }
 
 func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
@@ -213,15 +216,17 @@ func (u *URL) GetPortStr() string {
 }
 
 func (u *URL) GetAddressStr() string {
-	if u.address != "" {
-		return u.address
+	temp := u.address.Load()
+	if temp != nil && temp != "" {
+		return temp.(string)
 	}
 	if strings.HasPrefix(u.Host, UnixSockProtocolFlag) {
-		u.address = u.Host
-		return u.address
+		temp = u.Host
+	} else {
+		temp = u.Host + ":" + u.GetPortStr()
 	}
-	u.address = u.Host + ":" + u.GetPortStr()
-	return u.address
+	u.address.Store(temp)
+	return temp.(string)
 }
 
 func (u *URL) Copy() *URL {

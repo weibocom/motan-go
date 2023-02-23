@@ -67,6 +67,7 @@ motan-refer:
       path: helloService
       protocol: motan2
       registry: direct
+      asyncInitConnection: false
       serialization: breeze`)))
 	agent := NewAgent(ext)
 	go agent.StartMotanAgentFromConfig(config)
@@ -110,6 +111,7 @@ motan-refer:
       protocol: motanV1Compatible
       registry: direct
       serialization: breeze
+      asyncInitConnection: false
 `)))
 	agent := NewAgent(ext)
 	go agent.StartMotanAgentFromConfig(config1)
@@ -132,6 +134,7 @@ motan-refer:
     group: hello
     path: helloService
     requestTimeout: 3000
+    asyncInitConnection: false
 `)))
 	mccontext := NewClientContextFromConfig(cfg)
 	mccontext.Start(ext1)
@@ -355,6 +358,7 @@ func TestAgent_InitCall(t *testing.T) {
 	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
 	urlTest := &core.URL{Parameters: make(map[string]string)}
 	urlTest.Group = "test1"
+	urlTest.Parameters[core.AsyncInitConnection] = "false"
 	agent.initCluster(urlTest)
 	agentHandler := &agentMessageHandler{agent: agent}
 
@@ -494,6 +498,7 @@ func TestNotFoundProvider(t *testing.T) {
 			core.ApplicationKey:          "testep",
 			core.ConnectRetryIntervalKey: "5000",
 			core.ErrorCountThresholdKey:  "0",
+			core.AsyncInitConnection:     "false",
 		},
 	}
 	ext := GetDefaultExtFactory()
