@@ -25,6 +25,7 @@ func TestMain(m *testing.M) {
 func TestGetName(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
@@ -43,6 +44,7 @@ func TestRecordErrEmptyThreshold(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
@@ -63,6 +65,7 @@ func TestRecordErrWithErrThreshold(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "5")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
@@ -94,6 +97,7 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -115,6 +119,7 @@ func TestMotanEndpoint_AsyncCall(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetSerialization(&serialize.SimpleSerialization{})
@@ -136,6 +141,7 @@ func TestMotanEndpoint_ErrorCall(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
@@ -160,6 +166,7 @@ func TestMotanEndpoint_RequestTimeout(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)
@@ -185,6 +192,7 @@ func TestLazyInit(t *testing.T) {
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanEndpoint{}
 	ep.SetURL(url)
 	ep.SetProxy(true)

@@ -63,8 +63,8 @@ func (m *MotanCommonEndpoint) Initialize() {
 	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
-	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, false)
-	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, false)
+	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, defaultLazyInit)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, defaultAsyncInitConnection)
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
 	factory := func() (net.Conn, error) {
@@ -141,10 +141,7 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 	}
 	deadline := m.GetRequestTimeout(request)
 	// do call
-	group := GetRequestGroup(request)
-	if group != m.url.Group && m.url.Group != "" {
-		request.SetAttachment(mpro.MGroup, m.url.Group)
-	}
+	m.fitGroup(request)
 	response, err := channel.Call(request, deadline, rc)
 	if err != nil {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
@@ -174,6 +171,21 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 		}
 	}
 	return response
+}
+
+// Due to traffic switching, the group of the cluster may not same as the endpoint's
+func (m *MotanCommonEndpoint) fitGroup(r motan.Request) {
+	if r.GetRPCContext(true).IsMotanV1 { // motan v1 use group key
+		group := r.GetAttachment(motan.GroupKey)
+		if group != m.url.Group && m.url.Group != "" {
+			r.SetAttachment(motan.GroupKey, m.url.Group)
+		}
+	} else {
+		group := GetRequestGroup(r)
+		if group != m.url.Group && m.url.Group != "" {
+			r.SetAttachment(mpro.MGroup, m.url.Group)
+		}
+	}
 }
 
 func (m *MotanCommonEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *ChannelConfig, retryInterval time.Duration) {

@@ -28,6 +28,7 @@ motan-refer:
     protocol: motan2
     registry: direct
     serialization: simple
+    asyncInitConnection: false
 `
 	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
 	assert.Nil(err)

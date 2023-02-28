@@ -15,6 +15,7 @@ motan-basicRefer:
     protocol: motan2
     registry: direct
     serialization: simple
+    asyncInitConnection: false
 
 #conf of refers
 motan-refer:

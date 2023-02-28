@@ -69,6 +69,7 @@ func (c *MeshClient) Initialize() {
 	clusterURL.PutParam(core.RegistryKey, meshDirectRegistryKey)
 	clusterURL.PutParam(core.ConnectRetryIntervalKey, "5000")
 	clusterURL.PutParam(core.SerializationKey, c.serialization)
+	clusterURL.PutParam(core.AsyncInitConnection, "false")
 	meshRegistryURL := &core.URL{}
 	meshRegistryURL.Protocol = "direct"
 	meshRegistryURL.PutParam(core.AddressKey, c.address)

@@ -23,6 +23,8 @@ var (
 	defaultKeepaliveInterval    = 1000 * time.Millisecond
 	defaultConnectRetryInterval = 60 * time.Second
 	defaultErrorCountThreshold  = 10
+	defaultLazyInit             = false
+	defaultAsyncInitConnection  = true
 	ErrChannelShutdown          = fmt.Errorf("the channel has been shutdown")
 	ErrSendRequestTimeout       = fmt.Errorf("timeout err: send request timeout")
 	ErrRecvRequestTimeout       = fmt.Errorf("timeout err: receive request timeout")
@@ -39,7 +41,7 @@ type MotanEndpoint struct {
 	channels                     *V2ChannelPool
 	destroyed                    bool
 	destroyCh                    chan struct{}
-	available                    bool
+	available                    atomic.Value
 	errorCount                   uint32
 	proxy                        bool
 	errorCountThreshold          int64
@@ -58,7 +60,7 @@ type MotanEndpoint struct {
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
-	m.available = available
+	m.available.Store(available)
 }
 
 func (m *MotanEndpoint) SetSerialization(s motan.Serialization) {
@@ -71,6 +73,7 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 
 func (m *MotanEndpoint) Initialize() {
 	m.destroyCh = make(chan struct{}, 1)
+	m.available.Store(false) // init value
 	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
 	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
@@ -80,8 +83,8 @@ func (m *MotanEndpoint) Initialize() {
 	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
-	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, false)
-	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, false)
+	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, defaultLazyInit)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, defaultAsyncInitConnection)
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
 		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
@@ -327,7 +330,7 @@ func (m *MotanEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MotanEndpoint) IsAvailable() bool {
-	return m.available
+	return m.available.Load().(bool)
 }
 
 // ChannelConfig : ChannelConfig
