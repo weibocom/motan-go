@@ -91,7 +91,12 @@ const (
 	DefaultWriteTimeout     = 5 * time.Second
 	DefaultMaxContentLength = 10 * 1024 * 1024
 	GroupNameSeparator      = ","
-	GroupEnvironmentName    = "MESH_SERVICE_ADDITIONAL_GROUP"
+)
+
+// env variables
+const (
+	GroupEnvironmentName     = "MESH_SERVICE_ADDITIONAL_GROUP"
+	DirectRPCEnvironmentName = "MESH_DIRECT_RPC"
 )
 
 // meta keys

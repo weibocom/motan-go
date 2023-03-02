@@ -2,6 +2,9 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/weibocom/motan-go/registry"
+	"os"
 	"testing"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -82,7 +85,13 @@ func TestCall(t *testing.T) {
 }
 
 func initCluster() *MotanCluster {
+	return initClusterWithPathGroup("", "")
+}
+
+func initClusterWithPathGroup(path string, group string) *MotanCluster {
 	url := &motan.URL{Parameters: make(map[string]string)}
+	url.Path = path
+	url.Group = group
 	url.Protocol = "test"
 	url.Parameters[motan.Hakey] = "failover"
 	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
@@ -99,6 +108,18 @@ func TestDestroy(t *testing.T) {
 	cluster.Destroy()
 	if cluster.closed != true {
 		t.Fatalf("cluster destroy fail, closed not false")
+	}
+}
+
+func TestParseRegistryFromEnv(t *testing.T) {
+	motan.ClearDirectEnvRegistry()
+	os.Setenv(motan.DirectRPCEnvironmentName, "helloService>change_group@127.0.0.1:8005,127.0.0.1:8006;unknownService>127.0.0.1:8888,127.0.0.1:9999")
+	cluster := initClusterWithPathGroup("com.weibo.helloService", "group1")
+	assert.Equal(t, 2, len(cluster.Refers))
+	for _, r := range cluster.GetRefers() {
+		assert.Equal(t, "change_group", r.GetURL().Group)
+		assert.Equal(t, "127.0.0.1", r.GetURL().Host)
+		assert.True(t, r.GetURL().Port == 8005 || r.GetURL().Port == 8006)
 	}
 }
 
@@ -133,9 +154,10 @@ func getCustomExt() motan.ExtensionFactory {
 	ext.RegistExtRegistry("test", func(url *motan.URL) motan.Registry {
 		return &motan.TestRegistry{URL: url}
 	})
-
 	ext.RegistExtEndpoint("test", func(url *motan.URL) motan.EndPoint {
 		return &motan.TestEndPoint{URL: url}
 	})
+
+	registry.RegistDefaultRegistry(ext)
 	return ext
 }

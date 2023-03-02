@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"testing"
 
@@ -22,7 +23,7 @@ func TestGetLocalIP(t *testing.T) {
 	if ip == "" {
 		t.Errorf("get local ip fail. ip:%s", ip)
 	}
-	hostname := "testhostname"
+	hostname := "testHostname"
 	*LocalIP = hostname
 	ip = GetLocalIP()
 	if ip != hostname {
@@ -42,19 +43,19 @@ func TestSliceShuffle(t *testing.T) {
 	if len(ns) != len(s) || len(ns) != 32 {
 		t.Errorf("slice shuffle fail. size not correct. size:%d", len(ns))
 	}
-	diffcount := 0
+	diffCount := 0
 	for i := 0; i < size; i++ {
 		if ns[i] != s[i] {
-			diffcount++
+			diffCount++
 		}
 	}
-	fmt.Printf("shuffle diff count:%d\n", diffcount)
-	if diffcount < 2 {
-		t.Errorf("shuffle fail. diff count:%d", diffcount)
+	fmt.Printf("shuffle diff count:%d\n", diffCount)
+	if diffCount < 2 {
+		t.Errorf("shuffle fail. diff count:%d", diffCount)
 	}
 }
 
-func TestFisrtUpper(t *testing.T) {
+func TestFirstUpper(t *testing.T) {
 	s := "test"
 	ns := FirstUpper(s)
 	if ns != "Test" {
@@ -133,4 +134,74 @@ func TestGetEPFilterInfo(t *testing.T) {
 	filter2.SetNext(filter3)
 	str := GetEPFilterInfo(filter1)
 	assert.Equal(t, "TestEndPointFilter->TestEndPointFilter->TestEndPointFilter", str)
+}
+
+func TestGetDirectEnvRegistry(t *testing.T) {
+	os.Unsetenv(DirectRPCEnvironmentName)
+	ClearDirectEnvRegistry()
+	// test init value
+	assert.Nil(t, directRpc)
+
+	u := &URL{Path: "com.weibo.helloService"}
+	u1 := &URL{Path: "com.weibo.testService"}
+	u2 := &URL{Path: "com.weibo.tempService"}
+
+	// test not set env
+	reg := GetDirectEnvRegistry(u)
+	assert.Nil(t, directRpc)
+	assert.Nil(t, reg)
+
+	// test parse
+	ClearDirectEnvRegistry()
+	os.Setenv(DirectRPCEnvironmentName, "helloService>127.0.0.1:8005")
+	reg = GetDirectEnvRegistry(u)
+	assert.True(t, directRpc != nil && len(directRpc) == 1)
+	checkReg(reg, t, "127.0.0.1:8005", "")
+
+	// test parse multi
+	ClearDirectEnvRegistry()
+	os.Setenv(DirectRPCEnvironmentName, "helloService>127.0.0.1:8005;testService>10.123.123.123:7777,10.123.123.123:8888,10.123.123.123:9999;tempService>10.111.111.111:7777")
+	reg = GetDirectEnvRegistry(u)
+	assert.Equal(t, 3, len(directRpc))
+	checkReg(reg, t, "127.0.0.1:8005", "")
+
+	reg = GetDirectEnvRegistry(u1)
+	checkReg(reg, t, "10.123.123.123:7777,10.123.123.123:8888,10.123.123.123:9999", "")
+
+	reg = GetDirectEnvRegistry(u2)
+	checkReg(reg, t, "10.111.111.111:7777", "")
+
+	// test parse group
+	ClearDirectEnvRegistry()
+	os.Setenv(DirectRPCEnvironmentName, "helloService>change_group@127.0.0.1:8005;testService>temp-group@10.123.123.123:7777,10.123.123.123:8888,10.123.123.123:9999;")
+	reg = GetDirectEnvRegistry(u)
+	assert.Equal(t, 2, len(directRpc))
+	checkReg(reg, t, "127.0.0.1:8005", "change_group")
+
+	reg = GetDirectEnvRegistry(u1)
+	checkReg(reg, t, "10.123.123.123:7777,10.123.123.123:8888,10.123.123.123:9999", "temp-group")
+
+	// test prefix match
+	ClearDirectEnvRegistry()
+	os.Setenv(DirectRPCEnvironmentName, "com.weibo.t*>newGroup@127.0.0.1:8005,127.0.0.1:8006")
+	reg = GetDirectEnvRegistry(u1)
+	assert.Equal(t, 1, len(directRpc))
+	checkReg(reg, t, "127.0.0.1:8005,127.0.0.1:8006", "newGroup")
+
+	reg = GetDirectEnvRegistry(u2)
+	checkReg(reg, t, "127.0.0.1:8005,127.0.0.1:8006", "newGroup")
+
+	// test not match
+	reg = GetDirectEnvRegistry(u)
+	assert.Nil(t, reg)
+
+	os.Unsetenv(DirectRPCEnvironmentName)
+	ClearDirectEnvRegistry()
+}
+
+func checkReg(reg *URL, t *testing.T, addr string, group string) {
+	assert.NotNil(t, reg)
+	assert.Equal(t, "direct", reg.Protocol)
+	assert.Equal(t, addr, reg.GetParam(AddressKey, ""))
+	assert.Equal(t, group, reg.Group)
 }

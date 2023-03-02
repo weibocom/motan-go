@@ -37,10 +37,13 @@ func (d *DirectRegistry) Discover(url *motan.URL) []*motan.URL {
 	}
 	result := make([]*motan.URL, 0, len(d.urls))
 	for _, u := range d.urls {
-		newURL := *url
+		newURL := url.Copy()
 		newURL.Host = u.Host
 		newURL.Port = u.Port
-		result = append(result, &newURL)
+		if u.Group != "" { // specify group
+			newURL.Group = u.Group
+		}
+		result = append(result, newURL)
 	}
 	return result
 }
@@ -63,11 +66,13 @@ func (d *DirectRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
 func parseURLs(url *motan.URL) []*motan.URL {
 	urls := make([]*motan.URL, 0)
 	if len(url.Host) > 0 && url.Port > 0 {
-		urls = append(urls, url)
+		urls = append(urls, url.Copy())
 	} else if address, exist := url.Parameters[motan.AddressKey]; exist {
 		for _, add := range strings.Split(address, ",") {
+			u := url.Copy()
 			if strings.HasPrefix(add, "unix://") {
-				u := &motan.URL{Host: add, Port: 0}
+				u.Host = add
+				u.Port = 0
 				u.PutParam(motan.AddressKey, add)
 				urls = append(urls, u)
 			} else {
@@ -75,7 +80,8 @@ func parseURLs(url *motan.URL) []*motan.URL {
 				if len(hostport) == 2 {
 					port, err := strconv.Atoi(hostport[1])
 					if err == nil {
-						u := &motan.URL{Host: hostport[0], Port: port}
+						u.Host = hostport[0]
+						u.Port = port
 						urls = append(urls, u)
 					}
 				}
