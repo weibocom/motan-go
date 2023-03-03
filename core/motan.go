@@ -373,6 +373,9 @@ type RPCContext struct {
 
 	// trace context
 	Tc *TraceContext
+
+	// ----  internal vars ----
+	IsMotanV1 bool
 }
 
 func (c *RPCContext) AddFinishHandler(handler FinishHandler) {

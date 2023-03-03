@@ -106,7 +106,9 @@ func DecodeMotanV1Request(msg *MotanV1Message) (motan.Request, error) {
 		Method:      objStream.method,
 		MethodDesc:  objStream.paramDesc,
 		Attachment:  objStream.attachment}
-	request.GetRPCContext(true).OriginalMessage = msg
+	ctx := request.GetRPCContext(true)
+	ctx.OriginalMessage = msg
+	ctx.IsMotanV1 = true
 	return request, nil
 }
 
@@ -138,7 +140,9 @@ func DecodeMotanV1Response(msg *MotanV1Message) (motan.Response, error) {
 			response.Exception = &motan.Exception{ErrCode: 500, ErrMsg: "v1: has exception, class:" + objStream.cName, ErrType: motan.ServiceException}
 		}
 	}
-	response.GetRPCContext(true).OriginalMessage = msg
+	ctx := response.GetRPCContext(true)
+	ctx.OriginalMessage = msg
+	ctx.IsMotanV1 = true
 	return response, nil
 }
 

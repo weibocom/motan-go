@@ -499,9 +499,6 @@ func (a *Agent) initClusters() {
 }
 
 func (a *Agent) initCluster(url *motan.URL) {
-	a.clsLock.Lock()
-	defer a.clsLock.Unlock()
-
 	if url.Parameters[motan.ApplicationKey] == "" {
 		url.Parameters[motan.ApplicationKey] = a.agentURL.Parameters[motan.ApplicationKey]
 	}
@@ -523,6 +520,8 @@ func (a *Agent) initCluster(url *motan.URL) {
 		a.serviceMap.UnsafeStore(url.Path, serviceMapItemArr)
 	})
 	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	a.clsLock.Lock() // Mutually exclusive with the reloadClusters method
+	defer a.clsLock.Unlock()
 	a.clusterMap.Store(mapKey, c)
 }
 
@@ -617,13 +616,8 @@ type agentMessageHandler struct {
 }
 
 func (a *agentMessageHandler) clusterCall(request motan.Request, ck string, motanCluster *cluster.MotanCluster) (res motan.Response) {
-	if request.GetAttachment(mpro.MSource) == "" {
-		application := motanCluster.GetURL().GetParam(motan.ApplicationKey, "")
-		if application == "" {
-			application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
-		}
-		request.SetAttachment(mpro.MSource, application)
-	}
+	// fill default request info
+	fillDefaultReqInfo(request, motanCluster.GetURL())
 	res = motanCluster.Call(request)
 	if res == nil {
 		vlog.Warningf("motanCluster Call return nil. cluster:%s", ck)
@@ -647,13 +641,7 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	}()
 	if service, ok := httpCluster.CanServe(request.GetMethod()); ok {
 		// if the client can use rpc, do it
-		if request.GetAttachment(mpro.MSource) == "" {
-			application := httpCluster.GetURL().GetParam(motan.ApplicationKey, "")
-			if application == "" {
-				application = a.agent.agentURL.GetParam(motan.ApplicationKey, "")
-			}
-			request.SetAttachment(mpro.MSource, application)
-		}
+		fillDefaultReqInfo(request, httpCluster.GetURL())
 		request.SetAttachment(mpro.MPath, service)
 		if motanRequest, ok := request.(*motan.MotanRequest); ok {
 			motanRequest.ServiceName = service
@@ -693,6 +681,31 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	res = &motan.MotanResponse{RequestID: request.GetRequestID()}
 	mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
 	return res
+}
+
+// fill default reqeust info such as application, group..
+func fillDefaultReqInfo(r motan.Request, url *motan.URL) {
+	if r.GetRPCContext(true).IsMotanV1 {
+		if r.GetAttachment(motan.ApplicationKey) == "" {
+			application := url.GetParam(motan.ApplicationKey, "")
+			if application != "" {
+				r.SetAttachment(motan.ApplicationKey, application)
+			}
+		}
+		if r.GetAttachment(motan.GroupKey) == "" {
+			r.SetAttachment(motan.GroupKey, url.Group)
+		}
+	} else {
+		if r.GetAttachment(mpro.MSource) == "" {
+			application := url.GetParam(motan.ApplicationKey, "")
+			if application != "" {
+				r.SetAttachment(mpro.MSource, application)
+			}
+		}
+		if r.GetAttachment(mpro.MGroup) == "" {
+			r.SetAttachment(mpro.MGroup, url.Group)
+		}
+	}
 }
 
 func (a *agentMessageHandler) Call(request motan.Request) motan.Response {

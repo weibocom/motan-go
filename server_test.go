@@ -52,6 +52,7 @@ motan-server:
 	clientExt := GetDefaultExtFactory()
 	u := motan.FromExtInfo("motan2://127.0.0.1:64332/helloService?serialization=simple")
 	assert.NotNil(u)
+	u.Parameters["asyncInitConnection"] = "false"
 	ep := clientExt.GetEndPoint(u)
 	assert.NotNil(ep)
 	ep.SetSerialization(motan.GetSerialization(u, ext))
@@ -98,6 +99,7 @@ func TestNewMotanServerContextFromConfig(t *testing.T) {
 	ext := startServer(t, "helloService", 64532)
 	clientExt := GetDefaultExtFactory()
 	u := motan.FromExtInfo("motan2://127.0.0.1:64532/helloService?serialization=simple")
+	u.Parameters["asyncInitConnection"] = "false"
 	assert.NotNil(u)
 	ep := clientExt.GetEndPoint(u)
 	assert.NotNil(ep)
