@@ -711,12 +711,12 @@ motan-service:
 	a.Context = &core.Context{Config: config1}
 	a.Context.Initialize()
 	a.initParam()
-	assert.Equal(t, endpoint.GetMotanEPDefaultAsynInit(), false)
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), false)
 
 	config2, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "true"))))
 	a = NewAgent(ext)
 	a.Context = &core.Context{Config: config2}
 	a.Context.Initialize()
 	a.initParam()
-	assert.Equal(t, endpoint.GetMotanEPDefaultAsynInit(), true)
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), true)
 }
