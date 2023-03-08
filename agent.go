@@ -3,6 +3,7 @@ package motan
 import (
 	"flag"
 	"fmt"
+	"github.com/weibocom/motan-go/endpoint"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -41,9 +42,10 @@ const (
 )
 
 var (
-	initParamLock         sync.Mutex
-	setAgentLock          sync.Mutex
-	notFoundProviderCount int64 = 0
+	initParamLock             sync.Mutex
+	setAgentLock              sync.Mutex
+	notFoundProviderCount     int64 = 0
+	defaultInitClusterTimeout int64 = 10000 //ms
 )
 
 type Agent struct {
@@ -366,7 +368,13 @@ func (a *Agent) initParam() {
 	if err != nil {
 		panic("Init runtime directory error: " + err.Error())
 	}
-
+	if section != nil && section[motan.MotanEpAsyncInit] != nil {
+		if ai, ok := section[motan.MotanEpAsyncInit].(bool); ok {
+			endpoint.SetMotanEPDefaultAsynInit(ai)
+		} else {
+			vlog.Warningf("illegal %s input, input should be bool", motan.MotanEpAsyncInit)
+		}
+	}
 	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s", port, mPort, pidFile, logDir, runtimeDir)
 	a.logdir = logDir
 	a.port = port
@@ -489,12 +497,28 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 }
 
 func (a *Agent) initClusters() {
+	initTimeout := a.Context.AgentURL.GetIntValue(motan.InitClusterTimeoutKey, defaultInitClusterTimeout)
+	timer := time.NewTimer(time.Millisecond * time.Duration(initTimeout))
+	wg := sync.WaitGroup{}
+	wg.Add(len(a.Context.RefersURLs))
 	for _, url := range a.Context.RefersURLs {
 		// concurrently initialize cluster
 		go func(u *motan.URL) {
+			defer wg.Done()
 			defer motan.HandlePanic(nil)
 			a.initCluster(u)
 		}(url)
+	}
+	finishChan := make(chan struct{})
+	go func() {
+		wg.Wait()
+		finishChan <- struct{}{}
+	}()
+	select {
+	case <-timer.C:
+		vlog.Infof("agent init cluster timeout(%dms), do not wait", initTimeout)
+	case <-finishChan:
+		vlog.Infoln("agent cluster init complete")
 	}
 }
 

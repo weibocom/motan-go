@@ -786,3 +786,11 @@ func buildV2Channel(conn net.Conn, config *ChannelConfig, serialization motan.Se
 
 	return channel
 }
+
+func SetMotanEPDefaultAsynInit(ai bool) {
+	defaultAsyncInitConnection = ai
+}
+
+func GetMotanEPDefaultAsynInit() bool {
+	return defaultAsyncInitConnection
+}
