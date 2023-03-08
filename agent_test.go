@@ -707,7 +707,6 @@ motan-service:
 `
 	ext := GetDefaultExtFactory()
 	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "false"))))
-	assert.Equal(t, endpoint.GetMotanEPDefaultAsynInit(), true)
 	a := NewAgent(ext)
 	a.Context = &core.Context{Config: config1}
 	a.Context.Initialize()

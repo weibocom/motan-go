@@ -368,13 +368,8 @@ func (a *Agent) initParam() {
 	if err != nil {
 		panic("Init runtime directory error: " + err.Error())
 	}
-	if section != nil && section[motan.MotanEpAsyncInit] != nil {
-		if ai, ok := section[motan.MotanEpAsyncInit].(bool); ok {
-			endpoint.SetMotanEPDefaultAsynInit(ai)
-		} else {
-			vlog.Warningf("illegal %s input, input should be bool", motan.MotanEpAsyncInit)
-		}
-	}
+	ai := a.Context.AgentURL.GetBoolValue(motan.MotanEpAsyncInit, true)
+	endpoint.SetMotanEPDefaultAsynInit(ai)
 	vlog.Infof("agent port:%d, manage port:%d, pidfile:%s, logdir:%s, runtimedir:%s", port, mPort, pidFile, logDir, runtimeDir)
 	a.logdir = logDir
 	a.port = port

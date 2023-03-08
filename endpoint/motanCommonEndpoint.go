@@ -64,7 +64,7 @@ func (m *MotanCommonEndpoint) Initialize() {
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
 	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, defaultLazyInit)
-	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, defaultAsyncInitConnection)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, defaultAsyncInitConnection.Load())
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
 	factory := func() (net.Conn, error) {
@@ -556,7 +556,8 @@ func (s *Stream) Close() {
 }
 
 // Call send request to the server.
-//    about return: exception in response will record error count, err will not.
+//
+//	about return: exception in response will record error count, err will not.
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
 	stream, err := c.NewStream(req, rc)
 	if err != nil {
