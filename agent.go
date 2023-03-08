@@ -516,7 +516,7 @@ func (a *Agent) initClusters() {
 	}()
 	select {
 	case <-timer.C:
-		vlog.Infof("agent init cluster timeout(%dms), do not wait", initTimeout)
+		vlog.Infof("agent init cluster timeout(%dms), do not wait(rest cluster keep doing initialization backend)", initTimeout)
 	case <-finishChan:
 		vlog.Infoln("agent cluster init complete")
 	}
