@@ -372,6 +372,7 @@ func (a *Agent) initParam() {
 	if section != nil && section[motan.MotanEpAsyncInit] != nil {
 		if ai, ok := section[motan.MotanEpAsyncInit].(bool); ok {
 			asyncInit = ai
+			vlog.Infof("%s is set to %s", motan.MotanEpAsyncInit, strconv.FormatBool(ai))
 		} else {
 			vlog.Warningf("illegal %s input, input should be bool", motan.MotanEpAsyncInit)
 		}
@@ -520,6 +521,7 @@ func (a *Agent) initClusters() {
 	case <-timer.C:
 		vlog.Infof("agent init cluster timeout(%dms), do not wait(rest cluster keep doing initialization backend)", initTimeout)
 	case <-finishChan:
+		defer timer.Stop()
 		vlog.Infoln("agent cluster init complete")
 	}
 }
