@@ -24,7 +24,7 @@ var (
 	defaultConnectRetryInterval = 60 * time.Second
 	defaultErrorCountThreshold  = 10
 	defaultLazyInit             = false
-	defaultAsyncInitConnection  = true
+	defaultAsyncInitConnection  atomic.Value
 	ErrChannelShutdown          = fmt.Errorf("the channel has been shutdown")
 	ErrSendRequestTimeout       = fmt.Errorf("timeout err: send request timeout")
 	ErrRecvRequestTimeout       = fmt.Errorf("timeout err: receive request timeout")
@@ -84,7 +84,7 @@ func (m *MotanEndpoint) Initialize() {
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
 	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
 	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, defaultLazyInit)
-	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, defaultAsyncInitConnection)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, GetDefaultMotanEPAsynInit())
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
 		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
@@ -785,4 +785,16 @@ func buildV2Channel(conn net.Conn, config *ChannelConfig, serialization motan.Se
 	go channel.send()
 
 	return channel
+}
+
+func SetMotanEPDefaultAsynInit(ai bool) {
+	defaultAsyncInitConnection.Store(ai)
+}
+
+func GetDefaultMotanEPAsynInit() bool {
+	res := defaultAsyncInitConnection.Load()
+	if res == nil {
+		return true
+	}
+	return res.(bool)
 }

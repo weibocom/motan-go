@@ -2,7 +2,7 @@ package core
 
 import "time"
 
-//--------------all global public constants--------------
+// --------------all global public constants--------------
 // exception type
 const (
 	FrameworkException = iota
@@ -37,6 +37,7 @@ const (
 	DisableGlobalFilter     = "disableGlobalFilter"
 	DefaultFilter           = "defaultFilter"
 	DisableDefaultFilter    = "disableDefaultFilter"
+	MotanEpAsyncInit        = "motanEpAsyncInit"
 	RegistryKey             = "registry"
 	WeightKey               = "weight"
 	SerializationKey        = "serialization"
@@ -52,6 +53,7 @@ const (
 	RemoteIPKey             = "remoteIP"
 	ProxyRegistryKey        = "proxyRegistry"
 	ProxyRegistryUrlString  = "proxyRegistryUrlString"
+	InitClusterTimeoutKey   = "initClusterTimeout"
 	ConnectTimeoutKey       = "connectTimeout"
 	ConnectRetryIntervalKey = "connectRetryInterval"
 	ClientConnectionKey     = "clientConnection"

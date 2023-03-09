@@ -3,8 +3,10 @@ package motan
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	_ "fmt"
 	"github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/endpoint"
 	vlog "github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/serialize"
 	_ "github.com/weibocom/motan-go/server"
@@ -646,6 +648,7 @@ motan-agent:
   log_dir: "stdout"
   snapshot_dir: "./snapshot"
   application: "testing"
+  motanEpAsyncInit: false
 
 motan-registry:
   direct:
@@ -673,4 +676,47 @@ motan-service:
 	resp := c1.BaseCall(req, &reply)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "Hello jack from motan server", string(reply))
+}
+
+func Test_changeDefaultMotanEpAsyncInit(t *testing.T) {
+	template := `
+motan-agent:
+  port: 12821
+  mport: 12503
+  eport: 12281
+  htport: 23282
+  log_dir: "stdout"
+  motanEpAsyncInit: %s
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: motan2
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      proxy.host: unix://./server.sock
+      export: motan2:12281
+`
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "false"))))
+	a := NewAgent(ext)
+	a.Context = &core.Context{Config: config1}
+	a.Context.Initialize()
+	a.initParam()
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), false)
+
+	config2, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "true"))))
+	a = NewAgent(ext)
+	a.Context = &core.Context{Config: config2}
+	a.Context.Initialize()
+	a.initParam()
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), true)
 }
