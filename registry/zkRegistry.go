@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/samuel/go-zookeeper/zk"
-	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 )
@@ -343,7 +342,7 @@ func (z *ZkRegistry) doSubscribeCommand(url *motan.URL) {
 						if listeners, ok := z.subscribedCommandMap[commandPath]; ok && len(data) > 0 {
 							cmdInfo := getNodeInfo(data)
 							for lis := range listeners {
-								lis.NotifyCommand(url, cluster.ServiceCmd, cmdInfo)
+								lis.NotifyCommand(url, 1, cmdInfo) // service command
 								vlog.Infof("[ZkRegistry] command changed, path:%s, cmdInfo:%s", commandPath, cmdInfo)
 							}
 						}
