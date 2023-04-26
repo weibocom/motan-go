@@ -375,7 +375,8 @@ type RPCContext struct {
 	Tc *TraceContext
 
 	// ----  internal vars ----
-	IsMotanV1 bool
+	IsMotanV1  bool
+	RemoteAddr string // remote address
 }
 
 func (c *RPCContext) AddFinishHandler(handler FinishHandler) {
