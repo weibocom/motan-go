@@ -174,8 +174,8 @@ func (h *HTTPXProvider) Call(request motan.Request) motan.Response {
 	} else {
 		ip = request.GetAttachment(motan.HostKey)
 	}
-	if req.Header.Peek("x-forwarded-for") == nil {
-		req.Header.Add("x-forwarded-for", ip)
+	if req.Header.Peek(motan.XForwardedFor) == nil {
+		req.Header.Add(motan.XForwardedFor, ip)
 	}
 	err = h.httpClient.Do(req, httpResp)
 	if err != nil {

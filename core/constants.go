@@ -68,6 +68,8 @@ const (
 	MixGroups               = "mixGroups"
 	MaxContentLength        = "maxContentLength"
 	UnixSockProtocolFlag    = "unix://"
+	XForwardedForLower      = "x-forwarded-for" // used as motan default proxy key
+	XForwardedFor           = "X-Forwarded-For"
 )
 
 // nodeType

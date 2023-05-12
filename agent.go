@@ -736,18 +736,21 @@ func fillDefaultReqInfo(r motan.Request, url *motan.URL) {
 	}
 }
 
-func (a *agentMessageHandler) Call(request motan.Request) motan.Response {
+func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	c, ck, err := a.findCluster(request)
 	if err == nil {
-		return a.clusterCall(request, ck, c)
+		res = a.clusterCall(request, ck, c)
+	} else if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
+		// if normal cluster not found we try http cluster, here service of request represent domain
+		res = a.httpCall(request, ck, httpCluster.(*cluster.HTTPCluster))
+	} else {
+		vlog.Warningf("cluster not found. cluster: %s, request id:%d", err.Error(), request.GetRequestID())
+		res = getDefaultResponse(request.GetRequestID(), "cluster not found. cluster: "+err.Error())
 	}
-
-	// if normal cluster not found we try http cluster, here service of request represent domain
-	if httpCluster := a.agent.httpClusterMap.LoadOrNil(request.GetServiceName()); httpCluster != nil {
-		return a.httpCall(request, ck, httpCluster.(*cluster.HTTPCluster))
+	if res.GetRPCContext(true).RemoteAddr != "" { // set response remote addr
+		res.SetAttachment(motan.XForwardedForLower, res.GetRPCContext(true).RemoteAddr)
 	}
-	vlog.Warningf("cluster not found. cluster: %s, request id:%d", err.Error(), request.GetRequestID())
-	return getDefaultResponse(request.GetRequestID(), "cluster not found. cluster: "+err.Error())
+	return res
 }
 func (a *agentMessageHandler) matchRule(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string) (foundClusters []serviceMapItem, err error) {
 	if cond == "" {
