@@ -79,7 +79,7 @@ var (
 	Hport       = flag.Int("hport", 0, "http forward proxy server port")
 	Mport       = flag.Int("mport", 0, "agent manage port")
 	Pidfile     = flag.String("pidfile", "", "agent manage port")
-	CfgFile     = flag.String("c", "", "motan run conf")
+	CfgFile     = flag.String("motanc", "", "motan run conf")
 	LocalIP     = flag.String("localIP", "", "local ip for motan register")
 	IDC         = flag.String("idc", "", "the idc info for agent or client.")
 	Pool        = flag.String("pool", "", "application pool config. like 'application-idc-level'")
