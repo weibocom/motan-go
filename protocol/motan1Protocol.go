@@ -139,6 +139,7 @@ func DecodeMotanV1Response(msg *MotanV1Message) (motan.Response, error) {
 		} else {
 			response.Exception = &motan.Exception{ErrCode: 500, ErrMsg: "v1: has exception, class:" + objStream.cName, ErrType: motan.ServiceException}
 		}
+		vlog.Warningf("v1 exception message: %s", objStream.errMsg)
 	}
 	ctx := response.GetRPCContext(true)
 	ctx.OriginalMessage = msg
@@ -422,6 +423,7 @@ type simpleObjectStream struct {
 	processTime  int64
 	hasException bool
 	cName        string
+	errMsg       string
 	value        interface{}
 }
 
@@ -525,6 +527,8 @@ func (s *simpleObjectStream) parseRes() error {
 	case FLAG_RESPONSE_EXCEPTION:
 		s.hasException = true
 		s.cName, _ = s.readUtfFromBlock(s.sBlock) // parse exception class name
+		//It cannot be fully deserialized, so try to convert it into a string to provide more information
+		s.errMsg = string(s.bytes)
 	case FLAG_RESPONSE:
 		s.cName, err = s.readUtfFromBlock(s.sBlock)
 		if err == nil && s.cName == "java.lang.String" {

@@ -205,6 +205,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 			return m.defaultErrMotanResponse(request, err.Error())
 		}
 	}
+	response.GetRPCContext(true).RemoteAddr = channel.address
 	return response
 }
 

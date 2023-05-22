@@ -275,8 +275,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			return true
 		})
 		httpReq.Header.Del("Connection")
-		if httpReq.Header.Peek("X-Forwarded-For") == nil {
-			httpReq.Header.Set("X-Forwarded-For", ip)
+		if httpReq.Header.Peek(motan.XForwardedFor) == nil {
+			httpReq.Header.Set(motan.XForwardedFor, ip)
 		}
 		if len(bodyBytes) != 0 {
 			httpReq.BodyWriter().Write(bodyBytes)
@@ -333,8 +333,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		if len(httpReq.Header.Host()) == 0 {
 			httpReq.Header.SetHost(h.domain)
 		}
-		if httpReq.Header.Peek("X-Forwarded-For") == nil {
-			httpReq.Header.Set("X-Forwarded-For", ip)
+		if httpReq.Header.Peek(motan.XForwardedFor) == nil {
+			httpReq.Header.Set(motan.XForwardedFor, ip)
 		}
 		err = h.fastClient.Do(httpReq, httpRes)
 		if err != nil {
@@ -379,8 +379,8 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		req.Header.Add(k, v)
 		return true
 	})
-	if req.Header.Get("x-forwarded-for") == "" {
-		req.Header.Add("x-forwarded-for", ip)
+	if req.Header.Get(motan.XForwardedFor) == "" {
+		req.Header.Add(motan.XForwardedFor, ip)
 	}
 
 	timeout := h.url.GetTimeDuration(motan.TimeOutKey, time.Millisecond, DefaultRequestTimeout)
@@ -483,5 +483,6 @@ func fillException(resp *motan.MotanResponse, start int64, err error) {
 
 func updateUpstreamStatusCode(resp *motan.MotanResponse, statusCode int) {
 	resCtx := resp.GetRPCContext(true)
+	resp.SetAttachment(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
 	resCtx.Meta.Store(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
 }
