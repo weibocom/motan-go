@@ -147,7 +147,11 @@ func (p *PbSerialization) serializeBuf(buf *proto.Buffer, v interface{}) (err er
 		for i := 0; i < rv.Len(); i++ {
 			iv := rv.Index(i)
 			if _, ok := iv.Interface().(proto.Message); !ok {
-				return errors.New("not support other types in pb-array in PbSerialization. type: " + iv.Elem().Kind().String())
+				kind := iv.Type().Kind()
+				if iv.Type().Kind() == reflect.Ptr {
+					kind = iv.Elem().Kind()
+				}
+				return errors.New("not support other types in pb-array in PbSerialization. type: " + kind.String())
 			}
 			if err = p.serializeBuf(buf, iv.Elem().Interface()); err != nil {
 				return err
