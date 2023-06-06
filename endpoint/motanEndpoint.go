@@ -194,7 +194,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
 	}
 	excep := response.GetException()
-	if excep != nil && excep.ErrCode == 503 {
+	if excep != nil && excep.ErrType != motan.BizException {
 		m.recordErrAndKeepalive()
 	} else {
 		// reset errorCount

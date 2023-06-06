@@ -152,7 +152,7 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 		return defaultAsyncResponse
 	}
 	excep := response.GetException()
-	if excep != nil && excep.ErrCode == 503 {
+	if excep != nil && excep.ErrType != motan.BizException {
 		m.recordErrAndKeepalive()
 	} else {
 		// reset errorCount
