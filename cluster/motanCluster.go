@@ -191,9 +191,13 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 		m.registryRefers[registryURL.GetIdentity()] = endpoints
 	}
 	m.refresh()
-	for _, ep := range endpointMap {
-		ep.Destroy()
-	}
+	go func() {
+		defer motan.HandlePanic(nil)
+		time.Sleep(time.Second * 2)
+		for _, ep := range endpointMap {
+			ep.Destroy()
+		}
+	}()
 }
 
 // remove rule protocol && set weight
