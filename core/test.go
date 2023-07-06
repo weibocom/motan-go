@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -116,6 +117,7 @@ func (t *TestProvider) GetPath() string {
 type TestEndPoint struct {
 	URL         *URL
 	ProcessTime int64
+	available   atomic.Value
 }
 
 func (t *TestEndPoint) GetURL() *URL {
@@ -137,10 +139,20 @@ func (t *TestEndPoint) Call(request Request) Response {
 }
 
 func (t *TestEndPoint) IsAvailable() bool {
-	return true
+	return t.available.Load().(bool)
 }
 
-func (t *TestEndPoint) Destroy() {}
+func (t *TestEndPoint) Initialize() {
+	t.SetAvailable(true)
+}
+
+func (t *TestEndPoint) Destroy() {
+	t.SetAvailable(false)
+}
+
+func (t *TestEndPoint) SetAvailable(a bool) {
+	t.available.Store(a)
+}
 
 func (t *TestEndPoint) SetProxy(proxy bool) {}
 

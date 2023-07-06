@@ -74,10 +74,25 @@ func TestNotify(t *testing.T) {
 		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
 	}
 	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
+	var destroyEndpoint motan.EndPoint
+	for _, j := range cluster.Refers {
+		if j.GetURL().Port == 8002 {
+			destroyEndpoint = j
+		}
+	}
+	if destroyEndpoint == nil {
+		t.Fatalf("cluster endpoint is nil")
+	}
+	if !destroyEndpoint.IsAvailable() {
+		t.Fatalf("cluster endpoint should be not available")
+	}
 	cluster.Notify(RegistryURL, urls)
 	time.Sleep(time.Second * 3)
 	if len(cluster.Refers) != 1 {
 		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
+	}
+	if destroyEndpoint.IsAvailable() {
+		t.Fatalf("cluster endpoint should not be available")
 	}
 }
 
