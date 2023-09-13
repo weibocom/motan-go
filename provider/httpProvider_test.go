@@ -70,6 +70,45 @@ func TestHTTPProvider_Call(t *testing.T) {
 	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
 }
 
+func TestHTTPProvider_Http_Exception(t *testing.T) {
+	context := &core.Context{}
+	context.Config, _ = config.NewConfigFromReader(bytes.NewReader([]byte(httpProviderTestData)))
+	providerURL := &core.URL{Protocol: "http", Path: "test4"}
+	providerURL.PutParam(mhttp.DomainKey, "test.domain")
+	providerURL.PutParam("requestTimeout", "2000")
+	providerURL.PutParam("proxyAddress", "localhost:8091")
+	provider := &HTTPProvider{url: providerURL, gctx: context}
+	provider.Initialize()
+	req := &core.MotanRequest{}
+	req.ServiceName = "test4"
+	req.Method = "/p1/test"
+	req.SetAttachment("Host", "test.domain")
+	req.SetAttachment(mhttp.QueryString, "a=b")
+	assert.Nil(t, provider.Call(req).GetException())
+}
+
+func TestHTTPProvider_Http_EnableException(t *testing.T) {
+	context := &core.Context{}
+	context.Config, _ = config.NewConfigFromReader(bytes.NewReader([]byte(httpProviderTestData)))
+	providerURL := &core.URL{Protocol: "http", Path: "test4"}
+	providerURL.PutParam(mhttp.DomainKey, "test.domain")
+	providerURL.PutParam("requestTimeout", "2000")
+	providerURL.PutParam("proxyAddress", "localhost:8091")
+	providerURL.PutParam(mhttp.EnableHttpExceptionKey, "true")
+	provider := &HTTPProvider{url: providerURL, gctx: context}
+	provider.Initialize()
+	req := &core.MotanRequest{}
+	req.ServiceName = "test4"
+	req.Method = "/p1/test"
+	req.SetAttachment("Host", "test.domain")
+	req.SetAttachment(mhttp.QueryString, "a=b")
+	exception := provider.Call(req).GetException()
+	assert.NotNil(t, exception)
+	assert.Equal(t, exception.ErrCode, 500)
+	assert.Equal(t, exception.ErrType, core.BizException)
+	assert.Equal(t, exception.ErrMsg, "request failed")
+}
+
 func TestMain(m *testing.M) {
 	go func() {
 		var addr = ":8090"
@@ -77,6 +116,17 @@ func TestMain(m *testing.M) {
 		handler.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 			request.ParseForm()
 			writer.Write([]byte(request.URL.String()))
+		})
+		http.ListenAndServe(addr, handler)
+	}()
+	go func() {
+		// 返回500的server
+		var addr = ":8091"
+		handler := &http.ServeMux{}
+		handler.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+			request.ParseForm()
+			writer.WriteHeader(500)
+			writer.Write([]byte("request failed"))
 		})
 		http.ListenAndServe(addr, handler)
 	}()

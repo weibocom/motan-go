@@ -33,6 +33,7 @@ const (
 	ProxySchemaKey           = "proxySchema"
 	MaxConnectionsKey        = "maxConnections"
 	EnableRewriteKey         = "enableRewrite"
+	EnableHttpExceptionKey   = "enableHttpException"
 )
 
 const (
@@ -415,9 +416,10 @@ func (m *LocationMatcher) NeedURLQueryString() bool {
 // We use meta element HTTP_Method as http method, HTTP_QueryString as query string
 // Request method as request uri
 // Body will transform to a http body with following rules:
-//  if body is a map[string]string we transform it as a form data
-//  if body is a string or []byte just use it
-//  else is unsupported
+//
+//	if body is a map[string]string we transform it as a form data
+//	if body is a string or []byte just use it
+//	else is unsupported
 func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *fasthttp.Request, defaultHTTPMethod string) error {
 	httpMethod := motanRequest.GetAttachment(Method)
 	if httpMethod == "" {

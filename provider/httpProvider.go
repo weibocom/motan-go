@@ -32,14 +32,15 @@ type HTTPProvider struct {
 	gctx      *motan.Context
 	mixVars   []string
 	// for transparent http proxy
-	fastClient        *fasthttp.HostClient
-	proxyAddr         string
-	proxySchema       string
-	locationMatcher   *mhttp.LocationMatcher
-	maxConnections    int
-	domain            string
-	defaultHTTPMethod string
-	enableRewrite     bool
+	fastClient          *fasthttp.HostClient
+	proxyAddr           string
+	proxySchema         string
+	locationMatcher     *mhttp.LocationMatcher
+	maxConnections      int
+	domain              string
+	defaultHTTPMethod   string
+	enableRewrite       bool
+	enableHttpException bool
 }
 
 const (
@@ -94,6 +95,13 @@ func (h *HTTPProvider) Initialize() {
 		vlog.Errorf("%s should be a bool value, but got: %s", mhttp.EnableRewriteKey, enableRewriteStr)
 	} else {
 		h.enableRewrite = enableRewrite
+	}
+	h.enableHttpException = false
+	enableHttpExceptionStr := h.url.GetParam(mhttp.EnableHttpExceptionKey, "false")
+	if enableHttpException, err := strconv.ParseBool(enableHttpExceptionStr); err != nil {
+		vlog.Errorf("%s should be a bool value, but got: %s", mhttp.EnableHttpExceptionKey, enableHttpExceptionStr)
+	} else {
+		h.enableHttpException = enableHttpException
 	}
 	h.fastClient = &fasthttp.HostClient{
 		Name: "motan",
@@ -286,6 +294,12 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
 		}
+		if h.enableHttpException {
+			if httpRes.StatusCode() >= 400 {
+				fillHttpException(resp, httpRes.StatusCode(), t, httpRes.Body())
+				return resp
+			}
+		}
 		headerBuffer := &bytes.Buffer{}
 		httpRes.Header.Del("Connection")
 		httpRes.Header.WriteTo(headerBuffer)
@@ -340,6 +354,12 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		if err != nil {
 			fillExceptionWithCode(resp, http.StatusServiceUnavailable, t, err)
 			return resp
+		}
+		if h.enableHttpException {
+			if httpRes.StatusCode() >= 400 {
+				fillHttpException(resp, httpRes.StatusCode(), t, httpRes.Body())
+				return resp
+			}
 		}
 		mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
 		resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
@@ -407,7 +427,6 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	defer httpResp.Body.Close()
 	headers := httpResp.Header
 	statusCode := httpResp.StatusCode
-
 	body, err := ioutil.ReadAll(httpResp.Body)
 	l := len(body)
 	if l == 0 {
@@ -419,6 +438,12 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		resp.Exception = &motan.Exception{ErrCode: statusCode,
 			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 		return resp
+	}
+	if h.enableHttpException {
+		if statusCode >= 400 {
+			fillHttpException(resp, statusCode, t, body)
+			return resp
+		}
 	}
 	request.GetAttachments().Range(func(k, v string) bool {
 		resp.SetAttachment(k, v)
@@ -475,6 +500,11 @@ func (h *HTTPProvider) GetPath() string {
 func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err error) {
 	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
 	resp.Exception = &motan.Exception{ErrCode: code, ErrMsg: fmt.Sprintf("%s", err), ErrType: code}
+}
+
+func fillHttpException(resp *motan.MotanResponse, statusCode int, start int64, body []byte) {
+	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
+	resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: string(body), ErrType: motan.BizException}
 }
 
 func fillException(resp *motan.MotanResponse, start int64, err error) {
