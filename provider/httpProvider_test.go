@@ -105,7 +105,7 @@ func TestHTTPProvider_Http_EnableException(t *testing.T) {
 	exception := provider.Call(req).GetException()
 	assert.NotNil(t, exception)
 	assert.Equal(t, exception.ErrCode, 500)
-	assert.Equal(t, exception.ErrType, core.HttpException)
+	assert.Equal(t, exception.ErrType, core.BizException)
 	assert.Equal(t, exception.ErrMsg, "request failed")
 }
 

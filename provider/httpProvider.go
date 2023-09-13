@@ -296,10 +296,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		if h.enableHttpException {
 			if httpRes.StatusCode() >= 400 {
-				httpResponseBody := httpRes.Body()
-				motanResponseBody := make([]byte, len(httpResponseBody))
-				copy(motanResponseBody, httpResponseBody)
-				fillHttpException(resp, httpRes.StatusCode(), t, motanResponseBody)
+				fillHttpException(resp, httpRes.StatusCode(), t, httpRes.Body())
 				return resp
 			}
 		}
@@ -360,10 +357,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 		}
 		if h.enableHttpException {
 			if httpRes.StatusCode() >= 400 {
-				httpResponseBody := httpRes.Body()
-				motanResponseBody := make([]byte, len(httpResponseBody))
-				copy(motanResponseBody, httpResponseBody)
-				fillHttpException(resp, httpRes.StatusCode(), t, motanResponseBody)
+				fillHttpException(resp, httpRes.StatusCode(), t, httpRes.Body())
 				return resp
 			}
 		}
@@ -447,9 +441,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	}
 	if h.enableHttpException {
 		if statusCode >= 400 {
-			motanResponseBody := make([]byte, len(body))
-			copy(motanResponseBody, body)
-			fillHttpException(resp, statusCode, t, motanResponseBody)
+			fillHttpException(resp, statusCode, t, body)
 			return resp
 		}
 	}
@@ -512,7 +504,7 @@ func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err
 
 func fillHttpException(resp *motan.MotanResponse, statusCode int, start int64, body []byte) {
 	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
-	resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: string(body), ErrType: motan.HttpException}
+	resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: string(body), ErrType: motan.BizException}
 }
 
 func fillException(resp *motan.MotanResponse, start int64, err error) {
