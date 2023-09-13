@@ -10,6 +10,8 @@ const (
 	ServiceException
 	// BizException : exception by service implements
 	BizException
+	// HttpException
+	HttpException
 )
 
 // filter type
