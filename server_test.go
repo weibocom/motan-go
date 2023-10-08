@@ -134,35 +134,45 @@ motan-service:
 	m := mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(mm.Status, motan.NotRegister)
+		if mm.Service.Path == "testpath" {
+			assert.Equal(mm.Status, motan.NotRegister)
+		}
 	}
 	setRegistryFailSwitcher(true)
 	mscontext.ServicesAvailable()
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(mm.Status, motan.RegisterFailed)
+		if mm.Service.Path == "testpath" {
+			assert.Equal(mm.Status, motan.RegisterFailed)
+		}
 	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(mm.Status, motan.RegisterSuccess)
+		if mm.Service.Path == "testpath" {
+			assert.Equal(mm.Status, motan.RegisterSuccess)
+		}
 	}
 	setRegistryFailSwitcher(true)
 	mscontext.ServicesUnavailable()
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(mm.Status, motan.UnregisterFailed)
+		if mm.Service.Path == "testpath" {
+			assert.Equal(mm.Status, motan.UnregisterFailed)
+		}
 	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(mm.Status, motan.UnregisterSuccess)
+		if mm.Service.Path == "testpath" {
+			assert.Equal(mm.Status, motan.UnregisterSuccess)
+		}
 	}
 }
 

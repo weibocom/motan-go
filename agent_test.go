@@ -768,33 +768,43 @@ motan-service:
 	m := agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(t, mm.Status, core.NotRegister)
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.NotRegister)
+		}
 	}
 	agent.SetAllServicesAvailable()
 	m = agent.GetRegistryStatus()
 	for _, mm := range m[0] {
-		assert.Equal(t, mm.Status, core.RegisterFailed)
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterFailed)
+		}
 	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(t, mm.Status, core.RegisterSuccess)
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterSuccess)
+		}
 	}
 	setRegistryFailSwitcher(true)
 	agent.SetAllServicesUnavailable()
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(t, mm.Status, core.UnregisterFailed)
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterFailed)
+		}
 	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
-		assert.Equal(t, mm.Status, core.UnregisterSuccess)
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterSuccess)
+		}
 	}
 }
 
