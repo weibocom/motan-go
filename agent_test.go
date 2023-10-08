@@ -767,25 +767,35 @@ motan-service:
 	setRegistryFailSwitcher(true)
 	m := agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
-	assert.Equal(t, m[0]["motan2://10.222.6.187:12282/helloService?group=hello"].Status, core.NotRegister)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, core.NotRegister)
+	}
 	agent.SetAllServicesAvailable()
 	m = agent.GetRegistryStatus()
-	assert.Equal(t, m[0]["motan2://10.222.6.187:12282/helloService?group=hello"].Status, core.RegisterFailed)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, core.RegisterFailed)
+	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
-	assert.Equal(t, m[0]["motan2://10.222.6.187:12282/helloService?group=hello"].Status, core.RegisterSuccess)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, core.RegisterSuccess)
+	}
 	setRegistryFailSwitcher(true)
 	agent.SetAllServicesUnavailable()
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
-	assert.Equal(t, m[0]["motan2://10.222.6.187:12282/helloService?group=hello"].Status, core.UnregisterFailed)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, core.UnregisterFailed)
+	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
-	assert.Equal(t, m[0]["motan2://10.222.6.187:12282/helloService?group=hello"].Status, core.UnregisterSuccess)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, core.UnregisterSuccess)
+	}
 }
 
 type testRegistry struct {

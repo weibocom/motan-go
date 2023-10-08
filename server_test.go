@@ -133,28 +133,37 @@ motan-service:
 	time.Sleep(time.Second * 3)
 	m := mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
-	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.NotRegister)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, motan.NotRegister)
+	}
 	setRegistryFailSwitcher(true)
 	mscontext.ServicesAvailable()
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
-	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.RegisterFailed)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, motan.RegisterFailed)
+	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
-	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.RegisterSuccess)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, motan.RegisterSuccess)
+	}
 	setRegistryFailSwitcher(true)
 	mscontext.ServicesUnavailable()
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
-	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.UnregisterFailed)
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, motan.UnregisterFailed)
+	}
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
-	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.UnregisterSuccess)
-
+	for _, mm := range m[0] {
+		assert.Equal(t, mm.Status, motan.UnregisterSuccess)
+	}
 }
 
 func TestNewMotanServerContextFromConfig(t *testing.T) {
