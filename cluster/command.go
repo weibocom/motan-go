@@ -166,6 +166,13 @@ func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) m
 	return cmdRegistry
 }
 
+func (c *CommandRegistryWrapper) GetRegistryStatus() map[string]*motan.RegistryStatus {
+	if v, ok := c.registry.(motan.RegistryStatusManager); ok {
+		return v.GetRegistryStatus()
+	}
+	return nil
+}
+
 func (c *CommandRegistryWrapper) Register(serverURL *motan.URL) {
 	c.registry.Register(serverURL)
 }

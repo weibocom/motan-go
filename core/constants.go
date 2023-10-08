@@ -72,6 +72,15 @@ const (
 	XForwardedFor           = "X-Forwarded-For"
 )
 
+// registryStatus
+const (
+	RegisterSuccess   = "register-success"
+	RegisterFailed    = "register-failed"
+	UnregisterSuccess = "unregister-success"
+	UnregisterFailed  = "unregister-failed"
+	NotRegister       = "not-register"
+)
+
 // nodeType
 const (
 	NodeTypeService = "service"

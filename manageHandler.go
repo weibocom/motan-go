@@ -66,8 +66,8 @@ func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	case "/status":
 		rw.Write(s.getStatus())
 	default:
-		rw.WriteHeader(s.a.status)
-		rw.Write([]byte(http.StatusText(s.a.status)))
+		rw.WriteHeader(int(s.a.status))
+		rw.Write([]byte(http.StatusText(int(s.a.status))))
 	}
 }
 
@@ -89,7 +89,7 @@ func (s *StatusHandler) getStatus() []byte {
 		}
 	)
 	result := Result{
-		Status:   s.a.status,
+		Status:   int(s.a.status),
 		Services: make([]ServiceStatus, 0, 16),
 	}
 	s.a.serviceExporters.Range(func(k, v interface{}) bool {

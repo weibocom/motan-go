@@ -6,6 +6,7 @@ import (
 	assert2 "github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/registry"
 	"testing"
 	"time"
 )
@@ -91,6 +92,69 @@ motan-server:
 	time.Sleep(time.Second * 1)
 	request = newRequest("helloService", "hello", "Ray")
 	request.Attachment = motan.NewStringMap(motan.DefaultAttachmentSize)
+}
+
+func TestServerRegisterFailBack(t *testing.T) {
+	assert := assert2.New(t)
+	cfgText := `
+motan-server:
+  log_dir: "stdout"
+  application: "app-golang" # server identify.
+
+motan-registry:
+  direct:
+    protocol: direct
+  test:
+    protocol: test-registry
+
+#conf of services
+motan-service:
+  mytest-motan2:
+    path: testpath
+    group: testgroup
+    protocol: motan2
+    registry: test
+    serialization: simple
+    ref : "serviceID"
+    check: true
+    export: "motan2:14564"
+`
+	conf, err := config.NewConfigFromReader(bytes.NewReader([]byte(cfgText)))
+	assert.Nil(err)
+
+	extFactory := GetDefaultExtFactory()
+	extFactory.RegistExtRegistry("test-registry", func(url *motan.URL) motan.Registry {
+		return &testRegistry{url: url}
+	})
+	mscontext := NewMotanServerContextFromConfig(conf)
+	err = mscontext.RegisterService(&HelloService{}, "serviceID")
+	assert.Nil(err)
+	mscontext.Start(extFactory)
+	time.Sleep(time.Second * 3)
+	m := mscontext.GetRegistryStatus()
+	assert.Equal(len(m), 1)
+	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.NotRegister)
+	setRegistryFailSwitcher(true)
+	mscontext.ServicesAvailable()
+	m = mscontext.GetRegistryStatus()
+	assert.Equal(len(m), 1)
+	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.RegisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = mscontext.GetRegistryStatus()
+	assert.Equal(len(m), 1)
+	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.RegisterSuccess)
+	setRegistryFailSwitcher(true)
+	mscontext.ServicesUnavailable()
+	m = mscontext.GetRegistryStatus()
+	assert.Equal(len(m), 1)
+	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.UnregisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = mscontext.GetRegistryStatus()
+	assert.Equal(len(m), 1)
+	assert.Equal(m[0]["motan2://10.222.6.187:14564/testpath?group=testgroup"].Status, motan.UnregisterSuccess)
+
 }
 
 func TestNewMotanServerContextFromConfig(t *testing.T) {
