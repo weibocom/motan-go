@@ -42,7 +42,7 @@ var meshClient *MeshClient
 var agent *Agent
 
 var (
-	testRegistryFailSwitcher = atomic.Bool{}
+	testRegistryFailSwitcher int64 = 0
 )
 
 func Test_unixClientCall1(t *testing.T) {
@@ -900,9 +900,14 @@ func (t *testRegistry) GetRegistryStatus() map[string]*core.RegistryStatus {
 }
 
 func setRegistryFailSwitcher(b bool) {
-	testRegistryFailSwitcher.Store(b)
+	if b {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 1)
+	} else {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 0)
+	}
+
 }
 
 func getRegistryFailSwitcher() bool {
-	return testRegistryFailSwitcher.Load()
+	return atomic.LoadInt64(&testRegistryFailSwitcher) == 1
 }
