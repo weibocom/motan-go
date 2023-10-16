@@ -80,7 +80,7 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 	resCtx := response.GetRPCContext(true)
 	// response code should be same as upstream
 	responseCode := ""
-	metaUpstreamCode := resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
+	metaUpstreamCode, _ := response.GetAttachments().Load(motan.MetaUpstreamCode)
 	if resCtx.Meta != nil {
 		responseCode = resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
 	}
