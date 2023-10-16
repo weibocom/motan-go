@@ -54,6 +54,7 @@ type AccessLogEntity struct {
 	Success       bool   `json:"success"`
 	ResponseCode  string `json:"responseCode"`
 	Exception     string `json:"exception"`
+	UpstreamCode  string `json:"upstream_code"`
 }
 
 type Logger interface {
@@ -386,7 +387,8 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.Int64("totalTime", logObject.TotalTime),
 			zap.Bool("success", logObject.Success),
 			zap.String("responseCode", logObject.ResponseCode),
-			zap.String("exception", logObject.Exception))
+			zap.String("exception", logObject.Exception),
+			zap.String("upstreamCode", logObject.UpstreamCode))
 	} else {
 		var buffer bytes.Buffer
 		buffer.WriteString(logObject.FilterName)
@@ -416,6 +418,8 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString(logObject.ResponseCode)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Exception)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.UpstreamCode)
 		d.accessLogger.Info(buffer.String())
 	}
 }
