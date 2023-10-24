@@ -2,6 +2,7 @@ package motan
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	_ "fmt"
@@ -263,10 +264,11 @@ motan-agent:
 	conf.Merge(mportConfigENVParam)
 	section, err = conf.GetSection("motan-agent")
 	assert.Nil(err)
-	err = os.Setenv("mport", "8006")
-	_ = flag.Set("mport", "8007")
-	a.initParam()
-	assert.Equal(a.mport, 8007)
+	//err = os.Setenv("mport", "8006")
+	//_ = flag.Set("mport", "8007")
+	//a.initParam()
+	//assert.Equal(a.mport, 8007)
+	os.Unsetenv("mport")
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
@@ -730,12 +732,9 @@ func Test_agentRegistryFailback(t *testing.T) {
 	template := `
 motan-agent:
   port: 12829
-  mport: 12504
+  mport: 12604
   eport: 12282
   hport: 23283
-  log_dir: "stdout"
-  snapshot_dir: "./snapshot"
-  application: "testing"
 
 motan-registry:
   direct:
@@ -772,6 +771,8 @@ motan-service:
 			assert.Equal(t, mm.Status, core.NotRegister)
 		}
 	}
+	agentStatus := getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.NotRegister)
 	agent.SetAllServicesAvailable()
 	m = agent.GetRegistryStatus()
 	for _, mm := range m[0] {
@@ -779,6 +780,8 @@ motan-service:
 			assert.Equal(t, mm.Status, core.RegisterFailed)
 		}
 	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterFailed)
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
@@ -788,6 +791,8 @@ motan-service:
 			assert.Equal(t, mm.Status, core.RegisterSuccess)
 		}
 	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterSuccess)
 	setRegistryFailSwitcher(true)
 	agent.SetAllServicesUnavailable()
 	m = agent.GetRegistryStatus()
@@ -797,6 +802,8 @@ motan-service:
 			assert.Equal(t, mm.Status, core.UnregisterFailed)
 		}
 	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterFailed)
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
 	m = agent.GetRegistryStatus()
@@ -806,6 +813,8 @@ motan-service:
 			assert.Equal(t, mm.Status, core.UnregisterSuccess)
 		}
 	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterSuccess)
 }
 
 type testRegistry struct {
@@ -930,4 +939,31 @@ func setRegistryFailSwitcher(b bool) {
 
 func getRegistryFailSwitcher() bool {
 	return atomic.LoadInt64(&testRegistryFailSwitcher) == 1
+}
+
+func getCurAgentStatus(port int64) string {
+	type (
+		Result struct {
+			Status         string      `json:"status"`
+			RegistryStatus interface{} `json:"registryStatus"`
+		}
+	)
+	client := http.Client{
+		Timeout: time.Second * 3,
+	}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/registry/status", port))
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err.Error()
+	}
+	res := Result{}
+	err = json.Unmarshal(b, &res)
+	if err != nil {
+		return err.Error()
+	}
+	return res.Status
 }

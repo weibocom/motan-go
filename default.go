@@ -41,6 +41,7 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/503"] = status
 		defaultManageHandlers["/version"] = status
 		defaultManageHandlers["/status"] = status
+		defaultManageHandlers["/registry/status"] = status
 
 		info := &InfoHandler{}
 		defaultManageHandlers["/getConfig"] = info

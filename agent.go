@@ -230,15 +230,13 @@ func (a *Agent) startRegistryFailback() {
 			if vv, ok := v.(motan.RegistryStatusManager); ok {
 				statusMap := vv.GetRegistryStatus()
 				for _, j := range statusMap {
-					if j.IsCheck {
-						curStatus := atomic.LoadInt64(&a.status)
-						if curStatus == http.StatusOK && j.Status == motan.RegisterFailed {
-							vlog.Infoln(fmt.Sprintf("detect agent register fail, do register again, service: %s", j.Service.GetIdentity()))
-							v.(motan.Registry).Available(j.Service)
-						} else if curStatus == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
-							vlog.Infoln(fmt.Sprintf("detect agent unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
-							v.(motan.Registry).Unavailable(j.Service)
-						}
+					curStatus := atomic.LoadInt64(&a.status)
+					if curStatus == http.StatusOK && j.Status == motan.RegisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect agent register fail, do register again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Available(j.Service)
+					} else if curStatus == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect agent unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Unavailable(j.Service)
 					}
 				}
 			}

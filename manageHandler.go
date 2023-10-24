@@ -17,6 +17,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -65,10 +66,70 @@ func (s *StatusHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte(Version))
 	case "/status":
 		rw.Write(s.getStatus())
+	case "/registry/status":
+		rw.Write(s.getRegistryStatus())
 	default:
 		rw.WriteHeader(int(s.a.status))
 		rw.Write([]byte(http.StatusText(int(s.a.status))))
 	}
+}
+
+func (s *StatusHandler) getRegistryStatus() []byte {
+	type (
+		ResultStatus struct {
+			Group    string `json:"group"`
+			Service  string `json:"service"`
+			Registry string `json:"registry"`
+			Status   string `json:"status"`
+			ErrMsg   string `json:"errMsg"`
+			IsCheck  bool   `json:"isCheck"`
+		}
+		Result struct {
+			Status         string         `json:"status"`
+			RegistryStatus []ResultStatus `json:"registryStatus"`
+		}
+	)
+	statuses := s.a.GetRegistryStatus()
+	var res []ResultStatus
+	curAgentStatus := atomic.LoadInt64(&s.a.status)
+	var resStatus string
+	if curAgentStatus == http.StatusOK {
+		resStatus = motan.RegisterSuccess
+	} else {
+		resStatus = motan.UnregisterSuccess
+	}
+	for _, j := range statuses {
+		for _, k := range j {
+			res = append(res, ResultStatus{
+				Group:    k.Service.Group,
+				Service:  k.Service.Path,
+				Registry: k.Service.GetParam(motan.RegistryKey, ""),
+				Status:   k.Status,
+				ErrMsg:   k.ErrMsg,
+				IsCheck:  k.IsCheck,
+			})
+			if k.IsCheck {
+				if curAgentStatus == http.StatusOK {
+					if k.Status == motan.RegisterFailed {
+						resStatus = k.Status
+					} else if k.Status == motan.NotRegister && resStatus != motan.RegisterFailed {
+						resStatus = k.Status
+					}
+				} else {
+					if k.Status == motan.UnregisterFailed {
+						resStatus = k.Status
+					} else if k.Status == motan.NotRegister && resStatus != motan.UnregisterFailed {
+						resStatus = k.Status
+					}
+				}
+			}
+		}
+	}
+	resByte, _ := json.Marshal(Result{
+		Status:         resStatus,
+		RegistryStatus: res,
+	})
+	return resByte
 }
 
 func (s *StatusHandler) getStatus() []byte {

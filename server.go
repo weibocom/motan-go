@@ -278,14 +278,12 @@ func (m *MSContext) startRegistryFailback() {
 			if vv, ok := v.(motan.RegistryStatusManager); ok {
 				statusMap := vv.GetRegistryStatus()
 				for _, j := range statusMap {
-					if j.IsCheck {
-						if m.status == http.StatusOK && j.Status == motan.RegisterFailed {
-							vlog.Infoln(fmt.Sprintf("detect register fail, do register again, service: %s", j.Service.GetIdentity()))
-							v.(motan.Registry).Available(j.Service)
-						} else if m.status == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
-							vlog.Infoln(fmt.Sprintf("detect unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
-							v.(motan.Registry).Unavailable(j.Service)
-						}
+					if m.status == http.StatusOK && j.Status == motan.RegisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect register fail, do register again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Available(j.Service)
+					} else if m.status == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Unavailable(j.Service)
 					}
 				}
 			}
