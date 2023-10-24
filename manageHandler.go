@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	nppf "net/http/pprof"
 	"os"
 	"runtime"
 	"runtime/pprof"
@@ -284,6 +285,16 @@ func (d *DebugHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			Symbol(rw, req)
 		case "/debug/pprof/trace":
 			Trace(rw, req)
+		case "/debug/pprof/allocs":
+			nppf.Handler("allocs").ServeHTTP(rw, req)
+		case "/debug/pprof/block":
+			nppf.Handler("block").ServeHTTP(rw, req)
+		case "/debug/pprof/goroutine":
+			nppf.Handler("goroutine").ServeHTTP(rw, req)
+		case "/debug/pprof/mutex":
+			nppf.Handler("mutex").ServeHTTP(rw, req)
+		case "/debug/pprof/heap":
+			nppf.Handler("heap").ServeHTTP(rw, req)
 		case "/debug/mesh/trace":
 			MeshTrace(rw, req)
 		case "/debug/stat/system":
