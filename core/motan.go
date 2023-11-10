@@ -197,6 +197,18 @@ type Registry interface {
 	SnapshotService
 }
 
+type RegistryStatusManager interface {
+	GetRegistryStatus() map[string]*RegistryStatus
+}
+
+type RegistryStatus struct {
+	Status   string
+	Service  *URL
+	Registry RegisterService
+	ErrMsg   string
+	IsCheck  bool
+}
+
 // NotifyListener : NotifyListener
 type NotifyListener interface {
 	Identity

@@ -5,16 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"github.com/weibocom/motan-go/config"
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/provider"
+	"github.com/weibocom/motan-go/registry"
+	mserver "github.com/weibocom/motan-go/server"
 	"hash/fnv"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync"
-
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
-	mserver "github.com/weibocom/motan-go/server"
+	"time"
 )
 
 // MSContext is Motan Server Context
@@ -26,9 +28,10 @@ type MSContext struct {
 	portServer   map[string]motan.Server
 	serviceImpls map[string]interface{}
 	registries   map[string]motan.Registry // all registries used for services
-
-	csync  sync.Mutex
-	inited bool
+	registryLock sync.Mutex
+	status       int
+	csync        sync.Mutex
+	inited       bool
 }
 
 const (
@@ -102,6 +105,7 @@ func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	for _, url := range m.context.ServiceURLs {
 		m.export(url)
 	}
+	go m.startRegistryFailback()
 }
 
 func (m *MSContext) hashInt(s string) int {
@@ -238,12 +242,56 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 // ServicesAvailable will enable all service registed in registries
 func (m *MSContext) ServicesAvailable() {
 	// TODO: same as agent
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	m.status = http.StatusOK
 	availableService(m.registries)
 }
 
-// ServicesUnavailable will enable all service registed in registries
+// ServicesUnavailable will enable all service registered in registries
 func (m *MSContext) ServicesUnavailable() {
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	m.status = http.StatusServiceUnavailable
 	unavailableService(m.registries)
+}
+
+func (m *MSContext) GetRegistryStatus() []map[string]*motan.RegistryStatus {
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	var res []map[string]*motan.RegistryStatus
+	for _, v := range m.registries {
+		if vv, ok := v.(motan.RegistryStatusManager); ok {
+			res = append(res, vv.GetRegistryStatus())
+		}
+	}
+	return res
+}
+
+func (m *MSContext) startRegistryFailback() {
+	vlog.Infoln("start MSContext registry failback")
+	ticker := time.NewTicker(registry.DefaultFailbackInterval * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		m.registryLock.Lock()
+		for _, v := range m.registries {
+			if vv, ok := v.(motan.RegistryStatusManager); ok {
+				statusMap := vv.GetRegistryStatus()
+				for _, j := range statusMap {
+					if m.status == http.StatusOK && j.Status == motan.RegisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect register fail, do register again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Available(j.Service)
+					} else if m.status == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Unavailable(j.Service)
+					}
+				}
+			}
+
+		}
+		m.registryLock.Unlock()
+	}
+
 }
 
 func canShareChannel(u1 motan.URL, u2 motan.URL) bool {

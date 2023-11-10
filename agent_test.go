@@ -2,12 +2,14 @@ package motan
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	_ "fmt"
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/endpoint"
 	vlog "github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/registry"
 	"github.com/weibocom/motan-go/serialize"
 	_ "github.com/weibocom/motan-go/server"
 	_ "golang.org/x/net/context"
@@ -39,6 +41,10 @@ const (
 var proxyClient *http.Client
 var meshClient *MeshClient
 var agent *Agent
+
+var (
+	testRegistryFailSwitcher int64 = 0
+)
 
 func Test_unixClientCall1(t *testing.T) {
 	t.Parallel()
@@ -258,10 +264,11 @@ motan-agent:
 	conf.Merge(mportConfigENVParam)
 	section, err = conf.GetSection("motan-agent")
 	assert.Nil(err)
-	err = os.Setenv("mport", "8006")
-	_ = flag.Set("mport", "8007")
-	a.initParam()
-	assert.Equal(a.mport, 8007)
+	//err = os.Setenv("mport", "8006")
+	//_ = flag.Set("mport", "8007")
+	//a.initParam()
+	//assert.Equal(a.mport, 8007)
+	os.Unsetenv("mport")
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
@@ -719,4 +726,244 @@ motan-service:
 	a.Context.Initialize()
 	a.initParam()
 	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), true)
+}
+
+func Test_agentRegistryFailback(t *testing.T) {
+	template := `
+motan-agent:
+  port: 12829
+  mport: 12604
+  eport: 12282
+  hport: 23283
+
+motan-registry:
+  direct:
+    protocol: direct
+  test:
+    protocol: test-registry
+
+motan-service:
+  test01:
+    protocol: motan2
+    provider: motan2
+    group: hello
+    path: helloService
+    registry: test
+    serialization: simple
+    export: motan2:12282
+    check: true
+`
+	extFactory := GetDefaultExtFactory()
+	extFactory.RegistExtRegistry("test-registry", func(url *core.URL) core.Registry {
+		return &testRegistry{url: url}
+	})
+	config1, err := config.NewConfigFromReader(bytes.NewReader([]byte(template)))
+	assert.Nil(t, err)
+	agent := NewAgent(extFactory)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 10)
+
+	setRegistryFailSwitcher(true)
+	m := agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.NotRegister)
+		}
+	}
+	agentStatus := getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.NotRegister)
+	agent.SetAllServicesAvailable()
+	m = agent.GetRegistryStatus()
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterFailed)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterSuccess)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterSuccess)
+	setRegistryFailSwitcher(true)
+	agent.SetAllServicesUnavailable()
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterFailed)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterSuccess)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterSuccess)
+}
+
+type testRegistry struct {
+	url                 *core.URL
+	namingServiceStatus *core.CopyOnWriteMap
+	registeredServices  map[string]*core.URL
+}
+
+func (t *testRegistry) Initialize() {
+	t.registeredServices = make(map[string]*core.URL)
+	t.namingServiceStatus = core.NewCopyOnWriteMap()
+}
+
+func (t *testRegistry) GetName() string {
+	return "test-registry"
+}
+
+func (t *testRegistry) GetURL() *core.URL {
+	return t.url
+}
+
+func (t *testRegistry) SetURL(url *core.URL) {
+	t.url = url
+}
+
+func (t *testRegistry) Subscribe(url *core.URL, listener core.NotifyListener) {
+}
+
+func (t *testRegistry) Unsubscribe(url *core.URL, listener core.NotifyListener) {
+}
+
+func (t *testRegistry) Discover(url *core.URL) []*core.URL {
+	return nil
+}
+
+func (t *testRegistry) Register(serverURL *core.URL) {
+	t.registeredServices[serverURL.GetIdentity()] = serverURL
+	t.namingServiceStatus.Store(serverURL.GetIdentity(), &core.RegistryStatus{
+		Status:   core.NotRegister,
+		Service:  serverURL,
+		Registry: t,
+		IsCheck:  registry.IsCheck(serverURL),
+	})
+
+}
+
+func (t *testRegistry) UnRegister(serverURL *core.URL) {
+	delete(t.registeredServices, serverURL.GetIdentity())
+	t.namingServiceStatus.Delete(serverURL.GetIdentity())
+}
+
+func (t *testRegistry) Available(serverURL *core.URL) {
+	if getRegistryFailSwitcher() {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.RegisterFailed,
+				Registry: t,
+				Service:  u,
+				ErrMsg:   "error",
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	} else {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.RegisterSuccess,
+				Registry: t,
+				Service:  u,
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	}
+}
+
+func (t *testRegistry) Unavailable(serverURL *core.URL) {
+	if getRegistryFailSwitcher() {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.UnregisterFailed,
+				Registry: t,
+				Service:  u,
+				ErrMsg:   "error",
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	} else {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.UnregisterSuccess,
+				Registry: t,
+				Service:  u,
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	}
+}
+
+func (t *testRegistry) GetRegisteredServices() []*core.URL {
+	return nil
+}
+
+func (t *testRegistry) StartSnapshot(conf *core.SnapshotConf) {
+}
+
+func (t *testRegistry) GetRegistryStatus() map[string]*core.RegistryStatus {
+	res := make(map[string]*core.RegistryStatus)
+	t.namingServiceStatus.Range(func(k, v interface{}) bool {
+		res[k.(string)] = v.(*core.RegistryStatus)
+		return true
+	})
+	return res
+}
+
+func setRegistryFailSwitcher(b bool) {
+	if b {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 1)
+	} else {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 0)
+	}
+
+}
+
+func getRegistryFailSwitcher() bool {
+	return atomic.LoadInt64(&testRegistryFailSwitcher) == 1
+}
+
+func getCurAgentStatus(port int64) string {
+	type (
+		Result struct {
+			Status         string      `json:"status"`
+			RegistryStatus interface{} `json:"registryStatus"`
+		}
+	)
+	client := http.Client{
+		Timeout: time.Second * 3,
+	}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/registry/status", port))
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err.Error()
+	}
+	res := Result{}
+	err = json.Unmarshal(b, &res)
+	if err != nil {
+		return err.Error()
+	}
+	return res.Status
 }

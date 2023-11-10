@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 	"unsafe"
@@ -18,9 +19,10 @@ const (
 	DefaultHeartbeatInterval = 10 * 1000 //ms
 	DefaultTimeout           = 3 * 1000  //ms
 	DefaultSnapshotDir       = "./snapshot"
+	DefaultFailbackInterval  = 30 * 1000 //ms
 )
 
-//ext name
+// ext name
 const (
 	Direct = "direct"
 	Local  = "local"
@@ -131,6 +133,18 @@ func IsAgent(url *motan.URL) bool {
 		}
 	}
 	return isAgent
+}
+
+func IsCheck(url *motan.URL) bool {
+	isCheck := false
+	var err error
+	if t, ok := url.Parameters["check"]; ok {
+		isCheck, err = strconv.ParseBool(t)
+		if err != nil {
+			return false
+		}
+	}
+	return isCheck
 }
 
 func GetSubKey(url *motan.URL) string {
