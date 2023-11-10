@@ -68,8 +68,13 @@ const (
 	MixGroups               = "mixGroups"
 	MaxContentLength        = "maxContentLength"
 	UnixSockProtocolFlag    = "unix://"
-	XForwardedForLower      = "x-forwarded-for" // used as motan default proxy key
-	XForwardedFor           = "X-Forwarded-For"
+)
+
+// attachment keys
+const (
+	XForwardedForLower = "x-forwarded-for" // used as motan default proxy key
+	XForwardedFor      = "X-Forwarded-For"
+	ConsistentHashKey  = "consistentHashKey" //string used to calculate consistent hash
 )
 
 // nodeType

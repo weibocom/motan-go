@@ -13,8 +13,9 @@ import (
 
 // ext name
 const (
-	Random     = "random"
-	Roundrobin = "roundrobin"
+	Random            = "random"
+	Roundrobin        = "roundrobin"
+	ConsistentHashKey = "consistentHashKey"
 )
 
 const (
@@ -34,6 +35,9 @@ func RegistDefaultLb(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtLb(Roundrobin, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
 		return &RoundrobinLB{url: url}
+	}))
+	extFactory.RegistExtLb(ConsistentHashKey, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
+		return &ConsistentHashLB{url: url}
 	}))
 }
 
