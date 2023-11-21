@@ -408,9 +408,9 @@ func (s *V2Stream) Send() error {
 	if s.sendTimer == nil {
 		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
 	} else {
-		s.recvTimer.Reset(s.deadline.Sub(time.Now()))
+		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
 	}
-	defer s.recvTimer.Stop()
+	defer s.sendTimer.Stop()
 
 	buf := s.sendMsg.Encode()
 	if s.rc != nil && s.rc.Tc != nil {
