@@ -369,7 +369,7 @@ func (s *Stream) Reset() {
 
 func (s *Stream) Send() (err error) {
 	if s.sendTimer == nil {
-		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
 	} else {
 		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
 	}
