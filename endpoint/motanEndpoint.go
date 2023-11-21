@@ -32,7 +32,10 @@ var (
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
-	errPanic = errors.New("panic error")
+	errPanic     = errors.New("panic error")
+	v2StreamPool = sync.Pool{New: func() interface{} {
+		return new(V2Stream)
+	}}
 )
 
 type MotanEndpoint struct {
@@ -391,17 +394,30 @@ type V2Stream struct {
 	rc          *motan.RPCContext
 	isClose     atomic.Value // bool
 	isHeartBeat bool
+	sendTimer   *time.Timer
+	recvTimer   *time.Timer
+}
+
+func (s *V2Stream) Reset() {
+	s.sendMsg = nil
+	s.rc = nil
+	s.channel = nil
+	v2StreamPool.Put(s)
 }
 
 func (s *V2Stream) Send() error {
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.sendTimer == nil {
+		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.sendTimer.Stop()
 
 	buf := s.sendMsg.Encode()
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: buf.Bytes()}
+	ready := sendReady{data: buf.Bytes(), bytesBuffer: buf}
 	select {
 	case s.channel.sendCh <- ready:
 		if s.rc != nil {
@@ -412,7 +428,7 @@ func (s *V2Stream) Send() error {
 			}
 		}
 		return nil
-	case <-timer.C:
+	case <-s.sendTimer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -424,8 +440,12 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
 		s.Close()
 	}()
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.recvTimer == nil {
+		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.recvTimer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.recvTimer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.recvMsg
@@ -433,7 +453,7 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-timer.C:
+	case <-s.recvTimer.C:
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
 		return nil, ErrChannelShutdown
@@ -451,6 +471,7 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer s.Reset()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
@@ -487,13 +508,15 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &V2Stream{
-		channel:      c,
-		sendMsg:      msg,
-		recvNotifyCh: make(chan struct{}, 1),
-		deadline:     time.Now().Add(1 * time.Second),
-		rc:           rc,
+
+	s := v2StreamPool.Get().(*V2Stream)
+	s.channel = c
+	s.sendMsg = msg
+	if s.recvNotifyCh == nil {
+		s.recvNotifyCh = make(chan struct{}, 1)
 	}
+	s.deadline = time.Now().Add(1 * time.Second)
+	s.rc = rc
 	s.isClose.Store(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
@@ -526,22 +549,27 @@ func (s *V2Stream) Close() {
 }
 
 type sendReady struct {
-	data []byte
+	data        []byte
+	bytesBuffer *motan.BytesBuffer
 }
 
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
 	stream, err := c.NewStream(msg, rc)
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	stream.SetDeadline(deadline)
 	if err := stream.Send(); err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
-	return stream.Recv()
+	resp, err := stream.Recv()
+	stream.Reset()
+	return resp, err
 }
 
 func (c *V2Channel) IsClosed() bool {
@@ -597,6 +625,7 @@ func (c *V2Channel) send() {
 					sent += n
 				}
 			}
+			motan.PutBytesBufferPool(ready.bytesBuffer)
 		case <-c.shutdownCh:
 			return
 		}
