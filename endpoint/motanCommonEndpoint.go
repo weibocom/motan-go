@@ -459,6 +459,10 @@ func (s *Stream) Recv() (motan.Response, error) {
 func (s *Stream) notify(msg interface{}, t time.Time) {
 	defer func() {
 		s.Close()
+		// async call, reuse stream
+		if s.rc != nil && s.rc.AsyncCall {
+			s.Reset()
+		}
 	}()
 	decodeTime := time.Now()
 	var res motan.Response
@@ -506,7 +510,6 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
-			defer s.Reset()
 			result := s.rc.Result
 			if err != nil {
 				result.Error = err
@@ -610,13 +613,16 @@ func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCC
 func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
 	stream, err := c.NewHeartbeatStream(heartbeatVersion)
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	err = stream.Send()
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
-	return stream.Recv()
+	resp, err := stream.Recv()
+	return resp, err
 }
 
 func (c *Channel) IsClosed() bool {

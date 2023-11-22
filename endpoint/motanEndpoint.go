@@ -463,6 +463,9 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 	defer func() {
 		s.Close()
+		if s.rc != nil && s.rc.AsyncCall {
+			s.Reset()
+		}
 	}()
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
@@ -471,7 +474,6 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
-			defer s.Reset()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
