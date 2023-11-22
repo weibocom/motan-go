@@ -402,6 +402,7 @@ func (s *V2Stream) Reset() {
 	s.sendMsg = nil
 	s.rc = nil
 	s.channel = nil
+	v2StreamPool.Put(s)
 }
 
 func (s *V2Stream) Send() error {
@@ -438,8 +439,6 @@ func (s *V2Stream) Send() error {
 func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
 		s.Close()
-		s.Reset()
-		v2StreamPool.Put(s)
 	}()
 	if s.recvTimer == nil {
 		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -464,8 +463,6 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 	defer func() {
 		s.Close()
-		s.Reset()
-		v2StreamPool.Put(s)
 	}()
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
@@ -474,6 +471,7 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer s.Reset()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
@@ -558,16 +556,20 @@ type sendReady struct {
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
 	stream, err := c.NewStream(msg, rc)
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	stream.SetDeadline(deadline)
 	if err := stream.Send(); err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
-	return stream.Recv()
+	resp, err := stream.Recv()
+	stream.Reset()
+	return resp, err
 }
 
 func (c *V2Channel) IsClosed() bool {

@@ -365,6 +365,7 @@ func (s *Stream) Reset() {
 	s.req = nil
 	s.rc = nil
 	s.channel = nil
+	streamPool.Put(s)
 }
 
 func (s *Stream) Send() (err error) {
@@ -434,8 +435,6 @@ func (s *Stream) Send() (err error) {
 func (s *Stream) Recv() (motan.Response, error) {
 	defer func() {
 		s.Close()
-		s.Reset()
-		streamPool.Put(s)
 	}()
 	if s.recvTimer == nil {
 		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -460,8 +459,6 @@ func (s *Stream) Recv() (motan.Response, error) {
 func (s *Stream) notify(msg interface{}, t time.Time) {
 	defer func() {
 		s.Close()
-		s.Reset()
-		streamPool.Put(s)
 	}()
 	decodeTime := time.Now()
 	var res motan.Response
@@ -509,6 +506,7 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer s.Reset()
 			result := s.rc.Result
 			if err != nil {
 				result.Error = err
@@ -592,17 +590,21 @@ func (s *Stream) Close() {
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
 	stream, err := c.NewStream(req, rc)
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	stream.SetDeadline(deadline)
 	err = stream.Send()
 	if err != nil {
+		stream.Reset()
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
-	return stream.Recv()
+	resp, err := stream.Recv()
+	stream.Reset()
+	return resp, err
 }
 
 func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
