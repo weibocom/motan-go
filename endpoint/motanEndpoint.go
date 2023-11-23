@@ -396,13 +396,15 @@ type V2Stream struct {
 	isHeartBeat bool
 	sendTimer   *time.Timer
 	recvTimer   *time.Timer
+	waitClose   sync.WaitGroup
 }
 
 func (s *V2Stream) Reset() {
-	s.sendMsg = nil
-	s.rc = nil
+	s.waitClose.Wait()
 	s.channel = nil
-	v2StreamPool.Put(s)
+	s.sendMsg = nil
+	s.recvMsg = nil
+	s.rc = nil
 }
 
 func (s *V2Stream) Send() error {
@@ -463,9 +465,6 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 	defer func() {
 		s.Close()
-		if s.rc != nil && s.rc.AsyncCall {
-			s.Reset()
-		}
 	}()
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
@@ -511,7 +510,7 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 		return nil, ErrChannelShutdown
 	}
 
-	s := v2StreamPool.Get().(*V2Stream)
+	s := AcquireV2Stream()
 	s.channel = c
 	s.sendMsg = msg
 	if s.recvNotifyCh == nil {
@@ -531,12 +530,15 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 		c.streamLock.Lock()
 		c.streams[msg.Header.RequestID] = s
 		c.streamLock.Unlock()
+		s.isHeartBeat = false
 	}
 	return s, nil
 }
 
 func (s *V2Stream) Close() {
-	if !s.isClose.Load().(bool) {
+	s.waitClose.Add(1)
+	defer s.waitClose.Done()
+	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
@@ -546,7 +548,6 @@ func (s *V2Stream) Close() {
 			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose.Store(true)
 	}
 }
 
@@ -558,19 +559,19 @@ type sendReady struct {
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
 	stream, err := c.NewStream(msg, rc)
 	if err != nil {
-		stream.Reset()
+		ReleaseV2Stream(stream)
 		return nil, err
 	}
 	stream.SetDeadline(deadline)
 	if err := stream.Send(); err != nil {
-		stream.Reset()
+		ReleaseV2Stream(stream)
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
 	resp, err := stream.Recv()
-	stream.Reset()
+	ReleaseV2Stream(stream)
 	return resp, err
 }
 
@@ -627,7 +628,7 @@ func (c *V2Channel) send() {
 					sent += n
 				}
 			}
-			motan.PutBytesBufferPool(ready.bytesBuffer)
+			motan.ReleaseBytesBuffer(ready.bytesBuffer)
 		case <-c.shutdownCh:
 			return
 		}
@@ -829,4 +830,19 @@ func GetDefaultMotanEPAsynInit() bool {
 		return true
 	}
 	return res.(bool)
+}
+
+func AcquireV2Stream() *V2Stream {
+	v := v2StreamPool.Get()
+	if v == nil {
+		return &V2Stream{}
+	}
+	return v.(*V2Stream)
+}
+
+func ReleaseV2Stream(stream *V2Stream) {
+	if stream != nil {
+		stream.Reset()
+		v2StreamPool.Put(stream)
+	}
 }

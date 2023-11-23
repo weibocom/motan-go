@@ -359,13 +359,15 @@ type Stream struct {
 	heartbeatVersion int          // for heartbeat
 	sendTimer        *time.Timer
 	recvTimer        *time.Timer
+	waitClose        sync.WaitGroup
 }
 
 func (s *Stream) Reset() {
-	s.req = nil
-	s.rc = nil
+	s.waitClose.Wait()
 	s.channel = nil
-	streamPool.Put(s)
+	s.req = nil
+	s.res = nil
+	s.rc = nil
 }
 
 func (s *Stream) Send() (err error) {
@@ -459,10 +461,6 @@ func (s *Stream) Recv() (motan.Response, error) {
 func (s *Stream) notify(msg interface{}, t time.Time) {
 	defer func() {
 		s.Close()
-		// async call, reuse stream
-		if s.rc != nil && s.rc.AsyncCall {
-			s.Reset()
-		}
 	}()
 	decodeTime := time.Now()
 	var res motan.Response
@@ -536,9 +534,10 @@ func (c *Channel) NewStream(req motan.Request, rc *motan.RPCContext) (*Stream, e
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := streamPool.Get().(*Stream)
+	s := AcquireStream()
 	s.streamId = GenerateRequestID()
 	s.channel = c
+	s.isHeartbeat = false
 	s.req = req
 	if s.recvNotifyCh == nil {
 		s.recvNotifyCh = make(chan struct{}, 1)
@@ -556,7 +555,7 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := streamPool.Get().(*Stream)
+	s := AcquireStream()
 	s.streamId = GenerateRequestID()
 	s.channel = c
 	s.isHeartbeat = true
@@ -573,7 +572,9 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 }
 
 func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
+	s.waitClose.Add(1)
+	defer s.waitClose.Done()
+	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartbeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.streamId)
@@ -583,7 +584,6 @@ func (s *Stream) Close() {
 			delete(s.channel.streams, s.streamId)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose.Store(true)
 	}
 }
 
@@ -593,35 +593,36 @@ func (s *Stream) Close() {
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
 	stream, err := c.NewStream(req, rc)
 	if err != nil {
-		stream.Reset()
+		ReleaseStream(stream)
 		return nil, err
 	}
 	stream.SetDeadline(deadline)
 	err = stream.Send()
 	if err != nil {
-		stream.Reset()
+		ReleaseStream(stream)
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
 	resp, err := stream.Recv()
-	stream.Reset()
+	ReleaseStream(stream)
 	return resp, err
 }
 
 func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
 	stream, err := c.NewHeartbeatStream(heartbeatVersion)
 	if err != nil {
-		stream.Reset()
+		ReleaseStream(stream)
 		return nil, err
 	}
 	err = stream.Send()
 	if err != nil {
-		stream.Reset()
+		ReleaseStream(stream)
 		return nil, err
 	}
 	resp, err := stream.Recv()
+	ReleaseStream(stream)
 	return resp, err
 }
 
@@ -719,7 +720,7 @@ func (c *Channel) send() {
 				}
 			}
 			if ready.bytesBuffer != nil {
-				motan.PutBytesBufferPool(ready.bytesBuffer)
+				motan.ReleaseBytesBuffer(ready.bytesBuffer)
 			}
 		case <-c.shutdownCh:
 			return
@@ -885,4 +886,19 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 	go channel.send()
 
 	return channel
+}
+
+func AcquireStream() *Stream {
+	v := streamPool.Get()
+	if v == nil {
+		return &Stream{}
+	}
+	return v.(*Stream)
+}
+
+func ReleaseStream(stream *Stream) {
+	if stream != nil {
+		stream.Reset()
+		streamPool.Put(stream)
+	}
 }
