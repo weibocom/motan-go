@@ -248,7 +248,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	res.Header.RequestID = lastRequestID
 	resBuf := res.Encode()
 	// reuse BytesBuffer
-	defer motan.PutBytesBufferPool(resBuf)
+	defer motan.ReleaseBytesBuffer(resBuf)
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}

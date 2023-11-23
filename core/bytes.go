@@ -37,7 +37,7 @@ func NewBytesBuffer(initsize int) *BytesBuffer {
 
 // NewBytesBufferWithOrder create a empty BytesBuffer with initial size and byte order
 func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
-	bb := bytesBufferPool.Get().(*BytesBuffer)
+	bb := AcquireBytesBuffer()
 	if bb.buf == nil {
 		bb.buf = make([]byte, initsize)
 	}
@@ -270,6 +270,7 @@ func (b *BytesBuffer) ReadByte() (byte, error) {
 }
 
 func (b *BytesBuffer) Reset() {
+	b.buf = b.buf[:0]
 	b.rpos = 0
 	b.wpos = 0
 }
@@ -288,7 +289,15 @@ func hitDiscard() bool {
 	return false
 }
 
-func PutBytesBufferPool(b *BytesBuffer) {
+func AcquireBytesBuffer() *BytesBuffer {
+	b := bytesBufferPool.Get()
+	if b == nil {
+		return &BytesBuffer{}
+	}
+	return b.(*BytesBuffer)
+}
+
+func ReleaseBytesBuffer(b *BytesBuffer) {
 	if cap(b.buf) > maxReuseBufSize && hitDiscard() {
 		return
 	}
