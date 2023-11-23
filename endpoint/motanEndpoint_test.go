@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-//TODO more UT
+// TODO more UT
 func TestGetName(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
@@ -269,7 +269,8 @@ func handle(netListen net.Listener) {
 
 func handleConnection(conn net.Conn, timeout int) {
 	buf := bufio.NewReader(conn)
-	msg, _, err := protocol.DecodeWithTime(buf, 10*1024*1024)
+	readSlice := make([]byte, 100)
+	msg, _, err := protocol.DecodeWithTime(buf, &readSlice, 10*1024*1024)
 	if err != nil {
 		time.Sleep(time.Millisecond * 1000)
 		conn.Close()

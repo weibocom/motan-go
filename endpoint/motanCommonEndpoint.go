@@ -601,6 +601,7 @@ func (c *Channel) recv() {
 }
 
 func (c *Channel) recvLoop() error {
+	decodeBuf := make([]byte, motan.DefaultDecodeLength)
 	for {
 		v, err := mpro.CheckMotanVersion(c.bufRead)
 		if err != nil {
@@ -611,7 +612,7 @@ func (c *Channel) recvLoop() error {
 		if v == mpro.Version1 {
 			msg, t, err = mpro.ReadV1Message(c.bufRead, c.config.MaxContentLength)
 		} else if v == mpro.Version2 {
-			msg, t, err = mpro.DecodeWithTime(c.bufRead, c.config.MaxContentLength)
+			msg, t, err = mpro.DecodeWithTime(c.bufRead, &decodeBuf, c.config.MaxContentLength)
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s.", v, c.conn.RemoteAddr().String())
 			err = mpro.ErrVersion

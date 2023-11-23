@@ -380,8 +380,9 @@ type V2Channel struct {
 }
 
 type V2Stream struct {
-	channel *V2Channel
-	sendMsg *mpro.Message
+	channel  *V2Channel
+	sendMsg  *mpro.Message
+	streamId uint64
 	// recv msg
 	recvMsg      *mpro.Message
 	recvNotifyCh chan struct{}
@@ -497,6 +498,7 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 	s.isClose.Store(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
+	s.streamId = msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
 		c.heartbeatLock.Lock()
 		c.heartbeats[msg.Header.RequestID] = s
@@ -514,11 +516,11 @@ func (s *V2Stream) Close() {
 	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
+			delete(s.channel.heartbeats, s.streamId)
 			s.channel.heartbeatLock.Unlock()
 		} else {
 			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.sendMsg.Header.RequestID)
+			delete(s.channel.streams, s.streamId)
 			s.channel.streamLock.Unlock()
 		}
 		s.isClose.Store(true)
@@ -558,8 +560,9 @@ func (c *V2Channel) recv() {
 }
 
 func (c *V2Channel) recvLoop() error {
+	readSlice := make([]byte, motan.DefaultDecodeLength)
 	for {
-		res, t, err := mpro.DecodeWithTime(c.bufRead, c.config.MaxContentLength)
+		res, t, err := mpro.DecodeWithTime(c.bufRead, &readSlice, c.config.MaxContentLength)
 		if err != nil {
 			return err
 		}
