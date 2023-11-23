@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/serialize"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -145,7 +147,11 @@ func TestEncode(t *testing.T) {
 	ebytes := msg.Encode()
 
 	fmt.Println("len:", ebytes.Len())
-	newMsg, err := Decode(bufio.NewReader(ebytes))
+	readSlice := make([]byte, 100)
+	//for i := 0; i < len(readSlice); i++ {
+	//	readSlice[i] = 't'
+	//}
+	newMsg, err := Decode(bufio.NewReader(ebytes), &readSlice)
 	if newMsg == nil {
 		t.Fatalf("encode message fail")
 	}
@@ -164,7 +170,7 @@ func TestEncode(t *testing.T) {
 	msg.Header.SetGzip(true)
 	msg.Body, _ = EncodeGzip([]byte("gzip encode"))
 	b := msg.Encode()
-	newMsg, _ = Decode(bufio.NewReader(b))
+	newMsg, _ = Decode(bufio.NewReader(b), &readSlice)
 	// should not decode gzip
 	if !newMsg.Header.IsGzip() {
 		t.Fatalf("encode message fail")
@@ -177,13 +183,106 @@ func TestEncode(t *testing.T) {
 	assertTrue(string(nb) == "gzip encode", "body", t)
 }
 
+func TestPool(t *testing.T) {
+	h := &Header{}
+	h.SetVersion(Version2)
+	h.SetStatus(6)
+	h.SetOneWay(true)
+	h.SetSerialize(5)
+	h.SetGzip(true)
+	h.SetHeartbeat(true)
+	h.SetProxy(true)
+	h.SetRequest(true)
+	h.Magic = MotanMagic
+	h.RequestID = 2349789
+	meta := core.NewStringMap(0)
+	for mi := 0; mi < 10000; mi++ {
+		meta.Store(strconv.Itoa(mi), strconv.Itoa(mi))
+	}
+	body := []byte("testbodytestbodytestbodytestbodytestbodytestbodytestbodytestbodytestbodytestbodytestbody")
+	msg := &Message{Header: h, Metadata: meta, Body: body}
+	ebytes := msg.Encode()
+
+	fmt.Println("len:", ebytes.Len())
+	readSlice := make([]byte, 100)
+	newMsg, err := Decode(bufio.NewReader(ebytes), &readSlice)
+	if newMsg == nil {
+		t.Fatalf("encode message fail")
+	}
+	assertTrue(newMsg.Header.IsOneWay(), "oneway", t)
+	assertTrue(newMsg.Header.IsGzip(), "gzip", t)
+	assertTrue(newMsg.Header.IsHeartbeat(), "heartbeat", t)
+	assertTrue(newMsg.Header.IsProxy(), "proxy", t)
+	assertTrue(newMsg.Header.isRequest(), "request", t)
+	assertTrue(newMsg.Header.GetVersion() == Version2, "version", t)
+	assertTrue(newMsg.Header.GetSerialize() == 5, "serialize", t)
+	assertTrue(newMsg.Header.GetStatus() == 6, "status", t)
+	assertTrue(newMsg.Metadata.LoadOrEmpty("1") == "1", "meta", t)
+	assertTrue(cap(readSlice) > 200, "readSlice", t)
+	assertTrue(len(newMsg.Body) == len(msg.Body), "body", t)
+	assert.Nil(t, err)
+	PutMessageBackToPool(newMsg)
+	body1 := []byte("testbody")
+	msg1 := &Message{Header: h, Metadata: meta, Body: body1}
+	ebytes1 := msg1.Encode()
+	newMsg, err = Decode(bufio.NewReader(ebytes1), &readSlice)
+	if newMsg == nil {
+		t.Fatalf("encode message fail")
+	}
+	assertTrue(newMsg.Header.IsOneWay(), "oneway", t)
+	assertTrue(newMsg.Header.IsGzip(), "gzip", t)
+	assertTrue(newMsg.Header.IsHeartbeat(), "heartbeat", t)
+	assertTrue(newMsg.Header.IsProxy(), "proxy", t)
+	assertTrue(newMsg.Header.isRequest(), "request", t)
+	assertTrue(newMsg.Header.GetVersion() == Version2, "version", t)
+	assertTrue(newMsg.Header.GetSerialize() == 5, "serialize", t)
+	assertTrue(newMsg.Header.GetStatus() == 6, "status", t)
+	assertTrue(newMsg.Metadata.LoadOrEmpty("1") == "1", "meta", t)
+	assertTrue(cap(readSlice) > 200, "readSlice", t)
+	assertTrue(len(newMsg.Body) == len(msg1.Body), "body", t)
+}
+
 func assertTrue(b bool, msg string, t *testing.T) {
 	if !b {
 		t.Fatalf("test fail, %s not correct.", msg)
 	}
 }
 
-//TODO convert
+func TestConvertToResponse(t *testing.T) {
+	h := &Header{}
+	h.SetVersion(Version2)
+	h.SetStatus(6)
+	h.SetOneWay(true)
+	h.SetSerialize(6)
+	h.SetGzip(true)
+	h.SetHeartbeat(true)
+	h.SetProxy(true)
+	h.SetRequest(true)
+	h.Magic = MotanMagic
+	h.RequestID = 2349789
+	meta := core.NewStringMap(0)
+	meta.Store("k1", "v1")
+	meta.Store(MGroup, "group")
+	meta.Store(MMethod, "method")
+	meta.Store(MPath, "path")
+	body := []byte("testbody")
+	msg := &Message{Header: h, Metadata: meta, Body: body}
+
+	pMap := make(map[string]string)
+	for i := 0; i < 10000; i++ {
+		resp, err := ConvertToResponse(msg, &serialize.SimpleSerialization{})
+		assertTrue(err == nil, "conver to request err", t)
+		assertTrue(resp.GetAttachment(MGroup) == "group", "response group", t)
+		assertTrue(resp.GetAttachment(MMethod) == "method", "response method", t)
+		assertTrue(resp.GetAttachment(MPath) == "path", "response path", t)
+		//assertTrue(resp.GetValue().(string) == "testbody", "response body", t)
+		pMap[fmt.Sprintf("%p", resp)] = "1"
+		core.PutMotanResponseBackPool(resp.(*core.MotanResponse))
+	}
+	assert.True(t, len(pMap) < 10000)
+}
+
+// TODO convert
 func TestConvertToRequest(t *testing.T) {
 	h := &Header{}
 	h.SetVersion(Version2)
@@ -203,12 +302,19 @@ func TestConvertToRequest(t *testing.T) {
 	meta.Store(MPath, "path")
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
-	req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
-	assertTrue(err == nil, "conver to request err", t)
-	assertTrue(req.GetAttachment(MGroup) == "group", "request group", t)
-	assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
-	assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
+	pMap := make(map[string]string)
+	for i := 0; i < 10000; i++ {
+		req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
+		assertTrue(err == nil, "conver to request err", t)
+		assertTrue(req.GetAttachment(MGroup) == "group", "request group", t)
+		assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
+		assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
+		pMap[fmt.Sprintf("%p", req)] = "1"
+		core.PutMotanRequestBackPool(req.(*core.MotanRequest))
+	}
+	assert.True(t, len(pMap) < 10000)
 
+	req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
 	// test request clone
 	cloneReq := req.Clone().(core.Request)
 	assertTrue(err == nil, "conver to request err", t)

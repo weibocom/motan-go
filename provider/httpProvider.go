@@ -512,7 +512,5 @@ func fillException(resp *motan.MotanResponse, start int64, err error) {
 }
 
 func updateUpstreamStatusCode(resp *motan.MotanResponse, statusCode int) {
-	resCtx := resp.GetRPCContext(true)
 	resp.SetAttachment(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
-	resCtx.Meta.Store(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
 }

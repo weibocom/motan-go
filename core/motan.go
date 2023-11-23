@@ -14,7 +14,20 @@ import (
 
 type taskHandler func()
 
-var refreshTaskPool = make(chan taskHandler, 100)
+var (
+	refreshTaskPool = make(chan taskHandler, 100)
+	requestPool     = &sync.Pool{New: func() interface{} {
+		return &MotanRequest{
+			RPCContext: &RPCContext{},
+			Arguments:  []interface{}{},
+		}
+	}}
+	responsePool = &sync.Pool{New: func() interface{} {
+		return &MotanResponse{
+			RPCContext: &RPCContext{},
+		}
+	}}
+)
 
 func init() {
 	go func() {
@@ -28,10 +41,8 @@ func init() {
 }
 
 const (
-	DefaultAttachmentSize     = 16
-	DefaultRPCContextMetaSize = 8
-
-	ProtocolLocal = "local"
+	DefaultAttachmentSize = 16
+	ProtocolLocal         = "local"
 )
 
 var (
@@ -373,8 +384,6 @@ type RPCContext struct {
 	AsyncCall bool
 	Result    *AsyncResult
 	Reply     interface{}
-
-	Meta *StringMap
 	// various time, it's owned by motan request context
 	RequestSendTime     time.Time
 	RequestReceiveTime  time.Time
@@ -389,6 +398,44 @@ type RPCContext struct {
 	// ----  internal vars ----
 	IsMotanV1  bool
 	RemoteAddr string // remote address
+}
+
+func ResetRPCContext(c *RPCContext) {
+	if c != nil {
+		c.ExtFactory = nil
+		c.OriginalMessage = nil
+		c.Oneway = false
+		c.Proxy = false
+		c.GzipSize = 0
+		c.BodySize = 0
+		c.SerializeNum = 0
+		c.Serialized = false
+		c.AsyncCall = false
+		c.Result = nil
+		c.Reply = nil
+		c.FinishHandlers = c.FinishHandlers[:0]
+		c.Tc = nil
+		c.IsMotanV1 = false
+		c.RemoteAddr = ""
+	}
+}
+
+func (c *RPCContext) Reset() {
+	c.ExtFactory = nil
+	c.OriginalMessage = nil
+	c.Oneway = false
+	c.Proxy = false
+	c.GzipSize = 0
+	c.BodySize = 0
+	c.SerializeNum = 0
+	c.Serialized = false
+	c.AsyncCall = false
+	c.Result = nil
+	c.Reply = nil
+	c.FinishHandlers = c.FinishHandlers[:0]
+	c.Tc = nil
+	c.IsMotanV1 = false
+	c.RemoteAddr = ""
 }
 
 func (c *RPCContext) AddFinishHandler(handler FinishHandler) {
@@ -441,6 +488,34 @@ type MotanRequest struct {
 	Attachment  *StringMap
 	RPCContext  *RPCContext
 	mu          sync.Mutex
+}
+
+func GetMotanRequestFromPool() *MotanRequest {
+	return requestPool.Get().(*MotanRequest)
+}
+
+func PutMotanRequestBackPool(req *MotanRequest) {
+	if req != nil {
+		req.Method = ""
+		req.RequestID = 0
+		req.ServiceName = ""
+		req.MethodDesc = ""
+		ResetRPCContext(req.RPCContext)
+		req.Attachment = nil
+		req.Arguments = req.Arguments[:0]
+		requestPool.Put(req)
+	}
+}
+
+// Reset: Reset
+func (m *MotanRequest) Reset() {
+	m.Method = ""
+	m.RequestID = 0
+	m.ServiceName = ""
+	m.MethodDesc = ""
+	m.RPCContext.Reset()
+	m.Attachment = nil
+	m.Arguments = m.Arguments[:0]
 }
 
 // GetAttachment GetAttachment
@@ -500,9 +575,7 @@ func (m *MotanRequest) GetAttachments() *StringMap {
 
 func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
 	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{
-			Meta: NewStringMap(DefaultRPCContextMetaSize),
-		}
+		m.RPCContext = &RPCContext{}
 	}
 	return m.RPCContext
 }
@@ -529,7 +602,6 @@ func (m *MotanRequest) Clone() interface{} {
 			AsyncCall:           m.RPCContext.AsyncCall,
 			Result:              m.RPCContext.Result,
 			Reply:               m.RPCContext.Reply,
-			Meta:                m.RPCContext.Meta,
 			RequestSendTime:     m.RPCContext.RequestSendTime,
 			RequestReceiveTime:  m.RPCContext.RequestReceiveTime,
 			ResponseSendTime:    m.RPCContext.ResponseSendTime,
@@ -571,6 +643,32 @@ type MotanResponse struct {
 	Attachment  *StringMap
 	RPCContext  *RPCContext
 	mu          sync.Mutex
+}
+
+func GetMotanResponseFromPool() *MotanResponse {
+	return responsePool.Get().(*MotanResponse)
+}
+
+func PutMotanResponseBackPool(resp *MotanResponse) {
+	if resp != nil {
+		//resp.Reset()
+		resp.RequestID = 0
+		resp.Value = nil
+		resp.Exception = nil
+		resp.ProcessTime = 0
+		resp.Attachment = nil
+		ResetRPCContext(resp.RPCContext)
+		responsePool.Put(resp)
+	}
+}
+
+func (m *MotanResponse) Reset() {
+	m.RequestID = 0
+	m.Value = nil
+	m.Exception = nil
+	m.ProcessTime = 0
+	m.Attachment = nil
+	m.RPCContext.Reset()
 }
 
 func (m *MotanResponse) GetAttachment(key string) string {
@@ -618,9 +716,7 @@ func (m *MotanResponse) GetAttachments() *StringMap {
 
 func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
 	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{
-			Meta: NewStringMap(DefaultRPCContextMetaSize),
-		}
+		m.RPCContext = &RPCContext{}
 	}
 	return m.RPCContext
 }

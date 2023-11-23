@@ -26,6 +26,15 @@ func (m *StringMap) Store(key, value string) {
 	m.mu.Unlock()
 }
 
+func (m *StringMap) Reset() {
+	//TODO: 这个地方是否应该加锁呢？
+	m.mu.Lock()
+	for k := range m.innerMap {
+		delete(m.innerMap, k)
+	}
+	m.mu.Unlock()
+}
+
 func (m *StringMap) Delete(key string) {
 	m.mu.Lock()
 	delete(m.innerMap, key)
