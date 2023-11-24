@@ -272,6 +272,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	// 回收message
 	mpro.PutMessageBackToPool(msg)
+	mpro.PutMessageBackToPool(res)
 	// 回收request
 	if motanReq, ok := mreq.(*motan.MotanRequest); ok {
 		motan.PutMotanRequestBackPool(motanReq)

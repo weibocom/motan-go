@@ -122,7 +122,7 @@ var (
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
 	}}
-	messagePool = &sync.Pool{New: func() interface{} {
+	messagePool = sync.Pool{New: func() interface{} {
 		return &Message{Metadata: motan.NewStringMap(DefaultMetaSize), Header: &Header{}}
 	}}
 )
@@ -614,7 +614,7 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 			return msg, nil
 		}
 	}
-	req := messagePool.Get().(*Message)
+	req := &Message{}
 	if rc.Serialized { // params already serialized
 		req.Header = BuildHeader(Req, false, rc.SerializeNum, request.GetRequestID(), Normal)
 	} else {
@@ -630,18 +630,15 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 					req.Body = b
 				} else {
 					vlog.Warningf("convert request value fail! serialized value not []byte. request:%+v", request)
-					PutMessageBackToPool(req)
 					return nil, ErrSerializedData
 				}
 			} else {
 				vlog.Warningf("convert request value fail! serialized value size > 1. request:%+v", request)
-				PutMessageBackToPool(req)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.SerializeMulti(request.GetArguments())
 			if err != nil {
-				PutMessageBackToPool(req)
 				return nil, err
 			}
 			req.Body = b
