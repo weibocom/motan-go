@@ -359,11 +359,9 @@ type Stream struct {
 	heartbeatVersion int          // for heartbeat
 	sendTimer        *time.Timer
 	recvTimer        *time.Timer
-	waitClose        sync.WaitGroup
 }
 
 func (s *Stream) Reset() {
-	s.waitClose.Wait()
 	s.channel = nil
 	s.req = nil
 	s.res = nil
@@ -459,9 +457,6 @@ func (s *Stream) Recv() (motan.Response, error) {
 }
 
 func (s *Stream) notify(msg interface{}, t time.Time) {
-	defer func() {
-		s.Close()
-	}()
 	decodeTime := time.Now()
 	var res motan.Response
 	var v2Msg *mpro.Message
@@ -508,6 +503,9 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer func() {
+				s.Close()
+			}()
 			result := s.rc.Result
 			if err != nil {
 				result.Error = err
@@ -572,8 +570,6 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 }
 
 func (s *Stream) Close() {
-	s.waitClose.Add(1)
-	defer s.waitClose.Done()
 	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartbeat {
 			s.channel.heartbeatLock.Lock()
@@ -593,37 +589,38 @@ func (s *Stream) Close() {
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
 	stream, err := c.NewStream(req, rc)
 	if err != nil {
-		ReleaseStream(stream)
 		return nil, err
 	}
+	defer func() {
+		if rc == nil || !rc.AsyncCall {
+			ReleaseStream(stream)
+		}
+	}()
+
 	stream.SetDeadline(deadline)
 	err = stream.Send()
 	if err != nil {
-		ReleaseStream(stream)
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
-	resp, err := stream.Recv()
-	ReleaseStream(stream)
-	return resp, err
+	return stream.Recv()
 }
 
 func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
 	stream, err := c.NewHeartbeatStream(heartbeatVersion)
 	if err != nil {
-		ReleaseStream(stream)
 		return nil, err
 	}
+	defer func() {
+		ReleaseStream(stream)
+	}()
 	err = stream.Send()
 	if err != nil {
-		ReleaseStream(stream)
 		return nil, err
 	}
-	resp, err := stream.Recv()
-	ReleaseStream(stream)
-	return resp, err
+	return stream.Recv()
 }
 
 func (c *Channel) IsClosed() bool {

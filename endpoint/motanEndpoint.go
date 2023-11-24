@@ -397,11 +397,9 @@ type V2Stream struct {
 	isHeartBeat bool
 	sendTimer   *time.Timer
 	recvTimer   *time.Timer
-	waitClose   sync.WaitGroup
 }
 
 func (s *V2Stream) Reset() {
-	s.waitClose.Wait()
 	s.channel = nil
 	s.sendMsg = nil
 	s.recvMsg = nil
@@ -464,9 +462,6 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 }
 
 func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
-	defer func() {
-		s.Close()
-	}()
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
 		if s.rc.Tc != nil {
@@ -474,6 +469,9 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer func() {
+				s.Close()
+			}()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
@@ -538,8 +536,6 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 }
 
 func (s *V2Stream) Close() {
-	s.waitClose.Add(1)
-	defer s.waitClose.Done()
 	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
@@ -561,20 +557,22 @@ type sendReady struct {
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
 	stream, err := c.NewStream(msg, rc)
 	if err != nil {
-		ReleaseV2Stream(stream)
 		return nil, err
 	}
+	defer func() {
+		if rc == nil || !rc.AsyncCall {
+			ReleaseV2Stream(stream)
+		}
+	}()
+
 	stream.SetDeadline(deadline)
 	if err := stream.Send(); err != nil {
-		ReleaseV2Stream(stream)
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
 		return nil, nil
 	}
-	resp, err := stream.Recv()
-	ReleaseV2Stream(stream)
-	return resp, err
+	return stream.Recv()
 }
 
 func (c *V2Channel) IsClosed() bool {
