@@ -732,6 +732,7 @@ type reporter struct {
 func (r *reporter) eventLoop() {
 	for evt := range r.eventBus {
 		r.processEvent(evt)
+		r.evtBuf.Put(evt)
 	}
 }
 

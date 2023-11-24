@@ -4,6 +4,17 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"math/rand"
+	"sync"
+	"time"
+)
+
+var (
+	maxReuseBufSize = 204800
+	discardRatio    = 0.1
+	bytesBufferPool = sync.Pool{New: func() interface{} {
+		return new(BytesBuffer)
+	}}
 )
 
 // BytesBuffer is a variable-sized buffer of bytes with Read and Write methods.
@@ -26,10 +37,16 @@ func NewBytesBuffer(initsize int) *BytesBuffer {
 
 // NewBytesBufferWithOrder create a empty BytesBuffer with initial size and byte order
 func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
-	return &BytesBuffer{buf: make([]byte, initsize),
-		order: order,
-		temp:  make([]byte, 8),
+	bb := AcquireBytesBuffer()
+	if bb.buf == nil {
+		bb.buf = make([]byte, initsize)
 	}
+	if bb.temp == nil {
+		bb.temp = make([]byte, 8)
+	}
+	bb.order = order
+
+	return bb
 }
 
 // CreateBytesBuffer create a BytesBuffer from data bytes
@@ -263,6 +280,7 @@ func (b *BytesBuffer) ReadByte() (byte, error) {
 }
 
 func (b *BytesBuffer) Reset() {
+	b.buf = b.buf[:0]
 	b.rpos = 0
 	b.wpos = 0
 }
@@ -272,3 +290,27 @@ func (b *BytesBuffer) Remain() int { return b.wpos - b.rpos }
 func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
+
+func hitDiscard() bool {
+	r := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(100)
+	if float64(r)/100 < discardRatio {
+		return true
+	}
+	return false
+}
+
+func AcquireBytesBuffer() *BytesBuffer {
+	b := bytesBufferPool.Get()
+	if b == nil {
+		return &BytesBuffer{}
+	}
+	return b.(*BytesBuffer)
+}
+
+func ReleaseBytesBuffer(b *BytesBuffer) {
+	if cap(b.buf) > maxReuseBufSize && hitDiscard() {
+		return
+	}
+	b.Reset()
+	bytesBufferPool.Put(b)
+}
