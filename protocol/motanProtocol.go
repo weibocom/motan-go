@@ -22,7 +22,7 @@ const (
 	DefaultMaxContentLength = 10 * 1024 * 1024
 )
 
-//message type
+// message type
 const (
 	Req = iota
 	Res
@@ -77,7 +77,7 @@ type Message struct {
 	Type     int
 }
 
-//serialize
+// serialize
 const (
 	Hessian = iota
 	GrpcPb
@@ -266,9 +266,9 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 			vlog.Errorf("metadata not correct.k:%s, v:%s", k, v)
 			return true
 		}
-		metabuf.Write([]byte(k))
+		metabuf.WriteString(k)
 		metabuf.WriteByte('\n')
-		metabuf.Write([]byte(v))
+		metabuf.WriteString(v)
 		metabuf.WriteByte('\n')
 		return true
 	})
