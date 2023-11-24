@@ -16,13 +16,13 @@ type taskHandler func()
 
 var (
 	refreshTaskPool = make(chan taskHandler, 100)
-	requestPool     = &sync.Pool{New: func() interface{} {
+	requestPool     = sync.Pool{New: func() interface{} {
 		return &MotanRequest{
 			RPCContext: &RPCContext{},
 			Arguments:  []interface{}{},
 		}
 	}}
-	responsePool = &sync.Pool{New: func() interface{} {
+	responsePool = sync.Pool{New: func() interface{} {
 		return &MotanResponse{
 			RPCContext: &RPCContext{},
 		}
