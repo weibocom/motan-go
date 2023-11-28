@@ -280,6 +280,7 @@ func (b *BytesBuffer) ReadByte() (byte, error) {
 }
 
 func (b *BytesBuffer) Reset() {
+	b.buf = b.buf[:0]
 	b.rpos = 0
 	b.wpos = 0
 }
