@@ -287,9 +287,9 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 			vlog.Errorf("metadata not correct.k:%s, v:%s", k, v)
 			return true
 		}
-		metabuf.Write([]byte(k))
+		metabuf.WriteString(k)
 		metabuf.WriteByte('\n')
-		metabuf.Write([]byte(v))
+		metabuf.WriteString(v)
 		metabuf.WriteByte('\n')
 		return true
 	})

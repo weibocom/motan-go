@@ -95,6 +95,16 @@ func (b *BytesBuffer) WriteByte(c byte) {
 	b.wpos++
 }
 
+// WriteString write a str string append the BytesBuffer, and the wpos will increase len(str)
+func (b *BytesBuffer) WriteString(str string) {
+	l := len(str)
+	if len(b.buf) < b.wpos+l {
+		b.grow(l)
+	}
+	copy(b.buf[b.wpos:], str)
+	b.wpos += l
+}
+
 // Write write a byte array append the BytesBuffer, and the wpos will increase len(bytes)
 func (b *BytesBuffer) Write(bytes []byte) {
 	l := len(bytes)
