@@ -308,9 +308,11 @@ func AcquireBytesBuffer() *BytesBuffer {
 }
 
 func ReleaseBytesBuffer(b *BytesBuffer) {
-	if cap(b.buf) > maxReuseBufSize && hitDiscard() {
-		return
+	if b != nil {
+		if cap(b.buf) > maxReuseBufSize && hitDiscard() {
+			return
+		}
+		b.Reset()
+		bytesBufferPool.Put(b)
 	}
-	b.Reset()
-	bytesBufferPool.Put(b)
 }
