@@ -14,6 +14,12 @@ import (
 	"time"
 )
 
+var (
+	streamPool = sync.Pool{New: func() interface{} {
+		return new(Stream)
+	}}
+)
+
 // MotanCommonEndpoint supports motan v1, v2 protocols
 type MotanCommonEndpoint struct {
 	url                          *motan.URL
@@ -351,11 +357,24 @@ type Stream struct {
 	isClose          atomic.Value // bool
 	isHeartbeat      bool         // for heartbeat
 	heartbeatVersion int          // for heartbeat
+	sendTimer        *time.Timer
+	recvTimer        *time.Timer
+}
+
+func (s *Stream) Reset() {
+	s.channel = nil
+	s.req = nil
+	s.res = nil
+	s.rc = nil
 }
 
 func (s *Stream) Send() (err error) {
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.sendTimer == nil {
+		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.sendTimer.Stop()
 
 	var bytes []byte
 	var msg *mpro.Message
@@ -386,13 +405,15 @@ func (s *Stream) Send() (err error) {
 		}
 	}
 
+	ready := sendReady{}
 	if msg != nil { // encode v2 message
-		bytes = msg.Encode().Bytes()
+		ready.bytesBuffer = msg.Encode()
+		bytes = ready.bytesBuffer.Bytes()
 	}
+	ready.data = bytes
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: bytes}
 	select {
 	case s.channel.sendCh <- ready:
 		if s.rc != nil {
@@ -403,7 +424,7 @@ func (s *Stream) Send() (err error) {
 			}
 		}
 		return nil
-	case <-timer.C:
+	case <-s.sendTimer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -415,8 +436,12 @@ func (s *Stream) Recv() (motan.Response, error) {
 	defer func() {
 		s.Close()
 	}()
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.recvTimer == nil {
+		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.recvTimer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.recvTimer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.res
@@ -424,7 +449,7 @@ func (s *Stream) Recv() (motan.Response, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-timer.C:
+	case <-s.recvTimer.C:
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
 		return nil, ErrChannelShutdown
@@ -432,9 +457,6 @@ func (s *Stream) Recv() (motan.Response, error) {
 }
 
 func (s *Stream) notify(msg interface{}, t time.Time) {
-	defer func() {
-		s.Close()
-	}()
 	decodeTime := time.Now()
 	var res motan.Response
 	var v2Msg *mpro.Message
@@ -481,6 +503,9 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer func() {
+				s.Close()
+			}()
 			result := s.rc.Result
 			if err != nil {
 				result.Error = err
@@ -507,14 +532,16 @@ func (c *Channel) NewStream(req motan.Request, rc *motan.RPCContext) (*Stream, e
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &Stream{
-		streamId:     GenerateRequestID(),
-		channel:      c,
-		req:          req,
-		recvNotifyCh: make(chan struct{}, 1),
-		deadline:     time.Now().Add(defaultRequestTimeout), // default deadline
-		rc:           rc,
+	s := AcquireStream()
+	s.streamId = GenerateRequestID()
+	s.channel = c
+	s.isHeartbeat = false
+	s.req = req
+	if s.recvNotifyCh == nil {
+		s.recvNotifyCh = make(chan struct{}, 1)
 	}
+	s.deadline = time.Now().Add(defaultRequestTimeout)
+	s.rc = rc
 	s.isClose.Store(false)
 	c.streamLock.Lock()
 	c.streams[s.streamId] = s
@@ -526,14 +553,15 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &Stream{
-		streamId:         GenerateRequestID(),
-		channel:          c,
-		isHeartbeat:      true,
-		heartbeatVersion: heartbeatVersion,
-		recvNotifyCh:     make(chan struct{}, 1),
-		deadline:         time.Now().Add(defaultRequestTimeout),
+	s := AcquireStream()
+	s.streamId = GenerateRequestID()
+	s.channel = c
+	s.isHeartbeat = true
+	s.heartbeatVersion = heartbeatVersion
+	if s.recvNotifyCh == nil {
+		s.recvNotifyCh = make(chan struct{}, 1)
 	}
+	s.deadline = time.Now().Add(defaultRequestTimeout)
 	s.isClose.Store(false)
 	c.heartbeatLock.Lock()
 	c.heartbeats[s.streamId] = s
@@ -542,7 +570,7 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 }
 
 func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
+	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartbeat {
 			s.channel.heartbeatLock.Lock()
 			delete(s.channel.heartbeats, s.streamId)
@@ -552,7 +580,6 @@ func (s *Stream) Close() {
 			delete(s.channel.streams, s.streamId)
 			s.channel.streamLock.Unlock()
 		}
-		s.isClose.Store(true)
 	}
 }
 
@@ -564,6 +591,12 @@ func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCC
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if rc == nil || !rc.AsyncCall {
+			ReleaseStream(stream)
+		}
+	}()
+
 	stream.SetDeadline(deadline)
 	err = stream.Send()
 	if err != nil {
@@ -580,6 +613,9 @@ func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		ReleaseStream(stream)
+	}()
 	err = stream.Send()
 	if err != nil {
 		return nil, err
@@ -601,6 +637,7 @@ func (c *Channel) recv() {
 }
 
 func (c *Channel) recvLoop() error {
+	decodeBuf := make([]byte, motan.DefaultDecodeLength)
 	for {
 		v, err := mpro.CheckMotanVersion(c.bufRead)
 		if err != nil {
@@ -611,7 +648,7 @@ func (c *Channel) recvLoop() error {
 		if v == mpro.Version1 {
 			msg, t, err = mpro.ReadV1Message(c.bufRead, c.config.MaxContentLength)
 		} else if v == mpro.Version2 {
-			msg, t, err = mpro.DecodeWithTime(c.bufRead, c.config.MaxContentLength)
+			msg, t, err = mpro.DecodeWithTime(c.bufRead, &decodeBuf, c.config.MaxContentLength)
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s.", v, c.conn.RemoteAddr().String())
 			err = mpro.ErrVersion
@@ -679,6 +716,9 @@ func (c *Channel) send() {
 					}
 					sent += n
 				}
+			}
+			if ready.bytesBuffer != nil {
+				motan.ReleaseBytesBuffer(ready.bytesBuffer)
 			}
 		case <-c.shutdownCh:
 			return
@@ -844,4 +884,19 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 	go channel.send()
 
 	return channel
+}
+
+func AcquireStream() *Stream {
+	v := streamPool.Get()
+	if v == nil {
+		return &Stream{}
+	}
+	return v.(*Stream)
+}
+
+func ReleaseStream(stream *Stream) {
+	if stream != nil {
+		stream.Reset()
+		streamPool.Put(stream)
+	}
 }
