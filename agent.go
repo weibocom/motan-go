@@ -815,11 +815,9 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	group := request.GetAttachment(mpro.MGroup)
 	version := request.GetAttachment(mpro.MVersion)
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
-	reqInfo := fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
-		service, group, protocol, version)
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, reqInfo)
+		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, getReqInfo(service, group, protocol, version))
 		return
 	}
 	search := []struct {
@@ -848,7 +846,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 			return
 		}
 	}
-	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, reqInfo)
+	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, getReqInfo(service, group, protocol, version))
 	return
 }
 
@@ -1220,6 +1218,11 @@ func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
 		}
 	}
 	return false
+}
+
+func getReqInfo(service, group, protocol, version string) string {
+	return fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
+		service, group, protocol, version)
 }
 
 func (a *Agent) SubscribeService(url *motan.URL) error {
