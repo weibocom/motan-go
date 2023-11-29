@@ -52,7 +52,11 @@ var (
 		processor: defaultEventProcessor, //sink processor size
 		eventBus:  make(chan *event, eventBufferSize),
 		writers:   make(map[string]StatWriter),
-		evtBuf:    &sync.Pool{New: func() interface{} { return new(event) }},
+		evtBuf: &sync.Pool{New: func() interface{} {
+			return &event{
+				keyBuilder: &strings.Builder{},
+			}
+		}},
 	}
 )
 
@@ -98,17 +102,18 @@ type StatWriter interface {
 }
 
 func GetOrRegisterStatItem(group string, service string) StatItem {
+	k := group + service
 	itemsLock.RLock()
-	item := items[group+service]
+	item := items[k]
 	itemsLock.RUnlock()
 	if item != nil {
 		return item
 	}
 	itemsLock.Lock()
-	item = items[group+service]
+	item = items[k]
 	if item == nil {
 		item = NewStatItem(group, service)
-		items[group+service] = item
+		items[k] = item
 	}
 	itemsLock.Unlock()
 	return item
@@ -187,13 +192,27 @@ func AddGauge(group string, service string, key string, value int64) {
 	sendEvent(eventGauge, group, service, key, value)
 }
 
+func AddCounterWithKeys(group, groupSuffix string, service string, keys []string, keySuffix string, value int64) {
+	sendEventWithKeys(eventCounter, group, groupSuffix, service, keys, keySuffix, value)
+}
+
+func AddHistogramsWithKeys(group, groupSuffix string, service string, keys []string, suffix string, duration int64) {
+	sendEventWithKeys(eventHistograms, group, groupSuffix, service, keys, suffix, duration)
+}
+
 func sendEvent(eventType int32, group string, service string, key string, value int64) {
+	sendEventWithKeys(eventType, group, "", service, []string{key}, "", value)
+}
+
+func sendEventWithKeys(eventType int32, group, groupSuffix string, service string, keys []string, suffix string, value int64) {
 	evt := rp.evtBuf.Get().(*event)
 	evt.event = eventType
-	evt.key = key
+	evt.keys = keys
 	evt.group = group
 	evt.service = service
 	evt.value = value
+	evt.keySuffix = suffix
+	evt.groupSuffix = groupSuffix
 	select {
 	case rp.eventBus <- evt:
 	default:
@@ -239,11 +258,54 @@ func startSampleStatus(application string) {
 }
 
 type event struct {
-	event   int32
-	key     string
-	group   string
-	service string
-	value   int64
+	event       int32
+	keys        []string
+	keySuffix   string
+	group       string
+	groupSuffix string
+	service     string
+	value       int64
+	keyBuilder  *strings.Builder
+	keyIsBuild  bool
+	groupCache  *string
+}
+
+func (s *event) reset() {
+	s.event = 0
+	s.keys = s.keys[:0]
+	s.keySuffix = ""
+	s.group = ""
+	s.service = ""
+	s.value = 0
+	s.keyIsBuild = false
+	s.keyBuilder.Reset()
+	s.groupCache = nil
+	s.groupSuffix = ""
+}
+
+func (s *event) getGroup() *string {
+	if s.groupCache != nil {
+		return s.groupCache
+	}
+	g := Escape(s.group) + s.groupSuffix
+	s.groupCache = &g
+	return s.groupCache
+}
+
+func (s *event) getMetricKey() string {
+	if s.keyIsBuild {
+		return s.keyBuilder.String()
+	}
+	s.keyIsBuild = true
+	l := len(s.keys)
+	for idx, k := range s.keys {
+		s.keyBuilder.WriteString(Escape(k))
+		if idx < l-1 {
+			s.keyBuilder.WriteString(":")
+		}
+	}
+	s.keyBuilder.WriteString(s.keySuffix)
+	return s.keyBuilder.String()
 }
 
 type RegistryHolder struct {
@@ -732,6 +794,8 @@ type reporter struct {
 func (r *reporter) eventLoop() {
 	for evt := range r.eventBus {
 		r.processEvent(evt)
+		// clean the event object before put it back
+		evt.reset()
 		r.evtBuf.Put(evt)
 	}
 }
@@ -747,14 +811,15 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(evt.group, evt.service)
+	item := GetOrRegisterStatItem(*evt.getGroup(), Escape(evt.service))
+	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:
-		item.AddCounter(evt.key, evt.value)
+		item.AddCounter(key, evt.value)
 	case eventHistograms:
-		item.AddHistograms(evt.key, evt.value)
+		item.AddHistograms(key, evt.value)
 	case eventGauge:
-		item.AddGauge(evt.key, evt.value)
+		item.AddGauge(key, evt.value)
 	}
 }
 
