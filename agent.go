@@ -45,6 +45,11 @@ var (
 	setAgentLock              sync.Mutex
 	notFoundProviderCount     int64 = 0
 	defaultInitClusterTimeout int64 = 10000 //ms
+	clusterSlicePool                = sync.Pool{
+		New: func() interface{} {
+			return make([]serviceMapItem, 0, 5)
+		},
+	}
 )
 
 type Agent struct {
@@ -794,21 +799,19 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 	return res
 }
-func (a *agentMessageHandler) matchRule(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string) (foundClusters []serviceMapItem, err error) {
+func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string, match *[]serviceMapItem) error {
 	if cond == "" {
-		err = fmt.Errorf("empty %s is not supported", typ)
-		return
+		return fmt.Errorf("empty %s is not supported", typ)
 	}
 	for _, item := range data {
 		if f(item.url) == cond {
-			foundClusters = append(foundClusters, item)
+			*match = append(*match, item)
 		}
 	}
-	if len(foundClusters) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
+	if len(*match) == 0 {
+		return fmt.Errorf("cluster not found. cluster:%s", key)
 	}
-	return
+	return nil
 }
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
@@ -830,23 +833,31 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		{"protocol", protocol, func(u *motan.URL) string { return u.Protocol }},
 		{"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") }},
 	}
-	foundClusters := serviceItemArrI.([]serviceMapItem)
+	clusters := serviceItemArrI.([]serviceMapItem)
+	matched := clusterSlicePool.Get().([]serviceMapItem)
+	if cap(matched) < len(clusters) {
+		matched = make([]serviceMapItem, 0, len(clusters))
+	}
 	for i, rule := range search {
 		if i == 0 {
 			key = rule.cond
 		} else {
 			key += "_" + rule.cond
 		}
-		foundClusters, err = a.matchRule(rule.tip, rule.cond, key, foundClusters, rule.condFn)
+		err = a.fillMatch(rule.tip, rule.cond, key, clusters, rule.condFn, &matched)
 		if err != nil {
+			putBackClusterSlice(matched)
 			return
 		}
-		if len(foundClusters) == 1 {
-			c = foundClusters[0].cluster
+		if len(matched) == 1 {
+			c = matched[0].cluster
+			putBackClusterSlice(matched)
 			return
 		}
+		matched = matched[:0]
 	}
 	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, getReqInfo(service, group, protocol, version))
+	putBackClusterSlice(matched)
 	return
 }
 
@@ -1253,4 +1264,9 @@ func (a *Agent) UnexportService(url *motan.URL) error {
 		exporter.(motan.Exporter).Unexport()
 	}
 	return nil
+}
+
+func putBackClusterSlice(s []serviceMapItem) {
+	s = s[:0]
+	clusterSlicePool.Put(s)
 }
