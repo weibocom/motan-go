@@ -54,7 +54,7 @@ var (
 		writers:   make(map[string]StatWriter),
 		evtBuf: &sync.Pool{New: func() interface{} {
 			return &event{
-				keyBuilder: &strings.Builder{},
+				keyBuilder: motan.NewBytesBuffer(128),
 			}
 		}},
 	}
@@ -265,7 +265,7 @@ type event struct {
 	groupSuffix string
 	service     string
 	value       int64
-	keyBuilder  *strings.Builder
+	keyBuilder  *motan.BytesBuffer
 	keyIsBuild  bool
 	groupCache  *string
 }
@@ -294,7 +294,7 @@ func (s *event) getGroup() *string {
 
 func (s *event) getMetricKey() string {
 	if s.keyIsBuild {
-		return s.keyBuilder.String()
+		return string(s.keyBuilder.Bytes())
 	}
 	s.keyIsBuild = true
 	l := len(s.keys)
@@ -305,7 +305,7 @@ func (s *event) getMetricKey() string {
 		}
 	}
 	s.keyBuilder.WriteString(s.keySuffix)
-	return s.keyBuilder.String()
+	return string(s.keyBuilder.Bytes())
 }
 
 type RegistryHolder struct {
