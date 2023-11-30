@@ -91,21 +91,23 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 			responseCode = "200"
 		}
 	}
-	vlog.AccessLog(&vlog.AccessLogEntity{
-		FilterName:    filterName,
-		Role:          role,
-		RequestID:     response.GetRequestID(),
-		Service:       request.GetServiceName(),
-		Method:        request.GetMethod(),
-		RemoteAddress: address,
-		Desc:          request.GetMethodDesc(),
-		ReqSize:       reqCtx.BodySize,
-		ResSize:       resCtx.BodySize,
-		BizTime:       response.GetProcessTime(), //ms
-		TotalTime:     totalTime,                 //ms
-		ResponseCode:  responseCode,
-		Success:       exception == nil,
-		Exception:     string(exceptionData),
-		UpstreamCode:  metaUpstreamCode,
-	})
+
+	logEntity := vlog.AcquireAccessLogEntity()
+	logEntity.FilterName = filterName
+	logEntity.Role = role
+	logEntity.RequestID = response.GetRequestID()
+	logEntity.Service = request.GetServiceName()
+	logEntity.Method = request.GetMethod()
+	logEntity.RemoteAddress = address
+	logEntity.Desc = request.GetMethodDesc()
+	logEntity.ReqSize = reqCtx.BodySize
+	logEntity.ResSize = resCtx.BodySize
+	logEntity.BizTime = response.GetProcessTime() //ms
+	logEntity.TotalTime = totalTime               //ms
+	logEntity.ResponseCode = responseCode
+	logEntity.Success = exception == nil
+	logEntity.Exception = string(exceptionData)
+	logEntity.UpstreamCode = metaUpstreamCode
+
+	vlog.AccessLog(logEntity)
 }
