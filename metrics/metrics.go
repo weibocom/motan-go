@@ -42,6 +42,7 @@ const (
 )
 
 var (
+	metricsKeyBuilderBufferSize = 64
 	// NewStatItem is the factory func for StatItem
 	NewStatItem = NewDefaultStatItem
 	items       = make(map[string]StatItem, 64)
@@ -54,7 +55,7 @@ var (
 		writers:   make(map[string]StatWriter),
 		evtBuf: &sync.Pool{New: func() interface{} {
 			return &event{
-				keyBuilder: motan.NewBytesBuffer(128),
+				keyBuilder: motan.NewBytesBuffer(metricsKeyBuilderBufferSize),
 			}
 		}},
 	}
