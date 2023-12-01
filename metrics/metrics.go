@@ -54,9 +54,7 @@ var (
 		eventBus:  make(chan *event, eventBufferSize),
 		writers:   make(map[string]StatWriter),
 		evtBuf: &sync.Pool{New: func() interface{} {
-			return &event{
-				keyBuilder: motan.NewBytesBuffer(metricsKeyBuilderBufferSize),
-			}
+			return &event{}
 		}},
 	}
 )
@@ -282,6 +280,9 @@ func (s *event) reset() {
 	s.keyBuilder.Reset()
 	s.groupCache = nil
 	s.groupSuffix = ""
+	if s.keyBuilder != nil {
+		s.keyBuilder.Reset()
+	}
 }
 
 func (s *event) getGroup() *string {
@@ -298,6 +299,9 @@ func (s *event) getMetricKey() string {
 		return string(s.keyBuilder.Bytes())
 	}
 	s.keyIsBuild = true
+	if s.keyBuilder == nil {
+		s.keyBuilder = motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
+	}
 	l := len(s.keys)
 	for idx, k := range s.keys {
 		s.keyBuilder.WriteString(Escape(k))
