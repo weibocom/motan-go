@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -392,38 +391,13 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.String("exception", logObject.Exception),
 			zap.String("upstreamCode", logObject.UpstreamCode))
 	} else {
-		requestIdString := strconv.FormatUint(logObject.RequestID, 10)
-		reqSizeString := strconv.Itoa(logObject.ReqSize)
-		resSizeString := strconv.Itoa(logObject.ResSize)
-		bizTimeString := strconv.FormatInt(logObject.BizTime, 10)
-		totalTimeString := strconv.FormatInt(logObject.TotalTime, 10)
-		initSize := 14 + // count "|"
-			len(logObject.FilterName) +
-			len(logObject.Role) +
-			len(requestIdString) +
-			len(logObject.Service) +
-			len(logObject.Method) +
-			len(logObject.Desc) +
-			len(logObject.RemoteAddress) +
-			len(reqSizeString) +
-			len(resSizeString) +
-			len(bizTimeString) +
-			len(totalTimeString) +
-			len(logObject.ResponseCode) +
-			len(logObject.Exception) +
-			len(logObject.UpstreamCode)
-		if logObject.Success {
-			initSize += 4 // logObject.Success len("true")
-		} else {
-			initSize += 5 // logObject.Success len("false")
-		}
-		buffer := newInnerBytesBuffer(initSize)
+		buffer := newInnerBytesBuffer()
 
 		buffer.WriteString(logObject.FilterName)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Role)
 		buffer.WriteString("|")
-		buffer.WriteString(requestIdString)
+		buffer.WriteUint64String(logObject.RequestID)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Service)
 		buffer.WriteString("|")
@@ -433,13 +407,13 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.RemoteAddress)
 		buffer.WriteString("|")
-		buffer.WriteString(reqSizeString)
+		buffer.WriteInt64String(int64(logObject.ReqSize))
 		buffer.WriteString("|")
-		buffer.WriteString(resSizeString)
+		buffer.WriteInt64String(int64(logObject.ResSize))
 		buffer.WriteString("|")
-		buffer.WriteString(bizTimeString)
+		buffer.WriteInt64String(logObject.BizTime)
 		buffer.WriteString("|")
-		buffer.WriteString(totalTimeString)
+		buffer.WriteInt64String(logObject.TotalTime)
 		buffer.WriteString("|")
 		buffer.WriteBoolString(logObject.Success)
 		buffer.WriteString("|")
