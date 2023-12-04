@@ -312,6 +312,7 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	if metasize > 0 {
 		buf.Write(metabuf.Bytes())
 	}
+	motan.ReleaseBytesBuffer(metabuf)
 
 	// encode body
 	buf.WriteUint32(uint32(bodysize))
