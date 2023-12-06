@@ -4,17 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/rand"
-	"sync"
-	"time"
-)
-
-var (
-	maxReuseBufSize = 204800
-	discardRatio    = 0.1
-	bytesBufferPool = sync.Pool{New: func() interface{} {
-		return new(BytesBuffer)
-	}}
 )
 
 // BytesBuffer is a variable-sized buffer of bytes with Read and Write methods.
@@ -37,16 +26,10 @@ func NewBytesBuffer(initsize int) *BytesBuffer {
 
 // NewBytesBufferWithOrder create a empty BytesBuffer with initial size and byte order
 func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
-	bb := AcquireBytesBuffer()
-	if bb.buf == nil {
-		bb.buf = make([]byte, initsize)
+	return &BytesBuffer{buf: make([]byte, initsize),
+		order: order,
+		temp:  make([]byte, 8),
 	}
-	if bb.temp == nil {
-		bb.temp = make([]byte, 8)
-	}
-	bb.order = order
-
-	return bb
 }
 
 // CreateBytesBuffer create a BytesBuffer from data bytes
@@ -93,16 +76,6 @@ func (b *BytesBuffer) WriteByte(c byte) {
 	}
 	b.buf[b.wpos] = c
 	b.wpos++
-}
-
-// WriteString write a str string append the BytesBuffer, and the wpos will increase len(str)
-func (b *BytesBuffer) WriteString(str string) {
-	l := len(str)
-	if len(b.buf) < b.wpos+l {
-		b.grow(l)
-	}
-	copy(b.buf[b.wpos:], str)
-	b.wpos += l
 }
 
 // Write write a byte array append the BytesBuffer, and the wpos will increase len(bytes)
@@ -289,29 +262,3 @@ func (b *BytesBuffer) Remain() int { return b.wpos - b.rpos }
 func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
-
-func hitDiscard() bool {
-	r := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(100)
-	if float64(r)/100 < discardRatio {
-		return true
-	}
-	return false
-}
-
-func AcquireBytesBuffer() *BytesBuffer {
-	b := bytesBufferPool.Get()
-	if b == nil {
-		return &BytesBuffer{}
-	}
-	return b.(*BytesBuffer)
-}
-
-func ReleaseBytesBuffer(b *BytesBuffer) {
-	if b != nil {
-		//if cap(b.buf) > maxReuseBufSize && hitDiscard() {
-		//	return
-		//}
-		b.Reset()
-		bytesBufferPool.Put(b)
-	}
-}

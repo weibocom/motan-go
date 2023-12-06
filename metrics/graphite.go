@@ -102,21 +102,19 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 				if len(pni) < minKeyLength {
 					return
 				}
-				escapedService := snap.GetEscapedService()
-				escapedGroup := snap.GetEscapedGroup()
 				if snap.IsHistogram(k) { //histogram
 					for slaK, slaV := range sla {
 						segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-							pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], slaK, snap.Percentile(k, slaV))
+							pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], slaK, snap.Percentile(k, slaV))
 					}
 					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
-						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], "avg_time", snap.Mean(k))
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
 				} else if snap.IsCounter(k) { //counter
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
-						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], snap.Count(k))
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Count(k))
 				} else { // gauge
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
-						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], snap.Value(k))
+						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Value(k))
 				}
 				if buf.Len() > 0 && buf.Len()+len(segment) > messageMaxLen {
 					messages = append(messages, buf.String())
