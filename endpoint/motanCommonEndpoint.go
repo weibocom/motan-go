@@ -578,7 +578,7 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 
 func (s *Stream) Close() bool {
 	var exist bool
-	if !s.isClose.Swap(true).(bool) {
+	if !s.isClose.Load().(bool) {
 		if s.isHeartbeat {
 			s.channel.heartbeatLock.Lock()
 			if _, exist = s.channel.heartbeats[s.streamId]; exist {
@@ -592,6 +592,7 @@ func (s *Stream) Close() bool {
 			}
 			s.channel.streamLock.Unlock()
 		}
+		s.isClose.Store(true)
 	}
 	return exist
 }

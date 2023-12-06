@@ -542,7 +542,7 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 
 func (s *V2Stream) Close() bool {
 	var exist bool
-	if !s.isClose.Swap(true).(bool) {
+	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
 			if _, exist = s.channel.heartbeats[s.streamId]; exist {
@@ -556,6 +556,7 @@ func (s *V2Stream) Close() bool {
 			}
 			s.channel.streamLock.Unlock()
 		}
+		s.isClose.Store(true)
 	}
 	return exist
 }
