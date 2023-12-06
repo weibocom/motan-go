@@ -273,8 +273,6 @@ type event struct {
 	groupSuffix string
 	service     string
 	value       int64
-	groupCache  *string
-	metricKey   *string
 }
 
 func (s *event) reset() {
@@ -284,28 +282,18 @@ func (s *event) reset() {
 	s.group = ""
 	s.service = ""
 	s.value = 0
-	s.groupCache = nil
 	s.groupSuffix = ""
-	s.metricKey = nil
 }
 
-func (s *event) getGroup() *string {
-	if s.groupCache != nil {
-		return s.groupCache
-	}
+func (s *event) getGroup() string {
 	if s.groupSuffix == "" {
-		s.groupCache = &s.group
+		return s.group
 	} else {
-		g := s.group + s.groupSuffix
-		s.groupCache = &g
+		return s.group + s.groupSuffix
 	}
-	return s.groupCache
 }
 
 func (s *event) getMetricKey() string {
-	if s.metricKey != nil {
-		return *s.metricKey
-	}
 	keyBuilder := motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
 	defer motan.ReleaseBytesBuffer(keyBuilder)
 	l := len(s.keys)
@@ -315,10 +303,10 @@ func (s *event) getMetricKey() string {
 			keyBuilder.WriteString(":")
 		}
 	}
-	keyBuilder.WriteString(s.keySuffix)
-	metricKey := string(keyBuilder.Bytes())
-	s.metricKey = &metricKey
-	return metricKey
+	if s.keySuffix != "" {
+		keyBuilder.WriteString(s.keySuffix)
+	}
+	return string(keyBuilder.Bytes())
 }
 
 type RegistryHolder struct {
@@ -838,7 +826,7 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(*evt.getGroup(), evt.service)
+	item := GetOrRegisterStatItem(evt.getGroup(), evt.service)
 	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:
