@@ -145,9 +145,8 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
-	startTime := time.Now().UnixNano()
 	if rc.AsyncCall {
-		rc.Result.StartTime = startTime
+		rc.Result.StartTime = time.Now().UnixNano()
 	}
 	// get a channel
 	channel, err := m.channels.Get()
