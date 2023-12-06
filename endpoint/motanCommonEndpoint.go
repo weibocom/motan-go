@@ -359,6 +359,7 @@ type Stream struct {
 	heartbeatVersion int          // for heartbeat
 	sendTimer        *time.Timer
 	recvTimer        *time.Timer
+	release          bool // concurrency issues for stream timeout and channel recv msg
 }
 
 func (s *Stream) Reset() {
@@ -434,7 +435,9 @@ func (s *Stream) Send() (err error) {
 // Recv sync recv
 func (s *Stream) Recv() (motan.Response, error) {
 	defer func() {
-		s.Close()
+		if s.Close() {
+			s.release = true
+		}
 	}()
 	if s.recvTimer == nil {
 		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -450,8 +453,10 @@ func (s *Stream) Recv() (motan.Response, error) {
 		}
 		return msg, nil
 	case <-s.recvTimer.C:
+		s.release = false
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
@@ -543,6 +548,7 @@ func (c *Channel) NewStream(req motan.Request, rc *motan.RPCContext) (*Stream, e
 	s.deadline = time.Now().Add(defaultRequestTimeout)
 	s.rc = rc
 	s.isClose.Store(false)
+	s.release = true
 	c.streamLock.Lock()
 	c.streams[s.streamId] = s
 	c.streamLock.Unlock()
@@ -563,24 +569,31 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 	}
 	s.deadline = time.Now().Add(defaultRequestTimeout)
 	s.isClose.Store(false)
+	s.release = true
 	c.heartbeatLock.Lock()
 	c.heartbeats[s.streamId] = s
 	c.heartbeatLock.Unlock()
 	return s, nil
 }
 
-func (s *Stream) Close() {
+func (s *Stream) Close() bool {
+	var exist bool
 	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartbeat {
 			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.streamId)
+			if _, exist = s.channel.heartbeats[s.streamId]; exist {
+				delete(s.channel.heartbeats, s.streamId)
+			}
 			s.channel.heartbeatLock.Unlock()
 		} else {
 			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.streamId)
+			if _, exist = s.channel.heartbeats[s.streamId]; exist {
+				delete(s.channel.streams, s.streamId)
+			}
 			s.channel.streamLock.Unlock()
 		}
 	}
+	return exist
 }
 
 // Call send request to the server.
@@ -684,10 +697,12 @@ func (c *Channel) handleMsg(msg interface{}, t time.Time) {
 	if isHeartbeat {
 		c.heartbeatLock.Lock()
 		stream = c.heartbeats[rid]
+		delete(c.heartbeats, rid)
 		c.heartbeatLock.Unlock()
 	} else {
 		c.streamLock.Lock()
 		stream = c.streams[rid]
+		delete(c.streams, rid)
 		c.streamLock.Unlock()
 	}
 	if stream == nil {
@@ -895,7 +910,7 @@ func AcquireStream() *Stream {
 }
 
 func ReleaseStream(stream *Stream) {
-	if stream != nil {
+	if stream != nil && stream.release {
 		stream.Reset()
 		streamPool.Put(stream)
 	}
