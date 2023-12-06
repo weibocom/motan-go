@@ -22,7 +22,7 @@ const (
 	DefaultMaxContentLength = 10 * 1024 * 1024
 )
 
-// message type
+//message type
 const (
 	Req = iota
 	Res
@@ -60,24 +60,6 @@ type Header struct {
 	RequestID     uint64
 }
 
-func (h *Header) Reset() {
-	h.Magic = 0
-	h.MsgType = 0
-	h.VersionStatus = 0
-	h.Serialize = 0
-	h.RequestID = 0
-}
-
-func ResetHeader(h *Header) {
-	if h != nil {
-		h.Magic = 0
-		h.MsgType = 0
-		h.VersionStatus = 0
-		h.Serialize = 0
-		h.RequestID = 0
-	}
-}
-
 func (h *Header) Clone() *Header {
 	return &Header{
 		Magic:         h.Magic,
@@ -95,7 +77,7 @@ type Message struct {
 	Type     int
 }
 
-// serialize
+//serialize
 const (
 	Hessian = iota
 	GrpcPb
@@ -121,9 +103,6 @@ var (
 	readBufPool      = &sync.Pool{}                         // for gzip read buffer
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
-	}}
-	messagePool = sync.Pool{New: func() interface{} {
-		return &Message{Metadata: motan.NewStringMap(DefaultMetaSize), Header: &Header{}}
 	}}
 )
 
@@ -287,9 +266,9 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 			vlog.Errorf("metadata not correct.k:%s, v:%s", k, v)
 			return true
 		}
-		metabuf.WriteString(k)
+		metabuf.Write([]byte(k))
 		metabuf.WriteByte('\n')
-		metabuf.WriteString(v)
+		metabuf.Write([]byte(v))
 		metabuf.WriteByte('\n')
 		return true
 	})
@@ -312,7 +291,6 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	if metasize > 0 {
 		buf.Write(metabuf.Bytes())
 	}
-	motan.ReleaseBytesBuffer(metabuf)
 
 	// encode body
 	buf.WriteUint32(uint32(bodysize))
@@ -320,13 +298,6 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 		buf.Write(msg.Body)
 	}
 	return buf
-}
-
-func (msg *Message) Reset() {
-	msg.Type = 0
-	msg.Body = msg.Body[:0]
-	msg.Header.Reset()
-	msg.Metadata.Reset()
 }
 
 func (msg *Message) Clone() interface{} {
@@ -355,105 +326,93 @@ func CheckMotanVersion(buf *bufio.Reader) (version int, err error) {
 	return int(b[3] >> 3 & 0x1f), nil
 }
 
-func Decode(buf *bufio.Reader, readSlice *[]byte) (msg *Message, err error) {
-	msg, _, err = DecodeWithTime(buf, readSlice, motan.DefaultMaxContentLength)
+func Decode(buf *bufio.Reader) (msg *Message, err error) {
+	msg, _, err = DecodeWithTime(buf, motan.DefaultMaxContentLength)
 	return msg, err
 }
 
-func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *Message, start time.Time, err error) {
-	readSlice := *rs
+func DecodeWithTime(buf *bufio.Reader, maxContentLength int) (msg *Message, start time.Time, err error) {
+	temp := make([]byte, HeaderLength, HeaderLength)
+
 	// decode header
-	_, err = io.ReadAtLeast(buf, readSlice[:HeaderLength], HeaderLength)
+	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
 	start = time.Now() // record time when starting to read data
 	if err != nil {
 		return nil, start, err
 	}
-	mn := binary.BigEndian.Uint16(readSlice[:2]) // TODO 不再验证
+	mn := binary.BigEndian.Uint16(temp[:2]) // TODO 不再验证
 	if mn != MotanMagic {
 		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
-	msg = messagePool.Get().(*Message)
-	msg.Header.Magic = MotanMagic
-	msg.Header.MsgType = readSlice[2]
-	msg.Header.VersionStatus = readSlice[3]
-	version := msg.Header.GetVersion()
+
+	header := &Header{Magic: MotanMagic}
+	header.MsgType = temp[2]
+	header.VersionStatus = temp[3]
+	version := header.GetVersion()
 	if version != Version2 { // TODO 不再验证
 		vlog.Errorf("unsupported protocol version number: %d", version)
 		return nil, start, ErrVersion
 	}
-	msg.Header.Serialize = readSlice[4]
-	msg.Header.RequestID = binary.BigEndian.Uint64(readSlice[5:HeaderLength])
+	header.Serialize = temp[4]
+	header.RequestID = binary.BigEndian.Uint64(temp[5:])
 
 	// decode meta
-	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
 		return nil, start, err
 	}
-	metasize := int(binary.BigEndian.Uint32(readSlice[:4]))
+	metasize := int(binary.BigEndian.Uint32(temp[:4]))
 	if metasize > maxContentLength {
 		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
-		PutMessageBackToPool(msg)
 		return nil, start, ErrOverSize
 	}
+	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
-		if cap(readSlice) < metasize {
-			readSlice = make([]byte, metasize)
-			*rs = readSlice
-		}
-		err := readBytes(buf, readSlice, metasize)
+		metadata, err := readBytes(buf, metasize)
 		if err != nil {
-			PutMessageBackToPool(msg)
 			return nil, start, err
 		}
 		s, e := 0, 0
 		var k string
 		for i := 0; i <= metasize; i++ {
-			if i == metasize || readSlice[i] == '\n' {
+			if i == metasize || metadata[i] == '\n' {
 				e = i
 				if k == "" {
-					k = string(readSlice[s:e])
+					k = string(metadata[s:e])
 				} else {
-					msg.Metadata.Store(k, string(readSlice[s:e]))
+					metamap.Store(k, string(metadata[s:e]))
 					k = ""
 				}
 				s = i + 1
 			}
 		}
 		if k != "" {
-			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", msg.Header, readSlice)
-			PutMessageBackToPool(msg)
+			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", header, metadata)
 			return nil, start, ErrMetadata
 		}
 	}
 
 	//decode body
-	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
+	_, err = io.ReadAtLeast(buf, temp[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
 		return nil, start, err
 	}
-	bodysize := int(binary.BigEndian.Uint32(readSlice[:4]))
+	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
 	if bodysize > maxContentLength {
 		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
-		PutMessageBackToPool(msg)
 		return nil, start, ErrOverSize
 	}
-
+	var body []byte
 	if bodysize > 0 {
-		if cap(msg.Body) < bodysize {
-			msg.Body = make([]byte, bodysize)
-		}
-		msg.Body = msg.Body[:bodysize]
-		err = readBytes(buf, msg.Body, bodysize)
+		body, err = readBytes(buf, bodysize)
 	} else {
-		msg.Body = make([]byte, 0)
+		body = make([]byte, 0)
 	}
 	if err != nil {
-		PutMessageBackToPool(msg)
 		return nil, start, err
 	}
+	msg = &Message{header, metamap, body, Req}
 	return msg, start, err
 }
 
@@ -466,14 +425,15 @@ func DecodeGzipBody(body []byte) []byte {
 	return ret
 }
 
-func readBytes(buf *bufio.Reader, readSlice []byte, size int) error {
+func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
+	tempbytes := make([]byte, size)
 	var s, n = 0, 0
 	var err error
 	for s < size && err == nil {
-		n, err = buf.Read(readSlice[s:size])
+		n, err = buf.Read(tempbytes[s:])
 		s += n
 	}
-	return err
+	return tempbytes, err
 }
 
 func EncodeGzip(data []byte) ([]byte, error) {
@@ -563,7 +523,7 @@ func DecodeGzip(data []byte) (ret []byte, err error) {
 
 // ConvertToRequest convert motan2 protocol request message  to motan Request
 func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Request, error) {
-	motanRequest := motan.GetMotanRequestFromPool()
+	motanRequest := &motan.MotanRequest{Arguments: make([]interface{}, 0)}
 	motanRequest.RequestID = request.Header.RequestID
 	if idStr, ok := request.Metadata.Load(MRequestID); !ok {
 		if request.Header.IsProxy() {
@@ -589,16 +549,12 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanRequestBackPool(motanRequest)
 			return nil, ErrSerializeNil
 		}
-		if len(motanRequest.Arguments) <= 0 {
-			motanRequest.Arguments = []interface{}{&motan.DeserializableValue{Body: request.Body, Serialization: serialize}}
-		} else {
-			motanRequest.Arguments[0].(*motan.DeserializableValue).Body = request.Body
-			motanRequest.Arguments[0].(*motan.DeserializableValue).Serialization = serialize
-		}
+		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
+		motanRequest.Arguments = []interface{}{dv}
 	}
+
 	return motanRequest, nil
 }
 
@@ -678,7 +634,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 		}
 	}
 
-	res := messagePool.Get().(*Message)
+	res := &Message{}
 	var msgType int
 	if response.GetException() != nil {
 		msgType = Exception
@@ -704,13 +660,11 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = b
 			} else {
 				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
-				PutMessageBackToPool(res)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
-				PutMessageBackToPool(res)
 				return nil, err
 			}
 			res.Body = b
@@ -729,7 +683,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 
 // ConvertToResponse convert protocol response to motan Response
 func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.Response, error) {
-	mres := motan.GetMotanResponseFromPool()
+	mres := &motan.MotanResponse{}
 	rc := mres.GetRPCContext(true)
 	rc.Proxy = response.Header.IsProxy()
 	mres.RequestID = response.Header.RequestID
@@ -745,7 +699,6 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanResponseBackPool(mres)
 			return nil, ErrSerializeNil
 		}
 		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
@@ -757,7 +710,6 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
 			if err != nil {
-				motan.PutMotanResponseBackPool(mres)
 				return nil, err
 			}
 			mres.Exception = exception
@@ -779,15 +731,4 @@ func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
 func ExceptionToJSON(e *motan.Exception) string {
 	errmsg, _ := json.Marshal(e)
 	return string(errmsg)
-}
-
-func PutMessageBackToPool(msg *Message) {
-	if msg != nil {
-		//msg.Reset()
-		msg.Type = 0
-		msg.Body = msg.Body[:0]
-		ResetHeader(msg.Header)
-		msg.Metadata.Reset()
-		messagePool.Put(msg)
-	}
 }

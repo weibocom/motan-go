@@ -41,28 +41,25 @@ func TestMetricsFilter(t *testing.T) {
 		name    string
 		caller  motan.Caller
 		request motan.Request
-		keys    []string
+		key     string
 	}{
-		{name: "proxyClient", caller: ep, request: request, keys: []string{"motan-client-agent", application, testMethod}},
-		{name: "proxyServer", caller: provider, request: request, keys: []string{"motan-server-agent", application, testMethod}},
-		{name: "Client", caller: ep, request: request2, keys: []string{"motan-client", application, testMethod}},
-		{name: "Server", caller: provider, request: request2, keys: []string{"motan-server", application, testMethod}},
-	}
-	var getKeysStr = func(keys []string) string {
-		return metrics.Escape(keys[0]) + ":" + metrics.Escape(keys[1]) + ":" + metrics.Escape(keys[2])
+		{name: "proxyClient", caller: ep, request: request, key: "motan-client-agent:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "proxyServer", caller: provider, request: request, key: "motan-server-agent:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "Client", caller: ep, request: request2, key: "motan-client:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
+		{name: "Server", caller: provider, request: request2, key: "motan-server:" + metrics.Escape(application) + ":" + metrics.Escape(testMethod)},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mf.Filter(test.caller, test.request)
 			time.Sleep(10 * time.Millisecond)
 			// The metrics filter has do escape
-			assert.Equal(t, 1, int(metrics.GetStatItem(testGroup, testService).SnapshotAndClear().Count(getKeysStr(test.keys)+MetricsTotalCountSuffix)), "metric count")
+			assert.Equal(t, 1, int(metrics.GetStatItem(metrics.Escape(testGroup), metrics.Escape(testService)).SnapshotAndClear().Count(test.key+MetricsTotalCountSuffix)), "metric count")
 		})
 	}
 }
 
 func TestAddMetric(t *testing.T) {
-	keys := []string{"motan-client-agent", "testApplication", testMethod}
+	key := "motan-client-agent:testApplication:" + testMethod
 	factory := initFactory()
 	mf := factory.GetFilter(Metrics).(motan.EndPointFilter)
 	mf.(*MetricsFilter).SetContext(&motan.Context{Config: config.NewConfig()})
@@ -70,9 +67,7 @@ func TestAddMetric(t *testing.T) {
 	response2 := &motan.MotanResponse{ProcessTime: 100, Exception: &motan.Exception{ErrType: motan.BizException}}
 	response3 := &motan.MotanResponse{ProcessTime: 100, Exception: &motan.Exception{ErrType: motan.FrameworkException}}
 	response4 := &motan.MotanResponse{ProcessTime: 1000}
-	var getKeysStr = func(keys []string) string {
-		return metrics.Escape(keys[0]) + ":" + metrics.Escape(keys[1]) + ":" + metrics.Escape(keys[2])
-	}
+
 	tests := []struct {
 		name     string
 		response motan.Response
@@ -86,11 +81,11 @@ func TestAddMetric(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			addMetricWithKeys(testGroup, "", testService, keys, test.response.GetProcessTime(), test.response)
+			addMetric(testGroup, testService, key, test.response.GetProcessTime(), test.response)
 			time.Sleep(10 * time.Millisecond)
 			snap := metrics.GetStatItem(testGroup, testService).SnapshotAndClear()
 			for _, k := range test.keys {
-				assert.True(t, snap.Count(getKeysStr(keys)+k) > 0, fmt.Sprintf("key '%s'", k))
+				assert.True(t, snap.Count(key+k) > 0, fmt.Sprintf("key '%s'", k))
 			}
 		})
 	}

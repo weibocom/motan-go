@@ -151,7 +151,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	} else {
 		ip = getRemoteIP(conn.RemoteAddr().String())
 	}
-	decodeBuf := make([]byte, motan.DefaultDecodeLength)
+
 	for {
 		v, err := mpro.CheckMotanVersion(buf)
 		if err != nil {
@@ -168,7 +168,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			}
 			go m.processV1(v1Msg, t, ip, conn)
 		} else if v == mpro.Version2 {
-			msg, t, err := mpro.DecodeWithTime(buf, &decodeBuf, m.maxContextLength)
+			msg, t, err := mpro.DecodeWithTime(buf, m.maxContextLength)
 			if err != nil {
 				vlog.Warningf("decode motan v2 message fail! con:%s, err:%s.", conn.RemoteAddr().String(), err.Error())
 				break
@@ -219,7 +219,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 				tc.PutReqSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 				req.GetRPCContext(true).Tc = tc
 			}
-
+			callStart := time.Now()
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
@@ -229,7 +229,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 				resCtx := mres.GetRPCContext(true)
 				resCtx.Proxy = m.proxy
 				if mres.GetAttachment(mpro.MProcessTime) == "" {
-					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(start)/1e6), 10))
+					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(callStart)/1e6), 10))
 				}
 				res, err = mpro.ConvertToResMessage(mres, serialization)
 				if tc != nil {
@@ -247,8 +247,6 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	// recover the communication identifier
 	res.Header.RequestID = lastRequestID
 	resBuf := res.Encode()
-	// reuse BytesBuffer
-	defer motan.ReleaseBytesBuffer(resBuf)
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
@@ -269,16 +267,6 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: resSendTime})
-	}
-	// 回收message
-	mpro.PutMessageBackToPool(msg)
-	mpro.PutMessageBackToPool(res)
-	// 回收request
-	if motanReq, ok := mreq.(*motan.MotanRequest); ok {
-		motan.PutMotanRequestBackPool(motanReq)
-	}
-	if motanResp, ok := mres.(*motan.MotanResponse); ok {
-		motan.PutMotanResponseBackPool(motanResp)
 	}
 }
 

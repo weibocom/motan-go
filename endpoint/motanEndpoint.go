@@ -32,10 +32,7 @@ var (
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
-	errPanic     = errors.New("panic error")
-	v2StreamPool = sync.Pool{New: func() interface{} {
-		return new(V2Stream)
-	}}
+	errPanic = errors.New("panic error")
 )
 
 type MotanEndpoint struct {
@@ -145,8 +142,9 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
+	startTime := time.Now().UnixNano()
 	if rc.AsyncCall {
-		rc.Result.StartTime = time.Now().UnixNano()
+		rc.Result.StartTime = startTime
 	}
 	// get a channel
 	channel, err := m.channels.Get()
@@ -382,9 +380,8 @@ type V2Channel struct {
 }
 
 type V2Stream struct {
-	channel  *V2Channel
-	sendMsg  *mpro.Message
-	streamId uint64
+	channel *V2Channel
+	sendMsg *mpro.Message
 	// recv msg
 	recvMsg      *mpro.Message
 	recvNotifyCh chan struct{}
@@ -394,31 +391,17 @@ type V2Stream struct {
 	rc          *motan.RPCContext
 	isClose     atomic.Value // bool
 	isHeartBeat bool
-	sendTimer   *time.Timer
-	recvTimer   *time.Timer
-	release     bool // concurrency issues for stream timeout and channel recv msg
-}
-
-func (s *V2Stream) Reset() {
-	s.channel = nil
-	s.sendMsg = nil
-	s.recvMsg = nil
-	s.rc = nil
 }
 
 func (s *V2Stream) Send() error {
-	if s.sendTimer == nil {
-		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
-	} else {
-		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
-	}
-	defer s.sendTimer.Stop()
+	timer := time.NewTimer(s.deadline.Sub(time.Now()))
+	defer timer.Stop()
 
 	buf := s.sendMsg.Encode()
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: buf.Bytes(), bytesBuffer: buf}
+	ready := sendReady{data: buf.Bytes()}
 	select {
 	case s.channel.sendCh <- ready:
 		if s.rc != nil {
@@ -429,7 +412,7 @@ func (s *V2Stream) Send() error {
 			}
 		}
 		return nil
-	case <-s.sendTimer.C:
+	case <-timer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -439,16 +422,10 @@ func (s *V2Stream) Send() error {
 // Recv sync recv
 func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
-		if s.Close() {
-			s.release = true
-		}
+		s.Close()
 	}()
-	if s.recvTimer == nil {
-		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
-	} else {
-		s.recvTimer.Reset(s.deadline.Sub(time.Now()))
-	}
-	defer s.recvTimer.Stop()
+	timer := time.NewTimer(s.deadline.Sub(time.Now()))
+	defer timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.recvMsg
@@ -456,16 +433,17 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-s.recvTimer.C:
-		s.release = false
+	case <-timer.C:
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
-		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
 
 func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
+	defer func() {
+		s.Close()
+	}()
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
 		if s.rc.Tc != nil {
@@ -473,9 +451,6 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
-			defer func() {
-				s.Close()
-			}()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
@@ -512,19 +487,16 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-
-	s := AcquireV2Stream()
-	s.channel = c
-	s.sendMsg = msg
-	if s.recvNotifyCh == nil {
-		s.recvNotifyCh = make(chan struct{}, 1)
+	s := &V2Stream{
+		channel:      c,
+		sendMsg:      msg,
+		recvNotifyCh: make(chan struct{}, 1),
+		deadline:     time.Now().Add(1 * time.Second),
+		rc:           rc,
 	}
-	s.deadline = time.Now().Add(1 * time.Second)
-	s.rc = rc
 	s.isClose.Store(false)
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
-	s.streamId = msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
 		c.heartbeatLock.Lock()
 		c.heartbeats[msg.Header.RequestID] = s
@@ -534,35 +506,27 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 		c.streamLock.Lock()
 		c.streams[msg.Header.RequestID] = s
 		c.streamLock.Unlock()
-		s.isHeartBeat = false
 	}
-	s.release = true
 	return s, nil
 }
 
-func (s *V2Stream) Close() bool {
-	var exist bool
-	if !s.isClose.Swap(true).(bool) {
+func (s *V2Stream) Close() {
+	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
-			if _, exist = s.channel.heartbeats[s.streamId]; exist {
-				delete(s.channel.heartbeats, s.streamId)
-			}
+			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
 			s.channel.heartbeatLock.Unlock()
 		} else {
 			s.channel.streamLock.Lock()
-			if _, exist = s.channel.heartbeats[s.streamId]; exist {
-				delete(s.channel.streams, s.streamId)
-			}
+			delete(s.channel.streams, s.sendMsg.Header.RequestID)
 			s.channel.streamLock.Unlock()
 		}
+		s.isClose.Store(true)
 	}
-	return exist
 }
 
 type sendReady struct {
-	data        []byte
-	bytesBuffer *motan.BytesBuffer
+	data []byte
 }
 
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
@@ -570,12 +534,6 @@ func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RP
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if rc == nil || !rc.AsyncCall {
-			ReleaseV2Stream(stream)
-		}
-	}()
-
 	stream.SetDeadline(deadline)
 	if err := stream.Send(); err != nil {
 		return nil, err
@@ -600,9 +558,8 @@ func (c *V2Channel) recv() {
 }
 
 func (c *V2Channel) recvLoop() error {
-	readSlice := make([]byte, motan.DefaultDecodeLength)
 	for {
-		res, t, err := mpro.DecodeWithTime(c.bufRead, &readSlice, c.config.MaxContentLength)
+		res, t, err := mpro.DecodeWithTime(c.bufRead, c.config.MaxContentLength)
 		if err != nil {
 			return err
 		}
@@ -640,7 +597,6 @@ func (c *V2Channel) send() {
 					sent += n
 				}
 			}
-			motan.ReleaseBytesBuffer(ready.bytesBuffer)
 		case <-c.shutdownCh:
 			return
 		}
@@ -650,7 +606,6 @@ func (c *V2Channel) send() {
 func (c *V2Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	c.heartbeatLock.Lock()
 	stream := c.heartbeats[msg.Header.RequestID]
-	delete(c.heartbeats, msg.Header.RequestID)
 	c.heartbeatLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -663,7 +618,6 @@ func (c *V2Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 func (c *V2Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	c.streamLock.Lock()
 	stream := c.streams[msg.Header.RequestID]
-	delete(c.streams, msg.Header.RequestID)
 	c.streamLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle recv message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -844,19 +798,4 @@ func GetDefaultMotanEPAsynInit() bool {
 		return true
 	}
 	return res.(bool)
-}
-
-func AcquireV2Stream() *V2Stream {
-	v := v2StreamPool.Get()
-	if v == nil {
-		return &V2Stream{}
-	}
-	return v.(*V2Stream)
-}
-
-func ReleaseV2Stream(stream *V2Stream) {
-	if stream != nil && stream.release {
-		stream.Reset()
-		v2StreamPool.Put(stream)
-	}
 }
