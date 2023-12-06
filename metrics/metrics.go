@@ -57,13 +57,16 @@ var (
 			return &event{}
 		}},
 	}
+	escapeCache sync.Map
 )
 
 type StatItem interface {
 	SetService(service string)
 	GetService() string
+	GetEscapedService() string
 	SetGroup(group string)
 	GetGroup() string
+	GetEscapedGroup() string
 	AddCounter(key string, value int64)
 	AddHistograms(key string, duration int64)
 	AddGauge(key string, value int64)
@@ -169,14 +172,20 @@ func StatItemSize() int {
 	return len(items)
 }
 
+// Escape the string avoid invalid graphite key
 func Escape(s string) string {
-	return strings.Map(func(char rune) rune {
+	if v, ok := escapeCache.Load(s); ok {
+		return v.(string)
+	}
+	v := strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
 			return char
 		} else {
 			return '_'
 		}
 	}, s)
+	escapeCache.Store(s, v)
+	return v
 }
 
 func AddCounter(group string, service string, key string, value int64) {
@@ -264,9 +273,6 @@ type event struct {
 	groupSuffix string
 	service     string
 	value       int64
-	keyBuilder  *motan.BytesBuffer
-	keyIsBuild  bool
-	groupCache  *string
 }
 
 func (s *event) reset() {
@@ -276,41 +282,30 @@ func (s *event) reset() {
 	s.group = ""
 	s.service = ""
 	s.value = 0
-	s.keyIsBuild = false
-	s.keyBuilder.Reset()
-	s.groupCache = nil
 	s.groupSuffix = ""
-	if s.keyBuilder != nil {
-		s.keyBuilder.Reset()
-	}
 }
 
-func (s *event) getGroup() *string {
-	if s.groupCache != nil {
-		return s.groupCache
+func (s *event) getGroup() string {
+	if s.groupSuffix == "" {
+		return s.group
 	}
-	g := Escape(s.group) + s.groupSuffix
-	s.groupCache = &g
-	return s.groupCache
+	return s.group + s.groupSuffix
 }
 
 func (s *event) getMetricKey() string {
-	if s.keyIsBuild {
-		return string(s.keyBuilder.Bytes())
-	}
-	s.keyIsBuild = true
-	if s.keyBuilder == nil {
-		s.keyBuilder = motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
-	}
+	keyBuilder := motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
+	defer motan.ReleaseBytesBuffer(keyBuilder)
 	l := len(s.keys)
 	for idx, k := range s.keys {
-		s.keyBuilder.WriteString(Escape(k))
+		keyBuilder.WriteString(Escape(k))
 		if idx < l-1 {
-			s.keyBuilder.WriteString(":")
+			keyBuilder.WriteString(":")
 		}
 	}
-	s.keyBuilder.WriteString(s.keySuffix)
-	return string(s.keyBuilder.Bytes())
+	if s.keySuffix != "" {
+		keyBuilder.WriteString(s.keySuffix)
+	}
+	return string(keyBuilder.Bytes())
 }
 
 type RegistryHolder struct {
@@ -337,13 +332,19 @@ func (d *DefaultStatItem) SetService(service string) {
 func (d *DefaultStatItem) GetService() string {
 	return d.service
 }
-
+func (d *DefaultStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
 func (d *DefaultStatItem) SetGroup(group string) {
 	d.group = group
 }
 
 func (d *DefaultStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *DefaultStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *DefaultStatItem) AddCounter(key string, value int64) {
@@ -588,12 +589,20 @@ func (d *ReadonlyStatItem) GetService() string {
 	return d.service
 }
 
+func (d *ReadonlyStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
+
 func (d *ReadonlyStatItem) SetGroup(group string) {
 	panic("action not supported")
 }
 
 func (d *ReadonlyStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *ReadonlyStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *ReadonlyStatItem) AddCounter(key string, value int64) {
@@ -816,7 +825,7 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(*evt.getGroup(), Escape(evt.service))
+	item := GetOrRegisterStatItem(evt.getGroup(), evt.service)
 	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:
