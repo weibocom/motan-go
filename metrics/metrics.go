@@ -57,13 +57,16 @@ var (
 			return &event{}
 		}},
 	}
+	escapeCache sync.Map
 )
 
 type StatItem interface {
 	SetService(service string)
 	GetService() string
+	GetEscapedService() string
 	SetGroup(group string)
 	GetGroup() string
+	GetEscapedGroup() string
 	AddCounter(key string, value int64)
 	AddHistograms(key string, duration int64)
 	AddGauge(key string, value int64)
@@ -169,14 +172,20 @@ func StatItemSize() int {
 	return len(items)
 }
 
+// Escape the string avoid invalid graphite key
 func Escape(s string) string {
-	return strings.Map(func(char rune) rune {
+	if v, ok := escapeCache.Load(s); ok {
+		return v.(string)
+	}
+	v := strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
 			return char
 		} else {
 			return '_'
 		}
 	}, s)
+	escapeCache.Store(s, v)
+	return v
 }
 
 func AddCounter(group string, service string, key string, value int64) {
@@ -289,7 +298,7 @@ func (s *event) getGroup() *string {
 	if s.groupCache != nil {
 		return s.groupCache
 	}
-	g := Escape(s.group) + s.groupSuffix
+	g := s.group + s.groupSuffix
 	s.groupCache = &g
 	return s.groupCache
 }
@@ -337,13 +346,19 @@ func (d *DefaultStatItem) SetService(service string) {
 func (d *DefaultStatItem) GetService() string {
 	return d.service
 }
-
+func (d *DefaultStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
 func (d *DefaultStatItem) SetGroup(group string) {
 	d.group = group
 }
 
 func (d *DefaultStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *DefaultStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *DefaultStatItem) AddCounter(key string, value int64) {
@@ -588,12 +603,20 @@ func (d *ReadonlyStatItem) GetService() string {
 	return d.service
 }
 
+func (d *ReadonlyStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
+
 func (d *ReadonlyStatItem) SetGroup(group string) {
 	panic("action not supported")
 }
 
 func (d *ReadonlyStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *ReadonlyStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *ReadonlyStatItem) AddCounter(key string, value int64) {
@@ -816,7 +839,7 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(*evt.getGroup(), Escape(evt.service))
+	item := GetOrRegisterStatItem(*evt.getGroup(), evt.service)
 	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:
