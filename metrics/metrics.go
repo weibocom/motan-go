@@ -273,9 +273,8 @@ type event struct {
 	groupSuffix string
 	service     string
 	value       int64
-	keyBuilder  *motan.BytesBuffer
-	keyIsBuild  bool
 	groupCache  *string
+	metricKey   *string
 }
 
 func (s *event) reset() {
@@ -285,41 +284,41 @@ func (s *event) reset() {
 	s.group = ""
 	s.service = ""
 	s.value = 0
-	s.keyIsBuild = false
-	s.keyBuilder.Reset()
 	s.groupCache = nil
 	s.groupSuffix = ""
-	if s.keyBuilder != nil {
-		s.keyBuilder.Reset()
-	}
+	s.metricKey = nil
 }
 
 func (s *event) getGroup() *string {
 	if s.groupCache != nil {
 		return s.groupCache
 	}
-	g := s.group + s.groupSuffix
-	s.groupCache = &g
+	if s.groupSuffix == "" {
+		s.groupCache = &s.group
+	} else {
+		g := s.group + s.groupSuffix
+		s.groupCache = &g
+	}
 	return s.groupCache
 }
 
 func (s *event) getMetricKey() string {
-	if s.keyIsBuild {
-		return string(s.keyBuilder.Bytes())
+	if s.metricKey != nil {
+		return *s.metricKey
 	}
-	s.keyIsBuild = true
-	if s.keyBuilder == nil {
-		s.keyBuilder = motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
-	}
+	keyBuilder := motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
+	defer motan.ReleaseBytesBuffer(keyBuilder)
 	l := len(s.keys)
 	for idx, k := range s.keys {
-		s.keyBuilder.WriteString(Escape(k))
+		keyBuilder.WriteString(Escape(k))
 		if idx < l-1 {
-			s.keyBuilder.WriteString(":")
+			keyBuilder.WriteString(":")
 		}
 	}
-	s.keyBuilder.WriteString(s.keySuffix)
-	return string(s.keyBuilder.Bytes())
+	keyBuilder.WriteString(s.keySuffix)
+	metricKey := string(keyBuilder.Bytes())
+	s.metricKey = &metricKey
+	return metricKey
 }
 
 type RegistryHolder struct {
