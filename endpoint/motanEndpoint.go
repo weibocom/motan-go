@@ -397,6 +397,7 @@ type V2Stream struct {
 	isHeartBeat bool
 	sendTimer   *time.Timer
 	recvTimer   *time.Timer
+	release     bool // concurrency issues for stream timeout and channel recv msg
 }
 
 func (s *V2Stream) Reset() {
@@ -439,7 +440,9 @@ func (s *V2Stream) Send() error {
 // Recv sync recv
 func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
-		s.Close()
+		if s.Close() {
+			s.release = true
+		}
 	}()
 	if s.recvTimer == nil {
 		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -455,8 +458,10 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 		}
 		return msg, nil
 	case <-s.recvTimer.C:
+		s.release = false
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
@@ -532,21 +537,28 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 		c.streamLock.Unlock()
 		s.isHeartBeat = false
 	}
+	s.release = true
 	return s, nil
 }
 
-func (s *V2Stream) Close() {
+func (s *V2Stream) Close() bool {
+	var exist bool
 	if !s.isClose.Swap(true).(bool) {
 		if s.isHeartBeat {
 			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.streamId)
+			if _, exist = s.channel.heartbeats[s.streamId]; exist {
+				delete(s.channel.heartbeats, s.streamId)
+			}
 			s.channel.heartbeatLock.Unlock()
 		} else {
 			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.streamId)
+			if _, exist = s.channel.heartbeats[s.streamId]; exist {
+				delete(s.channel.streams, s.streamId)
+			}
 			s.channel.streamLock.Unlock()
 		}
 	}
+	return exist
 }
 
 type sendReady struct {
@@ -639,6 +651,7 @@ func (c *V2Channel) send() {
 func (c *V2Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	c.heartbeatLock.Lock()
 	stream := c.heartbeats[msg.Header.RequestID]
+	delete(c.heartbeats, msg.Header.RequestID)
 	c.heartbeatLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -651,6 +664,7 @@ func (c *V2Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 func (c *V2Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	c.streamLock.Lock()
 	stream := c.streams[msg.Header.RequestID]
+	delete(c.streams, msg.Header.RequestID)
 	c.streamLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle recv message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -842,7 +856,7 @@ func AcquireV2Stream() *V2Stream {
 }
 
 func ReleaseV2Stream(stream *V2Stream) {
-	if stream != nil {
+	if stream != nil && stream.release {
 		stream.Reset()
 		v2StreamPool.Put(stream)
 	}
