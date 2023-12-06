@@ -1,11 +1,10 @@
 package filter
 
 import (
-	"time"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
+	"time"
 )
 
 const (
@@ -57,7 +56,13 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 }
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	start := time.Now()
+	var start time.Time
+	switch caller.(type) {
+	case motan.Provider:
+		start = request.GetRPCContext(true).RequestReceiveTime
+	case motan.EndPoint:
+		start = time.Now()
+	}
 	response := m.GetNext().Filter(caller, request)
 
 	proxy := false

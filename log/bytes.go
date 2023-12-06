@@ -1,85 +1,36 @@
 package vlog
 
 import (
-	"errors"
-	"io"
+	"strconv"
 	"sync"
 )
 
 var (
+	initSize             = 256
 	innerBytesBufferPool = sync.Pool{New: func() interface{} {
-		return new(innerBytesBuffer)
+		return &innerBytesBuffer{buf: make([]byte, 0, initSize)}
 	}}
 )
 
-// innerBytesBuffer is a variable-sized buffer of bytes with Read and Write methods.
-// innerBytesBuffer is not thread safe for multi goroutine operation.
+// innerBytesBuffer is a variable-sized buffer of bytes with Write methods.
 type innerBytesBuffer struct {
-	buf  []byte // contents are the bytes buf[0 : woff] in write, are the bytes buf[roff: len(buf)] in read
-	rpos int    // read position
-	wpos int    // write position
+	buf []byte // reuse
 }
 
-var ErrNotEnough = errors.New("innerBytesBuffer: not enough bytes")
-
 // newInnerBytesBuffer create an empty innerBytesBuffer with initial size
-func newInnerBytesBuffer(initSize int) *innerBytesBuffer {
-	bb := acquireBytesBuffer()
-	if bb.buf == nil {
-		bb.buf = make([]byte, initSize)
-	}
-	return bb
+func newInnerBytesBuffer() *innerBytesBuffer {
+	return acquireBytesBuffer()
 }
 
 func createInnerBytesBuffer(data []byte) *innerBytesBuffer {
 	return &innerBytesBuffer{
-		buf:  data,
-		rpos: 0,
-		wpos: len(data),
+		buf: data,
 	}
-}
-
-// SetWPos set the write position of innerBytesBuffer
-func (b *innerBytesBuffer) SetWPos(pos int) {
-	if cap(b.buf) < pos {
-		b.grow(pos - cap(b.buf))
-	}
-	b.wpos = pos
-}
-
-// GetWPos get the write position of innerBytesBuffer
-func (b *innerBytesBuffer) GetWPos() int {
-	return b.wpos
-}
-
-// SetRPos get the read position of innerBytesBuffer
-func (b *innerBytesBuffer) SetRPos(pos int) {
-	b.rpos = pos
-}
-
-// GetRPos get the read position of innerBytesBuffer
-func (b *innerBytesBuffer) GetRPos() int {
-	return b.rpos
 }
 
 // WriteString write a str string append the innerBytesBuffer
 func (b *innerBytesBuffer) WriteString(str string) {
-	l := len(str)
-	if cap(b.buf) < b.wpos+l {
-		b.grow(l)
-	}
-	copy(b.buf[b.wpos:], str)
-	b.wpos += l
-}
-
-// Write write a byte array append the innerBytesBuffer
-func (b *innerBytesBuffer) Write(bytes []byte) {
-	l := len(bytes)
-	if cap(b.buf) < b.wpos+l {
-		b.grow(l)
-	}
-	copy(b.buf[b.wpos:], bytes)
-	b.wpos += l
+	b.buf = append(b.buf, str...)
 }
 
 // WriteBoolString append the string value of v(true/false) to innerBytesBuffer
@@ -91,74 +42,34 @@ func (b *innerBytesBuffer) WriteBoolString(v bool) {
 	}
 }
 
-func (b *innerBytesBuffer) grow(n int) {
-	buf := make([]byte, 2*len(b.buf)+n)
-	copy(buf, b.buf[:b.wpos])
-	b.buf = buf
+// WriteUint64String append the string value of u to innerBytesBuffer
+func (b *innerBytesBuffer) WriteUint64String(u uint64) {
+	b.buf = strconv.AppendUint(b.buf, u, 10)
 }
 
-func (b *innerBytesBuffer) Bytes() []byte { return b.buf[:b.wpos] }
+// WriteInt64String append the string value of i to innerBytesBuffer
+func (b *innerBytesBuffer) WriteInt64String(i int64) {
+	b.buf = strconv.AppendInt(b.buf, i, 10)
+}
+
+func (b *innerBytesBuffer) Bytes() []byte { return b.buf }
 
 func (b *innerBytesBuffer) String() string {
-	return string(b.buf[:b.wpos])
-}
-
-func (b *innerBytesBuffer) Read(p []byte) (n int, err error) {
-	if b.rpos >= len(b.buf) {
-		return 0, io.EOF
-	}
-
-	n = copy(p, b.buf[b.rpos:])
-	b.rpos += n
-	return n, nil
-}
-
-func (b *innerBytesBuffer) ReadFull(p []byte) error {
-	if b.Remain() < len(p) {
-		return ErrNotEnough
-	}
-	n := copy(p, b.buf[b.rpos:])
-	if n < len(p) {
-		return ErrNotEnough
-	}
-	b.rpos += n
-	return nil
-}
-
-func (b *innerBytesBuffer) Next(n int) ([]byte, error) {
-	m := b.Remain()
-	if n > m {
-		return nil, ErrNotEnough
-	}
-	data := b.buf[b.rpos : b.rpos+n]
-	b.rpos += n
-	return data, nil
-}
-
-func (b *innerBytesBuffer) ReadByte() (byte, error) {
-	if b.rpos >= len(b.buf) {
-		return 0, io.EOF
-	}
-	c := b.buf[b.rpos]
-	b.rpos++
-	return c, nil
+	return string(b.buf)
 }
 
 func (b *innerBytesBuffer) Reset() {
-	b.rpos = 0
-	b.wpos = 0
+	b.buf = b.buf[:0]
 }
 
-func (b *innerBytesBuffer) Remain() int { return b.wpos - b.rpos }
-
-func (b *innerBytesBuffer) Len() int { return b.wpos - 0 }
+func (b *innerBytesBuffer) Len() int { return len(b.buf) }
 
 func (b *innerBytesBuffer) Cap() int { return cap(b.buf) }
 
 func acquireBytesBuffer() *innerBytesBuffer {
 	b := innerBytesBufferPool.Get()
 	if b == nil {
-		return &innerBytesBuffer{}
+		return &innerBytesBuffer{buf: make([]byte, 0, 256)}
 	}
 	return b.(*innerBytesBuffer)
 }
