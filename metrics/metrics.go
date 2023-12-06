@@ -288,9 +288,8 @@ func (s *event) reset() {
 func (s *event) getGroup() string {
 	if s.groupSuffix == "" {
 		return s.group
-	} else {
-		return s.group + s.groupSuffix
 	}
+	return s.group + s.groupSuffix
 }
 
 func (s *event) getMetricKey() string {
