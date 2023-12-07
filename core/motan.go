@@ -507,7 +507,7 @@ func PutMotanRequestBackPool(req *MotanRequest) {
 	}
 }
 
-// Reset: Reset
+// Reset reset motan request
 func (m *MotanRequest) Reset() {
 	m.Method = ""
 	m.RequestID = 0

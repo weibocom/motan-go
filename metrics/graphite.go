@@ -32,7 +32,7 @@ type graphite struct {
 	Port    int
 	Name    string
 	localIP string
-	lock    sync.Mutex
+	lock    *sync.Mutex //using pointer avoid shadow copy, cause lock issue
 	conn    net.Conn
 }
 
@@ -50,7 +50,7 @@ func newGraphite(ip, pool string, port int) *graphite {
 		Host: ip,
 		Port: port,
 		Name: pool,
-		lock: sync.Mutex{},
+		lock: &sync.Mutex{},
 		conn: getUDPConn(ip, port),
 	}
 }

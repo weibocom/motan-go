@@ -155,7 +155,7 @@ func (a *Agent) RuntimeDir() string {
 	return a.runtimedir
 }
 
-// get Agent server
+// GetAgentServer get Agent server
 func (a *Agent) GetAgentServer() motan.Server {
 	return a.agentServer
 }
@@ -1154,7 +1154,7 @@ func (a *Agent) startMServer() {
 				continue
 			}
 			a.mport = port
-			managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
+			managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 			break
 		}
 		if managementListener == nil {
@@ -1167,7 +1167,7 @@ func (a *Agent) startMServer() {
 			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
 			return
 		}
-		managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
+		managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 	}
 
 	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())

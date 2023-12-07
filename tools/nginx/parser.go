@@ -29,10 +29,11 @@ const (
 	Error
 )
 
-// location / { # directive location
-//    if ($request_uri ~= '/*') { # directive if
-//    }
-// }
+// Directive location / { # directive location
+//
+//	   if ($request_uri ~= '/*') { # directive if
+//	   }
+//	}
 type Directive struct {
 	name       string
 	args       []string

@@ -54,7 +54,9 @@ func (m *StringMap) LoadOrEmpty(key string) string {
 }
 
 // Range calls f sequentially for each key and value present in the map
-// If f returns false, range stops the iteration
+// If f returns false, range stops the iteration.
+//
+//	Notice: do not delete elements in range function,because of Range loop the inner map directly.
 func (m *StringMap) Range(f func(k, v string) bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

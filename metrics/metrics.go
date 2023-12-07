@@ -180,9 +180,8 @@ func Escape(s string) string {
 	v := strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
 			return char
-		} else {
-			return '_'
 		}
+		return '_'
 	}, s)
 	escapeCache.Store(s, v)
 	return v
@@ -200,10 +199,12 @@ func AddGauge(group string, service string, key string, value int64) {
 	sendEvent(eventGauge, group, service, key, value)
 }
 
+// AddCounterWithKeys arguments: group & groupSuffix & service &  keys elements & keySuffix is text without escaped
 func AddCounterWithKeys(group, groupSuffix string, service string, keys []string, keySuffix string, value int64) {
 	sendEventWithKeys(eventCounter, group, groupSuffix, service, keys, keySuffix, value)
 }
 
+// AddHistogramsWithKeys arguments: group & groupSuffix & service &  keys elements & keySuffix is text without escaped
 func AddHistogramsWithKeys(group, groupSuffix string, service string, keys []string, suffix string, duration int64) {
 	sendEventWithKeys(eventHistograms, group, groupSuffix, service, keys, suffix, duration)
 }
@@ -275,6 +276,8 @@ type event struct {
 	value       int64
 }
 
+// reset used to reset the event object before put it back
+// to event objects pool
 func (s *event) reset() {
 	s.event = 0
 	s.keys = s.keys[:0]
@@ -285,6 +288,7 @@ func (s *event) reset() {
 	s.groupSuffix = ""
 }
 
+// getGroup add the group suffix to group if it is not empty.
 func (s *event) getGroup() string {
 	if s.groupSuffix == "" {
 		return s.group
@@ -292,6 +296,8 @@ func (s *event) getGroup() string {
 	return s.group + s.groupSuffix
 }
 
+// getMetricKey get the metrics key when add metrics data into metrics object,
+// the key split by : used to when send data to graphite
 func (s *event) getMetricKey() string {
 	keyBuilder := motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
 	defer motan.ReleaseBytesBuffer(keyBuilder)
@@ -332,9 +338,12 @@ func (d *DefaultStatItem) SetService(service string) {
 func (d *DefaultStatItem) GetService() string {
 	return d.service
 }
+
+// GetEscapedService return the escaped service used as graphite key
 func (d *DefaultStatItem) GetEscapedService() string {
 	return Escape(d.service)
 }
+
 func (d *DefaultStatItem) SetGroup(group string) {
 	d.group = group
 }
@@ -343,6 +352,7 @@ func (d *DefaultStatItem) GetGroup() string {
 	return d.group
 }
 
+// GetEscapedGroup return the escaped group used as graphite key
 func (d *DefaultStatItem) GetEscapedGroup() string {
 	return Escape(d.group)
 }
@@ -392,8 +402,8 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	return d.lastSnapshot
 }
 
+// SnapshotAndClearV0 Using SnapshotAndClear instead.
 // Deprecated.
-// Using SnapshotAndClear instead.
 // Because of Snapshot(DefaultStatItem) calculates metrics will call locker to do that,
 // cause low performance
 func (d *DefaultStatItem) SnapshotAndClearV0() Snapshot {
@@ -589,6 +599,7 @@ func (d *ReadonlyStatItem) GetService() string {
 	return d.service
 }
 
+// GetEscapedService return the escaped service used as graphite key
 func (d *ReadonlyStatItem) GetEscapedService() string {
 	return Escape(d.service)
 }
@@ -601,6 +612,7 @@ func (d *ReadonlyStatItem) GetGroup() string {
 	return d.group
 }
 
+// GetEscapedGroup return the escaped group used as graphite key
 func (d *ReadonlyStatItem) GetEscapedGroup() string {
 	return Escape(d.group)
 }

@@ -56,9 +56,6 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 	if ctx != nil && ctx.Proxy {
 		role = "motan-client-agent"
 	}
-	//key := metrics.Escape(role) +
-	//	":" + metrics.Escape(request.GetAttachment(protocol.MSource)) +
-	//	":" + metrics.Escape(request.GetMethod())
 	keys := []string{role, request.GetAttachment(protocol.MSource), request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), ".cluster",
 		request.GetAttachment(protocol.MPath), keys, time.Since(start).Nanoseconds()/1e6, response)

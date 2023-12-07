@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -237,4 +238,10 @@ func TestZigzag(t *testing.T) {
 			t.Errorf("zigzag64 not correct. ni: %d, i:%d, err :%v, buf:%v\n", ni, i, err, buf2)
 		}
 	}
+}
+
+func TestBytesBuffer_WriteString(t *testing.T) {
+	a := BytesBuffer{}
+	a.WriteString("abc")
+	assert.Equal(t, "abc", string(a.Bytes()))
 }

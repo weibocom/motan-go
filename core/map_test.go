@@ -220,3 +220,16 @@ func BenchmarkCopyOnWriteMap_Load(b *testing.B) {
 		}
 	})
 }
+
+func TestStringMap_Range(t *testing.T) {
+	a := NewStringMap(10)
+	a.Store("a", "a")
+	a.Store("b", "a")
+	a.Store("c", "a")
+	s := ""
+	a.Range(func(k, v string) bool {
+		s += v
+		return true
+	})
+	assert.Equal(t, "aaa", s)
+}

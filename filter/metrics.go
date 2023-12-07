@@ -91,15 +91,13 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	if provider {
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
-	//key := metrics.Escape(role) +
-	//	":" + metrics.Escape(application) +
-	//	":" + metrics.Escape(request.GetMethod())
 	keys := []string{role, application, request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetAttachment(protocol.MPath),
 		keys, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
 
+// addMetricWithKeys arguments: group & groupSuffix & service &  keys elements is text without escaped
 func addMetricWithKeys(group, groupSuffix string, service string, keys []string, cost int64, response motan.Response) {
 	metrics.AddCounterWithKeys(group, "", service, keys, MetricsTotalCountSuffix, 1) //total_count
 	if response.GetException() != nil {                                              //err_count
