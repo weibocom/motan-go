@@ -103,7 +103,7 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 					return
 				}
 				escapedService := snap.GetEscapedService()
-				escapedGroup := snap.GetEscapedGroup()
+				escapedGroup := snap.GetEscapedGroup() + snap.GetGroupSuffix()
 				if snap.IsHistogram(k) { //histogram
 					for slaK, slaV := range sla {
 						segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
