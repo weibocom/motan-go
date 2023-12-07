@@ -18,12 +18,15 @@ type FailOverHA struct {
 func (f *FailOverHA) GetName() string {
 	return FailOver
 }
+
 func (f *FailOverHA) GetURL() *motan.URL {
 	return f.url
 }
+
 func (f *FailOverHA) SetURL(url *motan.URL) {
 	f.url = url
 }
+
 func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
 	retries := f.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, defaultRetries)
 	var lastErr *motan.Exception

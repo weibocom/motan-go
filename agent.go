@@ -442,7 +442,7 @@ func (a *Agent) initHTTPClusters() {
 		}
 		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
 		if httpCluster == nil {
-			vlog.Errorf("Create http cluster %s failed", id)
+			vlog.Errorf("—Create http cluster %s failed", id)
 			continue
 		}
 		// here the domain has value
@@ -799,6 +799,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 	return res
 }
+
 func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string, match *[]serviceMapItem) error {
 	if cond == "" {
 		return fmt.Errorf("empty %s is not supported", typ)
@@ -813,6 +814,7 @@ func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMap
 	}
 	return nil
 }
+
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
 	group := request.GetAttachment(mpro.MGroup)

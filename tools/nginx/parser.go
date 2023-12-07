@@ -70,6 +70,7 @@ func init() {
 func NewParser(reader io.Reader) *Parser {
 	return &Parser{reader: bufio.NewReader(reader)}
 }
+
 func (p *Parser) readToken() token {
 	buf := bytes.Buffer{}
 	sharpComment := false

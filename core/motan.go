@@ -549,6 +549,7 @@ func (m *MotanRequest) GetMethodDesc() string {
 func (m *MotanRequest) GetArguments() []interface{} {
 	return m.Arguments
 }
+
 func (m *MotanRequest) GetRequestID() uint64 {
 	return m.RequestID
 }
@@ -966,12 +967,15 @@ func (l *lastEndPointFilter) HasNext() bool {
 func (l *lastEndPointFilter) SetNext(nextFilter EndPointFilter) {
 	vlog.Errorf("should not set next in lastEndPointFilter! filer:%s", nextFilter.GetName())
 }
+
 func (l *lastEndPointFilter) GetNext() EndPointFilter {
 	return nil
 }
+
 func (l *lastEndPointFilter) GetIndex() int {
 	return 100
 }
+
 func (l *lastEndPointFilter) GetType() int32 {
 	return EndPointFilterType
 }
@@ -981,6 +985,7 @@ type lastClusterFilter struct{}
 func (l *lastClusterFilter) GetName() string {
 	return "lastClusterFilter"
 }
+
 func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 	return GetLastClusterFilter()
 }
@@ -1001,15 +1006,19 @@ func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalanc
 func (l *lastClusterFilter) HasNext() bool {
 	return false
 }
+
 func (l *lastClusterFilter) SetNext(nextFilter ClusterFilter) {
 	vlog.Errorf("should not set next in lastClusterFilter! filer:%s", nextFilter.GetName())
 }
+
 func (l *lastClusterFilter) GetNext() ClusterFilter {
 	return nil
 }
+
 func (l *lastClusterFilter) GetIndex() int {
 	return 100
 }
+
 func (l *lastClusterFilter) GetType() int32 {
 	return ClusterFilterType
 }
@@ -1027,12 +1036,15 @@ func (f *FilterEndPoint) Call(request Request) Response {
 	}
 	return f.Filter.Filter(f.Caller, request)
 }
+
 func (f *FilterEndPoint) GetURL() *URL {
 	return f.URL
 }
+
 func (f *FilterEndPoint) SetURL(url *URL) {
 	f.URL = url
 }
+
 func (f *FilterEndPoint) GetName() string {
 	return "FilterEndPoint"
 }

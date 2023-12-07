@@ -108,9 +108,11 @@ type CmdList []ClientCommand
 func (c CmdList) Len() int {
 	return len(c)
 }
+
 func (c CmdList) Swap(i, j int) {
 	c[i], c[j] = c[j], c[i]
 }
+
 func (c CmdList) Less(i, j int) bool {
 	return c[i].Index < c[j].Index
 }

@@ -555,6 +555,7 @@ type ReadonlyStatItem struct {
 func (d *ReadonlyStatItem) getRegistry() metrics.Registry {
 	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
 }
+
 func (d *ReadonlyStatItem) getCache(key string) interface{} {
 	d.buildCacheLock.RLock()
 	if v, ok := d.cache[key]; ok {
