@@ -361,6 +361,9 @@ func Decode(buf *bufio.Reader, readSlice *[]byte) (msg *Message, err error) {
 }
 
 func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *Message, start time.Time, err error) {
+	// readSlice is a slice used by reading header info from buf
+	// in order to reuse this slice, parameter rs is a slice pointer, so that
+	// the extension of *rs would also affect the slice outside
 	readSlice := *rs
 	// decode header
 	_, err = io.ReadAtLeast(buf, readSlice[:HeaderLength], HeaderLength)
@@ -373,6 +376,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
+	// get a message from pool
 	msg = messagePool.Get().(*Message)
 	msg.Header.Magic = MotanMagic
 	msg.Header.MsgType = readSlice[2]
@@ -388,13 +392,13 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	// decode meta
 	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	metasize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if metasize > maxContentLength {
 		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, ErrOverSize
 	}
 	if metasize > 0 {
@@ -404,7 +408,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		}
 		err := readBytes(buf, readSlice, metasize)
 		if err != nil {
-			PutMessageBackToPool(msg)
+			ReleaseMessage(msg)
 			return nil, start, err
 		}
 		s, e := 0, 0
@@ -423,7 +427,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		}
 		if k != "" {
 			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", msg.Header, readSlice)
-			PutMessageBackToPool(msg)
+			ReleaseMessage(msg)
 			return nil, start, ErrMetadata
 		}
 	}
@@ -431,13 +435,13 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	//decode body
 	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	bodysize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if bodysize > maxContentLength {
 		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, ErrOverSize
 	}
 
@@ -451,7 +455,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		msg.Body = make([]byte, 0)
 	}
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	return msg, start, err
@@ -589,7 +593,7 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanRequestBackPool(motanRequest)
+			motan.ReleaseMotanRequest(motanRequest)
 			return nil, ErrSerializeNil
 		}
 		if len(motanRequest.Arguments) <= 0 {
@@ -704,13 +708,13 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = b
 			} else {
 				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
-				PutMessageBackToPool(res)
+				ReleaseMessage(res)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
-				PutMessageBackToPool(res)
+				ReleaseMessage(res)
 				return nil, err
 			}
 			res.Body = b
@@ -745,7 +749,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanResponseBackPool(mres)
+			motan.ReleaseMotanResponse(mres)
 			return nil, ErrSerializeNil
 		}
 		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
@@ -757,7 +761,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
 			if err != nil {
-				motan.PutMotanResponseBackPool(mres)
+				motan.ReleaseMotanResponse(mres)
 				return nil, err
 			}
 			mres.Exception = exception
@@ -781,7 +785,7 @@ func ExceptionToJSON(e *motan.Exception) string {
 	return string(errmsg)
 }
 
-func PutMessageBackToPool(msg *Message) {
+func ReleaseMessage(msg *Message) {
 	if msg != nil {
 		//msg.Reset()
 		msg.Type = 0

@@ -138,7 +138,7 @@ func (a *Agent) RegisterCommandHandler(f CommandHandler) {
 	a.commandHandlers = append(a.commandHandlers, f)
 }
 
-func (a *Agent) GetDynamicRegistryInfo() *registrySnapInfoStorage {
+func (a *Agent) GetDynamicRegistryInfo() *RegistrySnapInfoStorage {
 	return a.configurer.getRegistryInfo()
 }
 
@@ -840,6 +840,7 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	if cap(matched) < len(clusters) {
 		matched = make([]serviceMapItem, 0, len(clusters))
 	}
+	releaseClusterSlice(matched)
 	for i, rule := range search {
 		if i == 0 {
 			key = rule.cond
@@ -848,18 +849,15 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		}
 		err = a.fillMatch(rule.tip, rule.cond, key, clusters, rule.condFn, &matched)
 		if err != nil {
-			putBackClusterSlice(matched)
 			return
 		}
 		if len(matched) == 1 {
 			c = matched[0].cluster
-			putBackClusterSlice(matched)
 			return
 		}
 		matched = matched[:0]
 	}
 	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, getReqInfo(service, group, protocol, version))
-	putBackClusterSlice(matched)
 	return
 }
 
@@ -1268,7 +1266,7 @@ func (a *Agent) UnexportService(url *motan.URL) error {
 	return nil
 }
 
-func putBackClusterSlice(s []serviceMapItem) {
+func releaseClusterSlice(s []serviceMapItem) {
 	s = s[:0]
 	clusterSlicePool.Put(s)
 }

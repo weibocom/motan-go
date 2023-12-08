@@ -137,19 +137,19 @@ func (r *RateLimitFilter) GetType() int32 {
 func getKeyValue(key, value, prefix string) (string, float64, bool) {
 	if strings.HasPrefix(key, prefix) {
 		if temp := strings.Split(key, prefix); len(temp) == 2 {
-			if r, err := strconv.ParseFloat(value, 64); err == nil && temp[1] != "" && r > 0 {
+			r, err := strconv.ParseFloat(value, 64)
+			if err == nil && temp[1] != "" && r > 0 {
 				return temp[1], r, true
+			}
+			if err != nil {
+				vlog.Warningf("[rateLimit] parse %s config error:%s", key, err.Error())
 			} else {
-				if err != nil {
-					vlog.Warningf("[rateLimit] parse %s config error:%s", key, err.Error())
-				} else {
-					if r <= 0 {
-						vlog.Warningf("[rateLimit] parse %s config error: value is 0 or negative", key)
-					}
+				if r <= 0 {
+					vlog.Warningf("[rateLimit] parse %s config error: value is 0 or negative", key)
 				}
-				if temp[1] == "" {
-					vlog.Warningf("[rateLimit] parse %s config error: key is empty", key)
-				}
+			}
+			if temp[1] == "" {
+				vlog.Warningf("[rateLimit] parse %s config error: key is empty", key)
 			}
 		}
 	}
