@@ -792,8 +792,8 @@ func (d *DefaultExtensionFactory) GetLB(url *URL) LoadBalance {
 }
 
 func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
-	if newDefualt, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
-		return newDefualt()
+	if newDefault, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
+		return newDefault()
 	}
 	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!", name)
 	return nil
@@ -1142,7 +1142,7 @@ func newRegistryGroupServiceCacheInfo(sr ServiceDiscoverableRegistry, group stri
 func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]string) {
 	if time.Now().Sub(c.lastUpdTime.Load().(time.Time)) >= registryGroupServiceInfoMaxCacheTime {
 		select {
-		case refreshTaskPool <- taskHandler(func() { c.refreshServices() }):
+		case refreshTaskPool <- func() { c.refreshServices() }:
 		default:
 			vlog.Warningf("Task pool is full, refresh service of group [%s] delay", c.group)
 		}

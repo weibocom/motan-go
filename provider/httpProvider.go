@@ -432,7 +432,7 @@ func (h *HTTPProvider) Call(request motan.Request) motan.Response {
 	if l == 0 {
 		vlog.Warningf("server_agent result is empty :%d,%d,%s", statusCode, request.GetRequestID(), httpReqURL)
 	}
-	resp.ProcessTime = int64((time.Now().UnixNano() - t) / 1e6)
+	resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
 	if err != nil {
 		vlog.Errorf("new HTTP Provider Read body err: %v", err)
 		resp.Exception = &motan.Exception{ErrCode: statusCode,
@@ -498,12 +498,12 @@ func (h *HTTPProvider) GetPath() string {
 }
 
 func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err error) {
-	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
+	resp.ProcessTime = (time.Now().UnixNano() - start) / 1e6
 	resp.Exception = &motan.Exception{ErrCode: code, ErrMsg: fmt.Sprintf("%s", err), ErrType: code}
 }
 
 func fillHttpException(resp *motan.MotanResponse, statusCode int, start int64, body []byte) {
-	resp.ProcessTime = int64((time.Now().UnixNano() - start) / 1e6)
+	resp.ProcessTime = (time.Now().UnixNano() - start) / 1e6
 	resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: string(body), ErrType: motan.BizException}
 }
 

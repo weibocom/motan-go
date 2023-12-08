@@ -305,7 +305,7 @@ func (a *Agent) initStatus() {
 
 func (a *Agent) saveStatus() {
 	statSnapFile := a.runtimedir + string(filepath.Separator) + defaultStatusSnap
-	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(int(http.StatusOK))), 0644)
+	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(http.StatusOK)), 0644)
 	if err != nil {
 		vlog.Errorln("Save status error: " + err.Error())
 		return
@@ -479,7 +479,7 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 	serviceItemKeep := make(map[string]bool)
 	clusterMap := make(map[interface{}]interface{})
 	serviceMap := make(map[interface{}]interface{})
-	var allRefersURLs = []*motan.URL{}
+	var allRefersURLs []*motan.URL
 	if a.configurer != nil {
 		//keep all dynamic refers
 		for _, url := range a.configurer.subscribeNodes {

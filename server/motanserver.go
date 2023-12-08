@@ -61,7 +61,7 @@ func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler,
 		}
 		lis = listener
 	} else {
-		addr := ":" + strconv.Itoa(int(m.URL.Port))
+		addr := ":" + strconv.Itoa(m.URL.Port)
 		if registry.IsAgent(m.URL) {
 			addr = m.URL.Host + addr
 		}
@@ -349,7 +349,7 @@ func getRemoteIP(address string) string {
 	var ip string
 	index := strings.Index(address, ":")
 	if index > 0 {
-		ip = string(address[:index])
+		ip = address[:index]
 	} else {
 		ip = address
 	}
