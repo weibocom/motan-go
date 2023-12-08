@@ -221,7 +221,7 @@ func TestPool(t *testing.T) {
 	assertTrue(cap(readSlice) > 200, "readSlice", t)
 	assertTrue(len(newMsg.Body) == len(msg.Body), "body", t)
 	assert.Nil(t, err)
-	PutMessageBackToPool(newMsg)
+	ReleaseMessage(newMsg)
 	body1 := []byte("testbody")
 	msg1 := &Message{Header: h, Metadata: meta, Body: body1}
 	ebytes1 := msg1.Encode()
@@ -277,7 +277,7 @@ func TestConvertToResponse(t *testing.T) {
 		assertTrue(resp.GetAttachment(MPath) == "path", "response path", t)
 		//assertTrue(resp.GetValue().(string) == "testbody", "response body", t)
 		pMap[fmt.Sprintf("%p", resp)] = "1"
-		core.PutMotanResponseBackPool(resp.(*core.MotanResponse))
+		core.ReleaseMotanResponse(resp.(*core.MotanResponse))
 	}
 	assert.True(t, len(pMap) < 10000)
 }
@@ -310,7 +310,7 @@ func TestConvertToRequest(t *testing.T) {
 		assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
 		assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
 		pMap[fmt.Sprintf("%p", req)] = "1"
-		core.PutMotanRequestBackPool(req.(*core.MotanRequest))
+		core.ReleaseMotanRequest(req.(*core.MotanRequest))
 	}
 	assert.True(t, len(pMap) < 10000)
 
