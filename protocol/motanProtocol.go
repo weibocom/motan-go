@@ -361,6 +361,9 @@ func Decode(buf *bufio.Reader, readSlice *[]byte) (msg *Message, err error) {
 }
 
 func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *Message, start time.Time, err error) {
+	// readSlice is a slice used by reading header info from buf
+	// in order to reuse this slice, parameter rs is a slice pointer, so that
+	// the extension of *rs would also affect the slice outside
 	readSlice := *rs
 	// decode header
 	_, err = io.ReadAtLeast(buf, readSlice[:HeaderLength], HeaderLength)
@@ -373,6 +376,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
+	// get a message from pool
 	msg = messagePool.Get().(*Message)
 	msg.Header.Magic = MotanMagic
 	msg.Header.MsgType = readSlice[2]
@@ -589,7 +593,7 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanRequestBackPool(motanRequest)
+			motan.ReleaseMotanRequest(motanRequest)
 			return nil, ErrSerializeNil
 		}
 		if len(motanRequest.Arguments) <= 0 {
@@ -745,7 +749,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
-			motan.PutMotanResponseBackPool(mres)
+			motan.ReleaseMotanResponse(mres)
 			return nil, ErrSerializeNil
 		}
 		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
@@ -757,7 +761,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
 			if err != nil {
-				motan.PutMotanResponseBackPool(mres)
+				motan.ReleaseMotanResponse(mres)
 				return nil, err
 			}
 			mres.Exception = exception

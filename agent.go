@@ -846,18 +846,18 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		}
 		err = a.fillMatch(rule.tip, rule.cond, key, clusters, rule.condFn, &matched)
 		if err != nil {
-			putBackClusterSlice(matched)
+			releaseClusterSlice(matched)
 			return
 		}
 		if len(matched) == 1 {
 			c = matched[0].cluster
-			putBackClusterSlice(matched)
+			releaseClusterSlice(matched)
 			return
 		}
 		matched = matched[:0]
 	}
 	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, getReqInfo(service, group, protocol, version))
-	putBackClusterSlice(matched)
+	releaseClusterSlice(matched)
 	return
 }
 
@@ -1266,7 +1266,7 @@ func (a *Agent) UnexportService(url *motan.URL) error {
 	return nil
 }
 
-func putBackClusterSlice(s []serviceMapItem) {
+func releaseClusterSlice(s []serviceMapItem) {
 	s = s[:0]
 	clusterSlicePool.Put(s)
 }

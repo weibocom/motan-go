@@ -277,7 +277,7 @@ func TestConvertToResponse(t *testing.T) {
 		assertTrue(resp.GetAttachment(MPath) == "path", "response path", t)
 		//assertTrue(resp.GetValue().(string) == "testbody", "response body", t)
 		pMap[fmt.Sprintf("%p", resp)] = "1"
-		core.PutMotanResponseBackPool(resp.(*core.MotanResponse))
+		core.ReleaseMotanResponse(resp.(*core.MotanResponse))
 	}
 	assert.True(t, len(pMap) < 10000)
 }
@@ -310,7 +310,7 @@ func TestConvertToRequest(t *testing.T) {
 		assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
 		assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
 		pMap[fmt.Sprintf("%p", req)] = "1"
-		core.PutMotanRequestBackPool(req.(*core.MotanRequest))
+		core.ReleaseMotanRequest(req.(*core.MotanRequest))
 	}
 	assert.True(t, len(pMap) < 10000)
 

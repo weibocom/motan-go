@@ -494,7 +494,7 @@ func GetMotanRequestFromPool() *MotanRequest {
 	return requestPool.Get().(*MotanRequest)
 }
 
-func PutMotanRequestBackPool(req *MotanRequest) {
+func ReleaseMotanRequest(req *MotanRequest) {
 	if req != nil {
 		req.Method = ""
 		req.RequestID = 0
@@ -649,7 +649,7 @@ func GetMotanResponseFromPool() *MotanResponse {
 	return responsePool.Get().(*MotanResponse)
 }
 
-func PutMotanResponseBackPool(resp *MotanResponse) {
+func ReleaseMotanResponse(resp *MotanResponse) {
 	if resp != nil {
 		//resp.Reset()
 		resp.RequestID = 0
