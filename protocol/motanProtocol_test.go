@@ -221,7 +221,7 @@ func TestPool(t *testing.T) {
 	assertTrue(cap(readSlice) > 200, "readSlice", t)
 	assertTrue(len(newMsg.Body) == len(msg.Body), "body", t)
 	assert.Nil(t, err)
-	PutMessageBackToPool(newMsg)
+	ReleaseMessage(newMsg)
 	body1 := []byte("testbody")
 	msg1 := &Message{Header: h, Metadata: meta, Body: body1}
 	ebytes1 := msg1.Encode()

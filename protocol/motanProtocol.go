@@ -392,13 +392,13 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	// decode meta
 	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	metasize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if metasize > maxContentLength {
 		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, ErrOverSize
 	}
 	if metasize > 0 {
@@ -408,7 +408,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		}
 		err := readBytes(buf, readSlice, metasize)
 		if err != nil {
-			PutMessageBackToPool(msg)
+			ReleaseMessage(msg)
 			return nil, start, err
 		}
 		s, e := 0, 0
@@ -427,7 +427,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		}
 		if k != "" {
 			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", msg.Header, readSlice)
-			PutMessageBackToPool(msg)
+			ReleaseMessage(msg)
 			return nil, start, ErrMetadata
 		}
 	}
@@ -435,13 +435,13 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	//decode body
 	_, err = io.ReadAtLeast(buf, readSlice[:4], 4)
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	bodysize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if bodysize > maxContentLength {
 		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, ErrOverSize
 	}
 
@@ -455,7 +455,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 		msg.Body = make([]byte, 0)
 	}
 	if err != nil {
-		PutMessageBackToPool(msg)
+		ReleaseMessage(msg)
 		return nil, start, err
 	}
 	return msg, start, err
@@ -708,13 +708,13 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = b
 			} else {
 				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
-				PutMessageBackToPool(res)
+				ReleaseMessage(res)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
-				PutMessageBackToPool(res)
+				ReleaseMessage(res)
 				return nil, err
 			}
 			res.Body = b
@@ -785,7 +785,7 @@ func ExceptionToJSON(e *motan.Exception) string {
 	return string(errmsg)
 }
 
-func PutMessageBackToPool(msg *Message) {
+func ReleaseMessage(msg *Message) {
 	if msg != nil {
 		//msg.Reset()
 		msg.Type = 0

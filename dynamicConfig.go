@@ -32,7 +32,7 @@ type DynamicConfigurer struct {
 	agent            *Agent
 }
 
-type registrySnapInfoStorage struct {
+type RegistrySnapInfoStorage struct {
 	RegisterNodes  []*core.URL `json:"register_nodes"`
 	SubscribeNodes []*core.URL `json:"subscribe_nodes"`
 }
@@ -60,7 +60,7 @@ func (c *DynamicConfigurer) doRecover() error {
 		vlog.Warningln("Read configuration snapshot file error: " + err.Error())
 		return err
 	}
-	registerSnapInfo := new(registrySnapInfoStorage)
+	registerSnapInfo := new(RegistrySnapInfoStorage)
 	err = json.Unmarshal(bytes, registerSnapInfo)
 	if err != nil {
 		vlog.Errorln("Parse snapshot string error: " + err.Error())
@@ -162,8 +162,8 @@ func (c *DynamicConfigurer) saveSnapshot() {
 	}
 }
 
-func (c *DynamicConfigurer) getRegistryInfo() *registrySnapInfoStorage {
-	registrySnapInfo := registrySnapInfoStorage{}
+func (c *DynamicConfigurer) getRegistryInfo() *RegistrySnapInfoStorage {
+	registrySnapInfo := RegistrySnapInfoStorage{}
 
 	c.regLock.Lock()
 	defer c.regLock.Unlock()

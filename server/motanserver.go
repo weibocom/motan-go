@@ -271,8 +271,8 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: resSendTime})
 	}
 	// 回收message
-	mpro.PutMessageBackToPool(msg)
-	mpro.PutMessageBackToPool(res)
+	mpro.ReleaseMessage(msg)
+	mpro.ReleaseMessage(res)
 	// 回收request
 	if motanReq, ok := mreq.(*motan.MotanRequest); ok {
 		motan.ReleaseMotanRequest(motanReq)
