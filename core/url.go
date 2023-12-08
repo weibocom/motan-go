@@ -328,9 +328,11 @@ type filterSlice []Filter
 func (f filterSlice) Len() int {
 	return len(f)
 }
+
 func (f filterSlice) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
+
 func (f filterSlice) Less(i, j int) bool {
 	// desc
 	return f[i].GetIndex() > f[j].GetIndex()

@@ -31,7 +31,7 @@ func TestMetricsFilter(t *testing.T) {
 	request.GetRPCContext(true).Proxy = true
 	request.SetAttachment(protocol.MSource, application)
 	request.SetAttachment(protocol.MPath, testService)
-	assert.Nil(t, metrics.GetStatItem(testGroup, testService), "metric stat")
+	assert.Nil(t, metrics.GetStatItem(testGroup, "", testService), "metric stat")
 	ep := factory.GetEndPoint(url)
 	provider := factory.GetProvider(url)
 
@@ -56,7 +56,7 @@ func TestMetricsFilter(t *testing.T) {
 			mf.Filter(test.caller, test.request)
 			time.Sleep(10 * time.Millisecond)
 			// The metrics filter has do escape
-			assert.Equal(t, 1, int(metrics.GetStatItem(testGroup, testService).SnapshotAndClear().Count(getKeysStr(test.keys)+MetricsTotalCountSuffix)), "metric count")
+			assert.Equal(t, 1, int(metrics.GetStatItem(testGroup, "", testService).SnapshotAndClear().Count(getKeysStr(test.keys)+MetricsTotalCountSuffix)), "metric count")
 		})
 	}
 }
@@ -88,7 +88,7 @@ func TestAddMetric(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			addMetricWithKeys(testGroup, "", testService, keys, test.response.GetProcessTime(), test.response)
 			time.Sleep(10 * time.Millisecond)
-			snap := metrics.GetStatItem(testGroup, testService).SnapshotAndClear()
+			snap := metrics.GetStatItem(testGroup, "", testService).SnapshotAndClear()
 			for _, k := range test.keys {
 				assert.True(t, snap.Count(getKeysStr(keys)+k) > 0, fmt.Sprintf("key '%s'", k))
 			}

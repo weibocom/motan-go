@@ -25,7 +25,7 @@ func Test_graphite_Write(t *testing.T) {
 	go server.start()
 	time.Sleep(100 * time.Millisecond)
 	g := newGraphite("127.0.0.1", "test pool", 3456)
-	item := NewStatItem(group, service)
+	item := NewStatItem(group, "", service)
 	item.AddCounter(keyPrefix+"c1", 1)
 	item.AddHistograms(keyPrefix+" h1", 100)
 	err := g.Write([]Snapshot{item.SnapshotAndClear()})
@@ -48,7 +48,7 @@ func Test_graphite_Write(t *testing.T) {
 }
 
 func TestGenGraphiteMessages(t *testing.T) {
-	item1 := NewDefaultStatItem(group, service)
+	item1 := NewDefaultStatItem(group, "", service)
 
 	// counter message
 	item1.AddCounter(keyPrefix+"c1", 1)
@@ -69,8 +69,8 @@ func TestGenGraphiteMessages(t *testing.T) {
 		role, application, group, localhost, service, methodPrefix+"h1", "avg_time", float32(100))), "histogram message")
 
 	// multi items
-	item2 := NewDefaultStatItem(group+"2", service+"2")
-	item3 := NewDefaultStatItem(group+"3", service+"3")
+	item2 := NewDefaultStatItem(group+"2", "", service+"2")
+	item3 := NewDefaultStatItem(group+"3", "", service+"3")
 	item3.SetReport(false) // item3 not report
 
 	length := 10

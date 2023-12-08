@@ -4,14 +4,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/rand"
 	"sync"
-	"time"
 )
 
 var (
-	maxReuseBufSize = 204800
-	discardRatio    = 0.1
 	bytesBufferPool = sync.Pool{New: func() interface{} {
 		return new(BytesBuffer)
 	}}
@@ -144,11 +140,11 @@ func (b *BytesBuffer) WriteUint64(u uint64) {
 }
 
 func (b *BytesBuffer) WriteZigzag32(u uint32) int {
-	return b.WriteVarint(uint64((u << 1) ^ uint32((int32(u) >> 31))))
+	return b.WriteVarint(uint64((u << 1) ^ uint32(int32(u)>>31)))
 }
 
 func (b *BytesBuffer) WriteZigzag64(u uint64) int {
-	return b.WriteVarint(uint64((u << 1) ^ uint64((int64(u) >> 63))))
+	return b.WriteVarint((u << 1) ^ uint64(int64(u)>>63))
 }
 
 func (b *BytesBuffer) WriteVarint(u uint64) int {
@@ -252,10 +248,10 @@ func (b *BytesBuffer) ReadVarint() (x uint64, err error) {
 			return 0, err
 		}
 		if (temp & 0x80) != 0x80 {
-			x |= (uint64(temp) << offset)
+			x |= uint64(temp) << offset
 			return x, nil
 		}
-		x |= (uint64(temp&0x7f) << offset)
+		x |= uint64(temp&0x7f) << offset
 	}
 	return 0, ErrOverflow
 }
@@ -289,14 +285,6 @@ func (b *BytesBuffer) Remain() int { return b.wpos - b.rpos }
 func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
-
-func hitDiscard() bool {
-	r := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(100)
-	if float64(r)/100 < discardRatio {
-		return true
-	}
-	return false
-}
 
 func AcquireBytesBuffer() *BytesBuffer {
 	b := bytesBufferPool.Get()

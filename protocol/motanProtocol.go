@@ -40,7 +40,7 @@ const (
 const (
 	MPath          = "M_p"
 	MMethod        = "M_m"
-	MExceptionn    = "M_e"
+	MException     = "M_e"
 	MProcessTime   = "M_pt"
 	MMethodDesc    = "M_md"
 	MGroup         = "M_g"
@@ -269,9 +269,9 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 	}
 
 	//status
-	status := uint8(0x08 | (uint8(msgStatus) & 0x07))
+	status := 0x08 | (uint8(msgStatus) & 0x07)
 
-	serial := uint8(0x00 | (uint8(serialize) << 3))
+	serial := 0x00 | (uint8(serialize) << 3)
 
 	header := &Header{MotanMagic, mtype, status, serial, requestID}
 	return header
@@ -299,7 +299,7 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 	}
 	metasize := metabuf.Len()
 	bodysize := len(msg.Body)
-	buf = motan.NewBytesBuffer(int(HeaderLength + bodysize + metasize + 8))
+	buf = motan.NewBytesBuffer(HeaderLength + bodysize + metasize + 8)
 	// encode header.
 	buf.WriteUint16(MotanMagic)
 	buf.WriteByte(msg.Header.MsgType)
@@ -686,7 +686,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 	var msgType int
 	if response.GetException() != nil {
 		msgType = Exception
-		response.SetAttachment(MExceptionn, ExceptionToJSON(response.GetException()))
+		response.SetAttachment(MException, ExceptionToJSON(response.GetException()))
 		if rc.Proxy {
 			rc.Serialized = true
 		}
@@ -756,7 +756,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 		mres.Value = dv
 	}
 	if response.Header.GetStatus() == Exception {
-		e := response.Metadata.LoadOrEmpty(MExceptionn)
+		e := response.Metadata.LoadOrEmpty(MException)
 		if e != "" {
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
@@ -776,7 +776,7 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
 	header := BuildHeader(Res, false, defaultSerialize, requestID, Exception)
 	msg := &Message{Header: header, Metadata: motan.NewStringMap(DefaultMetaSize)}
-	msg.Metadata.Store(MExceptionn, errmsg)
+	msg.Metadata.Store(MException, errmsg)
 	return msg
 }
 

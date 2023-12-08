@@ -305,7 +305,7 @@ func (a *Agent) initStatus() {
 
 func (a *Agent) saveStatus() {
 	statSnapFile := a.runtimedir + string(filepath.Separator) + defaultStatusSnap
-	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(int(http.StatusOK))), 0644)
+	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(http.StatusOK)), 0644)
 	if err != nil {
 		vlog.Errorln("Save status error: " + err.Error())
 		return
@@ -442,7 +442,7 @@ func (a *Agent) initHTTPClusters() {
 		}
 		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
 		if httpCluster == nil {
-			vlog.Errorf("Create http cluster %s failed", id)
+			vlog.Errorf("—Create http cluster %s failed", id)
 			continue
 		}
 		// here the domain has value
@@ -479,7 +479,7 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 	serviceItemKeep := make(map[string]bool)
 	clusterMap := make(map[interface{}]interface{})
 	serviceMap := make(map[interface{}]interface{})
-	var allRefersURLs = []*motan.URL{}
+	var allRefersURLs []*motan.URL
 	if a.configurer != nil {
 		//keep all dynamic refers
 		for _, url := range a.configurer.subscribeNodes {
@@ -799,6 +799,7 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 	return res
 }
+
 func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string, match *[]serviceMapItem) error {
 	if cond == "" {
 		return fmt.Errorf("empty %s is not supported", typ)
@@ -813,6 +814,7 @@ func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMap
 	}
 	return nil
 }
+
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
 	group := request.GetAttachment(mpro.MGroup)

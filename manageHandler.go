@@ -158,7 +158,7 @@ func (s *StatusHandler) getStatus() []byte {
 		exporter := v.(motan.Exporter)
 		group := exporter.GetURL().Group
 		service := exporter.GetURL().Path
-		statItem := metrics.GetStatItem(group, service)
+		statItem := metrics.GetStatItem(group, "", service)
 		if statItem == nil {
 			return true
 		}

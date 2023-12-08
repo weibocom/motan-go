@@ -113,6 +113,7 @@ func (m *MSContext) hashInt(s string) int {
 	h.Write([]byte(s))
 	return int(h.Sum32())
 }
+
 func (m *MSContext) export(url *motan.URL) {
 	defer motan.HandlePanic(nil)
 	service := m.serviceImpls[url.Parameters[motan.RefKey]]

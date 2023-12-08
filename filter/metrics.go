@@ -99,8 +99,8 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 
 // addMetricWithKeys arguments: group & groupSuffix & service &  keys elements is text without escaped
 func addMetricWithKeys(group, groupSuffix string, service string, keys []string, cost int64, response motan.Response) {
-	metrics.AddCounterWithKeys(group, "", service, keys, MetricsTotalCountSuffix, 1) //total_count
-	if response.GetException() != nil {                                              //err_count
+	metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsTotalCountSuffix, 1) //total_count
+	if response.GetException() != nil {                                                       //err_count
 		exception := response.GetException()
 		if exception.ErrType == motan.BizException {
 			metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsBizErrorCountSuffix, 1)

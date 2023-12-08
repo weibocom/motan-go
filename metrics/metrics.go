@@ -67,6 +67,7 @@ type StatItem interface {
 	SetGroup(group string)
 	GetGroup() string
 	GetEscapedGroup() string
+	GetGroupSuffix() string
 	AddCounter(key string, value int64)
 	AddHistograms(key string, duration int64)
 	AddGauge(key string, value int64)
@@ -103,8 +104,8 @@ type StatWriter interface {
 	Write(snapshots []Snapshot) error
 }
 
-func GetOrRegisterStatItem(group string, service string) StatItem {
-	k := group + service
+func GetOrRegisterStatItem(group, groupSuffix string, service string) StatItem {
+	k := group + groupSuffix + service
 	itemsLock.RLock()
 	item := items[k]
 	itemsLock.RUnlock()
@@ -114,32 +115,32 @@ func GetOrRegisterStatItem(group string, service string) StatItem {
 	itemsLock.Lock()
 	item = items[k]
 	if item == nil {
-		item = NewStatItem(group, service)
+		item = NewStatItem(group, groupSuffix, service)
 		items[k] = item
 	}
 	itemsLock.Unlock()
 	return item
 }
 
-func GetStatItem(group string, service string) StatItem {
+func GetStatItem(group, groupSuffix string, service string) StatItem {
 	itemsLock.RLock()
 	defer itemsLock.RUnlock()
-	return items[group+service]
+	return items[group+groupSuffix+service]
 }
 
 // NewDefaultStatItem create a new statistic item, you should escape input parameter before call this function
-func NewDefaultStatItem(group string, service string) StatItem {
-	return &DefaultStatItem{group: group, service: service, holder: &RegistryHolder{registry: metrics.NewRegistry()}, isReport: true}
+func NewDefaultStatItem(group, groupSuffix string, service string) StatItem {
+	return &DefaultStatItem{group: group, groupSuffix: groupSuffix, service: service, holder: &RegistryHolder{registry: metrics.NewRegistry()}, isReport: true}
 }
 
-func RMStatItem(group string, service string) {
+func RMStatItem(group, groupSuffix string, service string) {
 	itemsLock.RLock()
-	i := items[group+service]
+	i := items[group+groupSuffix+service]
 	itemsLock.RUnlock()
 	if i != nil {
 		i.Clear()
 		itemsLock.Lock()
-		delete(items, group+service)
+		delete(items, group+groupSuffix+service)
 		itemsLock.Unlock()
 	}
 }
@@ -288,14 +289,6 @@ func (s *event) reset() {
 	s.groupSuffix = ""
 }
 
-// getGroup add the group suffix to group if it is not empty.
-func (s *event) getGroup() string {
-	if s.groupSuffix == "" {
-		return s.group
-	}
-	return s.group + s.groupSuffix
-}
-
 // getMetricKey get the metrics key when add metrics data into metrics object,
 // the key split by : used to when send data to graphite
 func (s *event) getMetricKey() string {
@@ -320,6 +313,7 @@ type RegistryHolder struct {
 
 type DefaultStatItem struct {
 	group        string
+	groupSuffix  string
 	service      string
 	holder       *RegistryHolder
 	isReport     bool
@@ -350,6 +344,10 @@ func (d *DefaultStatItem) SetGroup(group string) {
 
 func (d *DefaultStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *DefaultStatItem) GetGroupSuffix() string {
+	return d.groupSuffix
 }
 
 // GetEscapedGroup return the escaped group used as graphite key
@@ -393,6 +391,7 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
 	d.lastSnapshot = &ReadonlyStatItem{
 		group:          d.group,
+		groupSuffix:    d.groupSuffix,
 		service:        d.service,
 		holder:         (*RegistryHolder)(old),
 		isReport:       d.isReport,
@@ -545,6 +544,7 @@ func (d *DefaultStatItem) IsGauge(key string) bool {
 
 type ReadonlyStatItem struct {
 	group          string
+	groupSuffix    string
 	service        string
 	holder         *RegistryHolder
 	isReport       bool
@@ -555,6 +555,7 @@ type ReadonlyStatItem struct {
 func (d *ReadonlyStatItem) getRegistry() metrics.Registry {
 	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
 }
+
 func (d *ReadonlyStatItem) getCache(key string) interface{} {
 	d.buildCacheLock.RLock()
 	if v, ok := d.cache[key]; ok {
@@ -610,6 +611,10 @@ func (d *ReadonlyStatItem) SetGroup(group string) {
 
 func (d *ReadonlyStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *ReadonlyStatItem) GetGroupSuffix() string {
+	return d.groupSuffix
 }
 
 // GetEscapedGroup return the escaped group used as graphite key
@@ -837,7 +842,7 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(evt.getGroup(), evt.service)
+	item := GetOrRegisterStatItem(evt.group, evt.groupSuffix, evt.service)
 	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:

@@ -60,6 +60,7 @@ func (m *MotanCluster) GetURL() *motan.URL {
 func (m *MotanCluster) SetURL(url *motan.URL) {
 	m.url = url
 }
+
 func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster call panic", ErrType: motan.ServiceException})
@@ -71,6 +72,7 @@ func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster not available, maybe caused by degrade", ErrType: motan.ServiceException})
 }
+
 func (m *MotanCluster) initCluster() bool {
 	m.registryRefers = make(map[string][]motan.EndPoint)
 	//ha
@@ -99,15 +101,19 @@ func (m *MotanCluster) initCluster() bool {
 	vlog.Infof("init MotanCluster %s", m.GetIdentity())
 	return true
 }
+
 func (m *MotanCluster) SetLoadBalance(loadBalance motan.LoadBalance) {
 	m.LoadBalance = loadBalance
 }
+
 func (m *MotanCluster) SetHaStrategy(haStrategy motan.HaStrategy) {
 	m.HaStrategy = haStrategy
 }
+
 func (m *MotanCluster) GetRefers() []motan.EndPoint {
 	return m.Refers
 }
+
 func (m *MotanCluster) refresh() {
 	newRefers := make([]motan.EndPoint, 0, 32)
 	for _, v := range m.registryRefers {
@@ -120,14 +126,17 @@ func (m *MotanCluster) refresh() {
 	m.Refers = newRefers
 	m.LoadBalance.OnRefresh(newRefers)
 }
+
 func (m *MotanCluster) ShuffleEndpoints(endpoints []motan.EndPoint) []motan.EndPoint {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(endpoints), func(i, j int) { endpoints[i], endpoints[j] = endpoints[j], endpoints[i] })
 	return endpoints
 }
+
 func (m *MotanCluster) AddRegistry(registry motan.Registry) {
 	m.Registries = append(m.Registries, registry)
 }
+
 func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 	vlog.Infof("cluster %s receive notify size %d. ", m.GetIdentity(), len(urls))
 	m.notifyLock.Lock()

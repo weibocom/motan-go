@@ -16,21 +16,25 @@ type DirectRegistry struct {
 func (d *DirectRegistry) GetURL() *motan.URL {
 	return d.url
 }
+
 func (d *DirectRegistry) SetURL(url *motan.URL) {
 	d.url = url
 	d.urls = parseURLs(url)
 }
+
 func (d *DirectRegistry) GetName() string {
 	return "direct"
 }
 
 func (d *DirectRegistry) InitRegistry() {
 }
+
 func (d *DirectRegistry) Subscribe(url *motan.URL, listener motan.NotifyListener) {
 }
 
 func (d *DirectRegistry) Unsubscribe(url *motan.URL, listener motan.NotifyListener) {
 }
+
 func (d *DirectRegistry) Discover(url *motan.URL) []*motan.URL {
 	if d.urls == nil {
 		d.urls = parseURLs(d.url)
@@ -47,22 +51,29 @@ func (d *DirectRegistry) Discover(url *motan.URL) []*motan.URL {
 	}
 	return result
 }
+
 func (d *DirectRegistry) Register(serverURL *motan.URL) {
 	vlog.Infof("direct registry:register url :%+v", serverURL)
 }
+
 func (d *DirectRegistry) UnRegister(serverURL *motan.URL) {
 
 }
+
 func (d *DirectRegistry) Available(serverURL *motan.URL) {
 
 }
+
 func (d *DirectRegistry) Unavailable(serverURL *motan.URL) {
 
 }
+
 func (d *DirectRegistry) GetRegisteredServices() []*motan.URL {
 	return nil
 }
+
 func (d *DirectRegistry) StartSnapshot(conf *motan.SnapshotConf) {}
+
 func parseURLs(url *motan.URL) []*motan.URL {
 	urls := make([]*motan.URL, 0)
 	if len(url.Host) > 0 && url.Port > 0 {
