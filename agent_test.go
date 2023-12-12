@@ -413,15 +413,18 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
+		// 只传service，且只有一个cluster，findcCluster 会正常返回
 		{"test0", "", "", "", "No refers for request"},
-		{"test-1", "111", "222", "333", "cluster not found. cluster:test-1"},
-		{"test3", "", "", "", "empty group is not supported"},
+		{"test0", "g0", "", "", "No refers for request"},
+		{"test0", "g0", "http", "", "No refers for request"},
+		{"test0", "g0", "", "1.3", "No refers for request"},
+		{"test-1", "111", "222", "333", "cluster not found"},
 		{"test", "g2", "", "", "No refers for request"},
-		{"test", "g1", "", "", "empty protocol is not supported"},
 		{"test", "g1", "motan2", "", "No refers for request"},
-		{"test", "g1", "motan", "", "empty version is not supported"},
 		{"test", "g1", "http", "1.3", "No refers for request"},
-		{"test", "g1", "http", "1.2", "less condition to select cluster"},
+		{"test", "b", "c", "d", "no cluster matches the request"},
+		// 同一个service有多个cluster可以匹配，但是group没有传
+		{"test", "", "c", "d", "multiple clusters are matched with service"},
 	} {
 		request.ServiceName = v.service
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -479,10 +482,9 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
-		{"test4", "", "", "", "empty group is not supported"},
+		{"test3", "111", "222", "333", "cluster not found. info: {service: test3"},
 		{"test5", "", "", "", "No refers for request"},
-		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
+		{"helloService2", "", "", "", "cluster not found. info: {service: helloService2"},
 	} {
 		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)

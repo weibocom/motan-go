@@ -45,6 +45,24 @@ func (u *URL) GetIdentity() string {
 	return idt
 }
 
+// IsMatch is a tool function for comparing parameters: service, group, protocol and version
+// with URL. This function is compatible with the situation that some of the parameters is empty
+func (u *URL) IsMatch(service, group, protocol, version string) bool {
+	if u.Path != service {
+		return false
+	}
+	if group != "" && u.Group != group {
+		return false
+	}
+	if protocol != "" && u.Protocol != protocol {
+		return false
+	}
+	if version != "" && u.GetParam(VersionKey, "") != version {
+		return false
+	}
+	return true
+}
+
 func (u *URL) GetIdentityWithRegistry() string {
 	id := u.GetIdentity()
 	registryId := u.GetParam(RegistryKey, "")

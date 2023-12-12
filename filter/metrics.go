@@ -56,15 +56,8 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 }
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	var start time.Time
-	switch caller.(type) {
-	case motan.Provider:
-		start = request.GetRPCContext(true).RequestReceiveTime
-	case motan.EndPoint:
-		start = time.Now()
-	}
+	start := getFilterStartTime(caller, request)
 	response := m.GetNext().Filter(caller, request)
-
 	proxy := false
 	provider := false
 	ctx := request.GetRPCContext(false)
