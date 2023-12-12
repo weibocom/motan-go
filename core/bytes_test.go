@@ -240,8 +240,19 @@ func TestZigzag(t *testing.T) {
 	}
 }
 
-func TestBytesBuffer_WriteString(t *testing.T) {
+func TestBytesBuffer_WriteString_Grow(t *testing.T) {
 	a := BytesBuffer{}
 	a.WriteString("abc")
 	assert.Equal(t, "abc", string(a.Bytes()))
+	assert.Equal(t, 3, len(a.buf))
+	a.WriteString("abc")
+	assert.Equal(t, "abcabc", string(a.Bytes()))
+	assert.Equal(t, 9, len(a.buf))
+}
+
+func TestBytesBuffer_WriteString_NoGrow(t *testing.T) {
+	a := BytesBuffer{buf: make([]byte, 4)}
+	a.WriteString("abc")
+	assert.Equal(t, "abc", string(a.Bytes()))
+	assert.Equal(t, 4, len(a.buf))
 }
