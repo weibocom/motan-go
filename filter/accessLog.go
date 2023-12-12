@@ -38,12 +38,11 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 	case motan.Provider:
 		role = serverAgentRole
 		ip = request.GetAttachment(motan.HostKey)
-		start = request.GetRPCContext(true).RequestReceiveTime
 	case motan.EndPoint:
 		role = clientAgentRole
 		ip = caller.GetURL().Host
-		start = time.Now()
 	}
+	start = getFilterStartTime(caller, request)
 	response := t.GetNext().Filter(caller, request)
 	address := ip + ":" + caller.GetURL().GetPortStr()
 	if _, ok := caller.(motan.Provider); ok {

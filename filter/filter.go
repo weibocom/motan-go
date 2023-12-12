@@ -2,6 +2,7 @@ package filter
 
 import (
 	motan "github.com/weibocom/motan-go/core"
+	"time"
 )
 
 // ext name
@@ -58,4 +59,15 @@ func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtFilter(ClusterCircuitBreaker, func() motan.Filter {
 		return &ClusterCircuitBreakerFilter{}
 	})
+}
+
+func getFilterStartTime(caller motan.Caller, request motan.Request) time.Time {
+	switch caller.(type) {
+	case motan.Provider:
+		return request.GetRPCContext(true).RequestReceiveTime
+	case motan.EndPoint:
+		return time.Now()
+	default:
+		return time.Now()
+	}
 }
