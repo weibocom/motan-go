@@ -378,6 +378,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	msg.Header.VersionStatus = readSlice[3]
 	version := msg.Header.GetVersion()
 	if version != Version2 { // TODO 不再验证
+		err = ErrVersion
 		vlog.Errorf("unsupported protocol version number: %d", version)
 		return nil, start, ErrVersion
 	}
@@ -391,6 +392,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	}
 	metasize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if metasize > maxContentLength {
+		err = ErrOverSize
 		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
 		return nil, start, ErrOverSize
 	}
@@ -418,6 +420,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 			}
 		}
 		if k != "" {
+			err = ErrMetadata
 			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", msg.Header, readSlice)
 			return nil, start, ErrMetadata
 		}
@@ -430,6 +433,7 @@ func DecodeWithTime(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg *M
 	}
 	bodysize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if bodysize > maxContentLength {
+		err = ErrOverSize
 		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
 		return nil, start, ErrOverSize
 	}
