@@ -53,7 +53,7 @@ var (
 		processor: defaultEventProcessor, //sink processor size
 		eventBus:  make(chan *event, eventBufferSize),
 		writers:   make(map[string]StatWriter),
-		evtBuf: &sync.Pool{New: func() interface{} {
+		eventPool: &sync.Pool{New: func() interface{} {
 			return &event{}
 		}},
 	}
@@ -215,7 +215,7 @@ func sendEvent(eventType int32, group string, service string, key string, value 
 }
 
 func sendEventWithKeys(eventType int32, group, groupSuffix string, service string, keys []string, suffix string, value int64) {
-	evt := rp.evtBuf.Get().(*event)
+	evt := rp.eventPool.Get().(*event)
 	evt.event = eventType
 	evt.keys = keys
 	evt.group = group
@@ -818,7 +818,7 @@ type reporter struct {
 	interval    time.Duration
 	processor   int
 	writers     map[string]StatWriter
-	evtBuf      *sync.Pool
+	eventPool   *sync.Pool
 	writersLock sync.RWMutex
 }
 
@@ -827,7 +827,7 @@ func (r *reporter) eventLoop() {
 		r.processEvent(evt)
 		// clean the event object before put it back
 		evt.reset()
-		r.evtBuf.Put(evt)
+		r.eventPool.Put(evt)
 	}
 }
 
