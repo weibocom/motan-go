@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"errors"
+	"github.com/weibocom/motan-go/internal/core"
 	"net"
 	"strconv"
 	"strings"
@@ -174,7 +175,10 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				break
 			}
 
-			go m.processV2(msg, t, ip, conn)
+			//go m.processV2(msg, t, ip, conn)
+			core.GetProcessV2Pool().Submit(func() {
+				m.processV2(msg, t, ip, conn)
+			})
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s", v, conn.RemoteAddr().String())
 			break

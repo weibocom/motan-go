@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/weibocom/motan-go/internal/core"
 	"net"
 	"strconv"
 	"strings"
@@ -828,9 +829,17 @@ func buildV2Channel(conn net.Conn, config *ChannelConfig, serialization motan.Se
 		address:       conn.RemoteAddr().String(),
 	}
 
-	go channel.recv()
+	//go channel.recv()
+	//
+	//go channel.send()
 
-	go channel.send()
+	core.GetProcessV2Pool().Submit(func() {
+		channel.recv()
+	})
+
+	core.GetProcessV2Pool().Submit(func() {
+		channel.send()
+	})
 
 	return channel
 }

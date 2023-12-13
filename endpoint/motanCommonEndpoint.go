@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/internal/core"
 	vlog "github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"net"
@@ -670,7 +671,10 @@ func (c *Channel) recvLoop() error {
 		if err != nil {
 			return err
 		}
-		go c.handleMsg(msg, t)
+		//go c.handleMsg(msg, t)
+		core.GetProcessV2Pool().Submit(func() {
+			c.handleMsg(msg, t)
+		})
 	}
 }
 
@@ -895,9 +899,17 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 		address:       conn.RemoteAddr().String(),
 	}
 
-	go channel.recv()
+	//go channel.recv()
+	//
+	//go channel.send()
 
-	go channel.send()
+	core.GetProcessV2Pool().Submit(func() {
+		channel.recv()
+	})
+
+	core.GetProcessV2Pool().Submit(func() {
+		channel.send()
+	})
 
 	return channel
 }

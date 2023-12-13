@@ -15,12 +15,13 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/opentracing/opentracing-go v1.0.2
+	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
 	github.com/samuel/go-zookeeper v0.0.0-20180130194729-c4fab1ac1bec
 	github.com/shirou/gopsutil/v3 v3.21.9
 	github.com/smartystreets/goconvey v1.6.4 // indirect
-	github.com/stretchr/testify v1.7.0
+	github.com/stretchr/testify v1.8.2
 	github.com/valyala/fasthttp v1.2.0
 	github.com/weibreeze/breeze-go v0.1.1
 	go.uber.org/atomic v1.4.0 // indirect
