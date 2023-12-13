@@ -45,11 +45,6 @@ var (
 	setAgentLock              sync.Mutex
 	notFoundProviderCount     int64 = 0
 	defaultInitClusterTimeout int64 = 10000 //ms
-	clusterSlicePool                = sync.Pool{
-		New: func() interface{} {
-			return make([]serviceMapItem, 0, 5)
-		},
-	}
 )
 
 type Agent struct {
@@ -442,7 +437,7 @@ func (a *Agent) initHTTPClusters() {
 		}
 		httpCluster := cluster.NewHTTPCluster(url, true, a.Context, a.extFactory)
 		if httpCluster == nil {
-			vlog.Errorf("—Create http cluster %s failed", id)
+			vlog.Errorf("Create http cluster %s failed", id)
 			continue
 		}
 		// here the domain has value
@@ -820,44 +815,32 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 	group := request.GetAttachment(mpro.MGroup)
 	version := request.GetAttachment(mpro.MVersion)
 	protocol := request.GetAttachment(mpro.MProxyProtocol)
-	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
-	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, getReqInfo(service, group, protocol, version))
+	if service == "" {
+		err = fmt.Errorf("empty service is not supported. info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
 		return
 	}
-	search := []struct {
-		tip    string
-		cond   string
-		condFn func(u *motan.URL) string
-	}{
-		{"service", service, func(u *motan.URL) string { return u.Path }},
-		{"group", group, func(u *motan.URL) string { return u.Group }},
-		{"protocol", protocol, func(u *motan.URL) string { return u.Protocol }},
-		{"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") }},
+	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
+	if !exists {
+		err = fmt.Errorf("cluster not found. info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
+		return
 	}
 	clusters := serviceItemArrI.([]serviceMapItem)
-	matched := clusterSlicePool.Get().([]serviceMapItem)
-	if cap(matched) < len(clusters) {
-		matched = make([]serviceMapItem, 0, len(clusters))
+	if len(clusters) == 1 {
+		//TODO: add strict mode to avoid incorrect group call
+		c = clusters[0].cluster
+		return
 	}
-	releaseClusterSlice(matched)
-	for i, rule := range search {
-		if i == 0 {
-			key = rule.cond
-		} else {
-			key += "_" + rule.cond
-		}
-		err = a.fillMatch(rule.tip, rule.cond, key, clusters, rule.condFn, &matched)
-		if err != nil {
+	if group == "" {
+		err = fmt.Errorf("multiple clusters are matched with service: %s, but the group is empty", service)
+		return
+	}
+	for _, j := range clusters {
+		if j.url.IsMatch(service, group, protocol, version) {
+			c = j.cluster
 			return
 		}
-		if len(matched) == 1 {
-			c = matched[0].cluster
-			return
-		}
-		matched = matched[:0]
 	}
-	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, getReqInfo(service, group, protocol, version))
+	err = fmt.Errorf("no cluster matches the request; info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
 	return
 }
 
@@ -1231,11 +1214,6 @@ func urlExist(url *motan.URL, urls map[string]*motan.URL) bool {
 	return false
 }
 
-func getReqInfo(service, group, protocol, version string) string {
-	return fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
-		service, group, protocol, version)
-}
-
 func (a *Agent) SubscribeService(url *motan.URL) error {
 	if urlExist(url, a.Context.RefersURLs) {
 		return fmt.Errorf("url exist, ignore subscribe, url: %s", url.GetIdentity())
@@ -1264,9 +1242,4 @@ func (a *Agent) UnexportService(url *motan.URL) error {
 		exporter.(motan.Exporter).Unexport()
 	}
 	return nil
-}
-
-func releaseClusterSlice(s []serviceMapItem) {
-	s = s[:0]
-	clusterSlicePool.Put(s)
 }

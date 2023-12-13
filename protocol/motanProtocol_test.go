@@ -148,9 +148,6 @@ func TestEncode(t *testing.T) {
 
 	fmt.Println("len:", ebytes.Len())
 	readSlice := make([]byte, 100)
-	//for i := 0; i < len(readSlice); i++ {
-	//	readSlice[i] = 't'
-	//}
 	newMsg, err := Decode(bufio.NewReader(ebytes), &readSlice)
 	if newMsg == nil {
 		t.Fatalf("encode message fail")
@@ -175,7 +172,6 @@ func TestEncode(t *testing.T) {
 	if !newMsg.Header.IsGzip() {
 		t.Fatalf("encode message fail")
 	}
-
 	nb, err := DecodeGzip(newMsg.Body)
 	if err != nil {
 		t.Errorf("decode gzip fail. err:%v", err)
@@ -254,7 +250,8 @@ func TestConvertToResponse(t *testing.T) {
 	h.SetStatus(6)
 	h.SetOneWay(true)
 	h.SetSerialize(6)
-	h.SetGzip(true)
+	h.SetStatus(0)
+	h.SetGzip(false)
 	h.SetHeartbeat(true)
 	h.SetProxy(true)
 	h.SetRequest(true)
@@ -267,7 +264,7 @@ func TestConvertToResponse(t *testing.T) {
 	meta.Store(MPath, "path")
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
-
+	// To test convert when the method use pool
 	pMap := make(map[string]string)
 	for i := 0; i < 10000; i++ {
 		resp, err := ConvertToResponse(msg, &serialize.SimpleSerialization{})
@@ -275,21 +272,74 @@ func TestConvertToResponse(t *testing.T) {
 		assertTrue(resp.GetAttachment(MGroup) == "group", "response group", t)
 		assertTrue(resp.GetAttachment(MMethod) == "method", "response method", t)
 		assertTrue(resp.GetAttachment(MPath) == "path", "response path", t)
-		//assertTrue(resp.GetValue().(string) == "testbody", "response body", t)
+		assertTrue(string(resp.GetValue().(*core.DeserializableValue).Body) == "testbody", "response body", t)
 		pMap[fmt.Sprintf("%p", resp)] = "1"
 		core.ReleaseMotanResponse(resp.(*core.MotanResponse))
 	}
+	// check if responses are reused
 	assert.True(t, len(pMap) < 10000)
+	// To test if convert is correct when the method is called in concurrent situation
+	h1 := &Header{}
+	h1.SetVersion(Version2)
+	h1.SetStatus(1)
+	h1.SetOneWay(true)
+	h1.SetSerialize(6)
+	h1.SetGzip(false)
+	h1.SetHeartbeat(true)
+	h1.SetProxy(true)
+	h1.SetRequest(true)
+	h1.Magic = MotanMagic
+	h1.RequestID = 1234456
+	meta1 := core.NewStringMap(0)
+	meta1.Store("k2", "v2")
+	meta1.Store(MGroup, "group1")
+	meta1.Store(MMethod, "method1")
+	meta1.Store(MPath, "path1")
+	meta1.Store(MException, `{"errcode": 0, "errmsg": "test exception", "errtype": 1}`)
+	msg1 := &Message{Header: h1, Metadata: meta1, Body: nil}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		time.Sleep(time.Millisecond * 500)
+		for i := 0; i < 10000; i++ {
+			resp, err := ConvertToResponse(msg, &serialize.SimpleSerialization{})
+			assertTrue(resp.GetRequestID() == 2349789, "request id is incorrect", t)
+			assertTrue(err == nil, "convert to response err", t)
+			assertTrue(resp.GetAttachment(MGroup) == "group", "response group", t)
+			assertTrue(resp.GetAttachment(MMethod) == "method", "response method", t)
+			assertTrue(resp.GetAttachment(MPath) == "path", "response path", t)
+			assertTrue(string(resp.GetValue().(*core.DeserializableValue).Body) == "testbody", "response body", t)
+			core.ReleaseMotanResponse(resp.(*core.MotanResponse))
+		}
+		wg.Done()
+	}()
+	go func() {
+		time.Sleep(time.Millisecond * 500)
+		for i := 0; i < 10000; i++ {
+			resp, err := ConvertToResponse(msg1, &serialize.SimpleSerialization{})
+			assertTrue(resp.GetRequestID() == 1234456, "request id is incorrect", t)
+			assertTrue(err == nil, "convert to response err", t)
+			assertTrue(resp.GetAttachment(MGroup) == "group1", "response group", t)
+			assertTrue(resp.GetAttachment(MMethod) == "method1", "response method", t)
+			assertTrue(resp.GetAttachment(MPath) == "path1", "response path", t)
+			assertTrue(resp.GetValue() == nil, "response body", t)
+			assertTrue(resp.GetException().ErrMsg == "test exception", "response exception error message", t)
+			assertTrue(resp.GetException().ErrCode == 0, "response exception error code", t)
+			assertTrue(resp.GetException().ErrType == 1, "response exception error type", t)
+			core.ReleaseMotanResponse(resp.(*core.MotanResponse))
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
-// TODO convert
 func TestConvertToRequest(t *testing.T) {
 	h := &Header{}
 	h.SetVersion(Version2)
 	h.SetStatus(6)
 	h.SetOneWay(true)
 	h.SetSerialize(6)
-	h.SetGzip(true)
+	h.SetGzip(false)
 	h.SetHeartbeat(true)
 	h.SetProxy(true)
 	h.SetRequest(true)
@@ -303,19 +353,71 @@ func TestConvertToRequest(t *testing.T) {
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
 	pMap := make(map[string]string)
+	// To test convert when the method use pool
 	for i := 0; i < 10000; i++ {
 		req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
+		assertTrue(req.GetRequestID() == 2349789, "request id", t)
 		assertTrue(err == nil, "conver to request err", t)
 		assertTrue(req.GetAttachment(MGroup) == "group", "request group", t)
 		assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
 		assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
+		assertTrue(len(req.GetArguments()) == 1, "request argument", t)
 		pMap[fmt.Sprintf("%p", req)] = "1"
 		core.ReleaseMotanRequest(req.(*core.MotanRequest))
 	}
+	// check if requests are reused
 	assert.True(t, len(pMap) < 10000)
-
-	req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
+	// To test if convert is correct when the method is called in concurrent situation
+	h1 := &Header{}
+	h1.SetVersion(Version2)
+	h1.SetStatus(6)
+	h1.SetOneWay(true)
+	h1.SetSerialize(6)
+	h1.SetGzip(false)
+	h1.SetHeartbeat(true)
+	h1.SetProxy(true)
+	h1.SetRequest(true)
+	h1.Magic = MotanMagic
+	h1.RequestID = 1234456
+	meta1 := core.NewStringMap(0)
+	meta1.Store("k2", "v2")
+	meta1.Store(MGroup, "group1")
+	meta1.Store(MMethod, "method1")
+	meta1.Store(MPath, "path1")
+	msg1 := &Message{Header: h1, Metadata: meta1, Body: nil}
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		time.Sleep(time.Millisecond * 500)
+		for i := 0; i < 10000; i++ {
+			req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
+			assertTrue(req.GetRequestID() == 2349789, "request id is incorrect", t)
+			assertTrue(err == nil, "conver to request err", t)
+			assertTrue(req.GetAttachment(MGroup) == "group", "request group", t)
+			assertTrue(req.GetAttachment(MMethod) == "method", "request method", t)
+			assertTrue(req.GetAttachment(MPath) == "path", "request path", t)
+			assertTrue(len(req.GetArguments()) == 1, "request argument", t)
+			core.ReleaseMotanRequest(req.(*core.MotanRequest))
+		}
+		wg.Done()
+	}()
+	go func() {
+		time.Sleep(time.Millisecond * 500)
+		for i := 0; i < 10000; i++ {
+			req, err := ConvertToRequest(msg1, &serialize.SimpleSerialization{})
+			assertTrue(req.GetRequestID() == 1234456, "request id is incorrect", t)
+			assertTrue(err == nil, "conver to request err", t)
+			assertTrue(req.GetAttachment(MGroup) == "group1", "request group", t)
+			assertTrue(req.GetAttachment(MMethod) == "method1", "request method", t)
+			assertTrue(req.GetAttachment(MPath) == "path1", "request path", t)
+			assertTrue(len(req.GetArguments()) == 0, "request argument", t)
+			core.ReleaseMotanRequest(req.(*core.MotanRequest))
+		}
+		wg.Done()
+	}()
+	wg.Wait()
 	// test request clone
+	req, err := ConvertToRequest(msg, &serialize.SimpleSerialization{})
 	cloneReq := req.Clone().(core.Request)
 	assertTrue(err == nil, "conver to request err", t)
 	assertTrue(cloneReq.GetAttachment(MGroup) == "group", "clone request group", t)
