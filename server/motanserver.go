@@ -3,7 +3,7 @@ package server
 import (
 	"bufio"
 	"errors"
-	"github.com/weibocom/motan-go/internal/core"
+	"github.com/panjf2000/ants/v2"
 	"net"
 	"strconv"
 	"strings"
@@ -20,6 +20,7 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
+var processV2Pool, _ = ants.NewPool(5 * 10000)
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
@@ -176,7 +177,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			}
 
 			//go m.processV2(msg, t, ip, conn)
-			core.GetProcessV2Pool().Submit(func() {
+			processV2Pool.Submit(func() {
 				m.processV2(msg, t, ip, conn)
 			})
 		} else {
