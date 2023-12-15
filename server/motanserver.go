@@ -246,14 +246,14 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	// recover the communication identifier
 	res.Header.RequestID = lastRequestID
-	resBuf := res.Encode()
-	// reuse BytesBuffer
-	defer motan.ReleaseBytesBuffer(resBuf)
+	res.EncodeWithoutBody()
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
+	var sendBuf net.Buffers = res.GetEncodedBytes()
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-	_, err := conn.Write(resBuf.Bytes())
+	_, err := sendBuf.WriteTo(conn)
+	res.SetAlreadySend()
 	if err != nil {
 		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()

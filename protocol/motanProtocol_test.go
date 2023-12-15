@@ -179,6 +179,51 @@ func TestEncode(t *testing.T) {
 	assertTrue(string(nb) == "gzip encode", "body", t)
 }
 
+func TestMessage_EncodeWithoutBody(t *testing.T) {
+	h := &Header{}
+	h.SetVersion(Version2)
+	h.SetStatus(6)
+	h.SetOneWay(true)
+	h.SetSerialize(5)
+	h.SetGzip(true)
+	h.SetHeartbeat(true)
+	h.SetProxy(true)
+	h.SetRequest(true)
+	h.Magic = MotanMagic
+	h.RequestID = 2349789
+	meta := core.NewStringMap(0)
+	meta.Store("k1", "v1")
+	body := []byte("testbody")
+	msg := &Message{Header: h, Metadata: meta, Body: body}
+	buf := msg.EncodeWithoutBody()
+
+	// verify decode
+	readSlice := make([]byte, 100)
+	newMsg, bodySize, err := DecodeWithoutBody(bufio.NewReader(buf), &readSlice, core.DefaultMaxContentLength)
+	if err != nil || newMsg == nil {
+		t.Fatalf("encode message fail")
+	}
+	if bodySize != len(body) {
+		t.Fatalf("bodysize not correct. body length: %d, bodySize: %d", len(body), bodySize)
+	}
+
+	// verify header
+	assertTrue(newMsg.Header.IsOneWay(), "oneway", t)
+	assertTrue(newMsg.Header.IsGzip(), "gzip", t)
+	assertTrue(newMsg.Header.IsHeartbeat(), "heartbeat", t)
+	assertTrue(newMsg.Header.IsProxy(), "proxy", t)
+	assertTrue(newMsg.Header.isRequest(), "request", t)
+	assertTrue(newMsg.Header.GetVersion() == Version2, "version", t)
+	assertTrue(newMsg.Header.GetSerialize() == 5, "serialize", t)
+	assertTrue(newMsg.Header.GetStatus() == 6, "status", t)
+
+	// verify meta
+	assertTrue(newMsg.Metadata.LoadOrEmpty("k1") == "v1", "meta", t)
+
+	// verify body nil
+	assertTrue(newMsg.Body == nil, "body", t)
+}
+
 func TestPool(t *testing.T) {
 	h := &Header{}
 	h.SetVersion(Version2)
