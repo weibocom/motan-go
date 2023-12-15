@@ -748,7 +748,9 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	if err != nil {
 		return getDefaultResponse(request.GetRequestID(), "do http request failed : "+err.Error())
 	}
-	res = &motan.MotanResponse{RequestID: request.GetRequestID()}
+	httpMotanResp := motan.AcquireHttpMotanResponse()
+	httpMotanResp.RequestID = request.GetRequestID()
+	res = httpMotanResp
 	mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
 	return res
 }
