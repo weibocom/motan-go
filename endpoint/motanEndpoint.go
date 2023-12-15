@@ -4,16 +4,16 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	motan "github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/log"
+	mpro "github.com/weibocom/motan-go/protocol"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
-	mpro "github.com/weibocom/motan-go/protocol"
+	"unsafe"
 )
 
 var (
@@ -394,42 +394,43 @@ type V2Stream struct {
 	rc          *motan.RPCContext
 	isClose     atomic.Value // bool
 	isHeartBeat bool
-	sendTimer   *time.Timer
-	recvTimer   *time.Timer
+	timer       *time.Timer
 	release     bool // concurrency issues for stream timeout and channel recv msg
 }
 
 func (s *V2Stream) Reset() {
-	s.channel = nil
-	s.sendMsg = nil
-	s.recvMsg = nil
-	s.rc = nil
+	//use atomic.Swap avoid data race between goroutines(Channel.Call and Stream.notify) when ReleaseStream
+	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.channel)), nil)
+	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.sendMsg)), nil)
+	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.recvMsg)), nil)
+	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.rc)), nil)
 }
 
 func (s *V2Stream) Send() error {
-	if s.sendTimer == nil {
-		s.sendTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
 	} else {
-		s.sendTimer.Reset(s.deadline.Sub(time.Now()))
+		s.timer.Reset(s.deadline.Sub(time.Now()))
 	}
-	defer s.sendTimer.Stop()
+	defer s.timer.Stop()
 
-	buf := s.sendMsg.Encode()
+	s.sendMsg.EncodeWithoutBody()
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: buf.Bytes(), bytesBuffer: buf}
+	ready := sendReady{message: s.sendMsg}
 	select {
 	case s.channel.sendCh <- ready:
-		if s.rc != nil {
+		// read/write data race
+		if rc := (*motan.RPCContext)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&s.rc)))); rc != nil {
 			sendTime := time.Now()
-			s.rc.RequestSendTime = sendTime
-			if s.rc.Tc != nil {
-				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
+			rc.RequestSendTime = sendTime
+			if rc.Tc != nil {
+				rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
 			}
 		}
 		return nil
-	case <-s.sendTimer.C:
+	case <-s.timer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -439,16 +440,14 @@ func (s *V2Stream) Send() error {
 // Recv sync recv
 func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
-		if s.Close() {
-			s.release = true
-		}
+		s.release = s.RemoveFromChannel()
 	}()
-	if s.recvTimer == nil {
-		s.recvTimer = time.NewTimer(s.deadline.Sub(time.Now()))
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
 	} else {
-		s.recvTimer.Reset(s.deadline.Sub(time.Now()))
+		s.timer.Reset(s.deadline.Sub(time.Now()))
 	}
-	defer s.recvTimer.Stop()
+	defer s.timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.recvMsg
@@ -456,11 +455,9 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-s.recvTimer.C:
-		s.release = false
+	case <-s.timer.C:
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
-		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
@@ -474,7 +471,8 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 		}
 		if s.rc.AsyncCall {
 			defer func() {
-				s.Close()
+				s.RemoveFromChannel()
+				ReleaseV2Stream(s)
 			}()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
@@ -488,7 +486,7 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			if err = response.ProcessDeserializable(result.Reply); err != nil {
 				result.Error = err
 			}
-			response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
+			response.SetProcessTime((time.Now().UnixNano() - result.StartTime) / 1000000)
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 			}
@@ -540,7 +538,7 @@ func (c *V2Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 	return s, nil
 }
 
-func (s *V2Stream) Close() bool {
+func (s *V2Stream) RemoveFromChannel() bool {
 	var exist bool
 	if !s.isClose.Load().(bool) {
 		if s.isHeartBeat {
@@ -562,8 +560,8 @@ func (s *V2Stream) Close() bool {
 }
 
 type sendReady struct {
-	data        []byte
-	bytesBuffer *motan.BytesBuffer
+	message   *mpro.Message // motan2 protocol message
+	v1Message []byte        //motan1 protocol, synchronize subsequent if motan1 protocol message optimization
 }
 
 func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
@@ -578,7 +576,7 @@ func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RP
 	}()
 
 	stream.SetDeadline(deadline)
-	if err := stream.Send(); err != nil {
+	if err = stream.Send(); err != nil {
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
@@ -627,21 +625,20 @@ func (c *V2Channel) send() {
 	for {
 		select {
 		case ready := <-c.sendCh:
-			if ready.data != nil {
+			if ready.message != nil {
+				// can`t reuse net.Buffers
+				// len and cap will be 0 after writev consume, out of range panic will happen next reuse
+				var sendBuf net.Buffers = ready.message.GetEncodedBytes()
 				// TODO need async?
 				c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-				sent := 0
-				for sent < len(ready.data) {
-					n, err := c.conn.Write(ready.data[sent:])
-					if err != nil {
-						vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
-						c.closeOnErr(err)
-						return
-					}
-					sent += n
+				_, err := sendBuf.WriteTo(c.conn)
+				ready.message.SetAlreadySend()
+				if err != nil {
+					vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
+					c.closeOnErr(err)
+					return
 				}
 			}
-			motan.ReleaseBytesBuffer(ready.bytesBuffer)
 		case <-c.shutdownCh:
 			return
 		}

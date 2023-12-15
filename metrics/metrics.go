@@ -292,8 +292,8 @@ func (s *event) reset() {
 // getMetricKey get the metrics key when add metrics data into metrics object,
 // the key split by : used to when send data to graphite
 func (s *event) getMetricKey() string {
-	keyBuilder := motan.NewBytesBuffer(metricsKeyBuilderBufferSize)
-	defer motan.ReleaseBytesBuffer(keyBuilder)
+	keyBuilder := motan.NewBytesBufferFromDefaultPool(metricsKeyBuilderBufferSize)
+	defer motan.ReleaseBytesBufferToDefaultPool(keyBuilder)
 	l := len(s.keys)
 	for idx, k := range s.keys {
 		keyBuilder.WriteString(Escape(k))
