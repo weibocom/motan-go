@@ -438,7 +438,10 @@ func (s *Stream) Send() (err error) {
 func (s *Stream) Recv() (motan.Response, error) {
 	defer func() {
 		// the stream may be referenced by other goroutine(channel.handleMsg) when timeout
-		s.release = s.RemoveFromChannel()
+		// only timeout or shutdown before channel.handleMsg, call RemoveFromChannel will be true
+		if s.RemoveFromChannel() {
+			s.release = true
+		}
 	}()
 	if s.timer == nil {
 		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -454,8 +457,10 @@ func (s *Stream) Recv() (motan.Response, error) {
 		}
 		return msg, nil
 	case <-s.timer.C:
+		s.release = false
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
@@ -720,7 +725,7 @@ func (c *Channel) send() {
 		select {
 		case ready := <-c.sendCh:
 			// can`t reuse net.Buffers
-			// len and cap will reset 0 after writev, out of range panic will happen when reuse
+			// len and cap will be 0 after writev, 'out of range panic' will happen when reuse
 			var sendBuf net.Buffers
 			if ready.message != nil { // motan2
 				sendBuf = ready.message.GetEncodedBytes()

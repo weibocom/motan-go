@@ -440,7 +440,11 @@ func (s *V2Stream) Send() error {
 // Recv sync recv
 func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
-		s.release = s.RemoveFromChannel()
+		// the stream may be referenced by other goroutine(channel.handleMsg) when timeout
+		// only timeout or shutdown before channel.handleMsg, call RemoveFromChannel will be true
+		if s.RemoveFromChannel() {
+			s.release = true
+		}
 	}()
 	if s.timer == nil {
 		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
@@ -456,8 +460,10 @@ func (s *V2Stream) Recv() (*mpro.Message, error) {
 		}
 		return msg, nil
 	case <-s.timer.C:
+		s.release = false
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		s.release = false
 		return nil, ErrChannelShutdown
 	}
 }
@@ -627,7 +633,7 @@ func (c *V2Channel) send() {
 		case ready := <-c.sendCh:
 			if ready.message != nil {
 				// can`t reuse net.Buffers
-				// len and cap will be 0 after writev consume, out of range panic will happen next reuse
+				// len and cap will be 0 after writev consume, 'out of range panic' will happen when reuse
 				var sendBuf net.Buffers = ready.message.GetEncodedBytes()
 				// TODO need async?
 				c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
