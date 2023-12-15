@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	bytesBufferPool = sync.Pool{New: func() interface{} {
+	defaultBytesBufferPool = sync.Pool{New: func() interface{} {
 		return new(BytesBuffer)
 	}}
 )
@@ -26,23 +26,32 @@ type BytesBuffer struct {
 var ErrNotEnough = errors.New("BytesBuffer: not enough bytes")
 var ErrOverflow = errors.New("BytesBuffer: integer overflow")
 
-// NewBytesBuffer create a empty BytesBuffer with initial size
+// NewBytesBuffer create an empty BytesBuffer with initial size
 func NewBytesBuffer(initsize int) *BytesBuffer {
 	return NewBytesBufferWithOrder(initsize, binary.BigEndian)
 }
 
-// NewBytesBufferWithOrder create a empty BytesBuffer with initial size and byte order
-func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
-	bb := AcquireBytesBuffer()
+// NewBytesBufferFromDefaultPool create an empty BytesBuffer with initial size and byte order from defaultBytesBufferPool
+func NewBytesBufferFromDefaultPool(initSize int) *BytesBuffer {
+	bb := AcquireBytesBufferFromDefaultPool()
 	if bb.buf == nil {
-		bb.buf = make([]byte, initsize)
+		bb.buf = make([]byte, initSize)
 	}
 	if bb.temp == nil {
 		bb.temp = make([]byte, 8)
 	}
-	bb.order = order
+	bb.order = binary.BigEndian
 
 	return bb
+}
+
+// NewBytesBufferWithOrder create an empty BytesBuffer with initial size and byte order
+func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
+	return &BytesBuffer{
+		buf:   make([]byte, initsize),
+		order: order,
+		temp:  make([]byte, 8),
+	}
 }
 
 // CreateBytesBuffer create a BytesBuffer from data bytes
@@ -286,20 +295,17 @@ func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
 
-func AcquireBytesBuffer() *BytesBuffer {
-	b := bytesBufferPool.Get()
+func AcquireBytesBufferFromDefaultPool() *BytesBuffer {
+	b := defaultBytesBufferPool.Get()
 	if b == nil {
 		return &BytesBuffer{}
 	}
 	return b.(*BytesBuffer)
 }
 
-func ReleaseBytesBuffer(b *BytesBuffer) {
+func ReleaseBytesBufferToDefaultPool(b *BytesBuffer) {
 	if b != nil {
-		//if cap(b.buf) > maxReuseBufSize && hitDiscard() {
-		//	return
-		//}
 		b.Reset()
-		bytesBufferPool.Put(b)
+		defaultBytesBufferPool.Put(b)
 	}
 }
