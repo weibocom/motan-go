@@ -20,7 +20,7 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
-var processPool, _ = ants.NewPool(5*10000, ants.WithMaxBlockingTasks(1024))
+var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
 
 func SetProcessPoolSize(size int) {
 	processPool.Tune(size)

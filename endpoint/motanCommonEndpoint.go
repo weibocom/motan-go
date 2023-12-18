@@ -19,7 +19,7 @@ var (
 	streamPool = sync.Pool{New: func() interface{} {
 		return new(Stream)
 	}}
-	handleMsgPool, _ = ants.NewPool(1 * 10000)
+	handleMsgPool, _ = ants.NewPool(10000)
 )
 
 // MotanCommonEndpoint supports motan v1, v2 protocols
