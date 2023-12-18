@@ -54,7 +54,17 @@ func (u *URL) IsMatch(service, group, protocol, version string) bool {
 	if group != "" && u.Group != group {
 		return false
 	}
-	if protocol != "" && u.Protocol != protocol {
+	// for motan v1 request, parameter protocol should be empty
+	if protocol != "" {
+		if u.Protocol == "motanV1Compatible" {
+			if protocol != "motan2" {
+				return false
+			}
+		} else {
+			if u.Protocol != protocol {
+				return false
+			}
+		}
 		return false
 	}
 	if version != "" && u.GetParam(VersionKey, "") != version {
