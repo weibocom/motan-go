@@ -635,7 +635,7 @@ motan-service:
 	c1.Initialize()
 	var reply []byte
 	req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
-	req.SetAttachment("HTTP_HOST", "test.com")
+	req.SetAttachment("http_Host", "test.com")
 	resp := c1.BaseCall(req, &reply)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "okay", string(reply))

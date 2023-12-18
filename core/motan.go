@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"github.com/valyala/fasthttp"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +27,12 @@ var (
 		return &MotanResponse{
 			RPCContext: &RPCContext{},
 		}
+	}}
+	httpResponsePool = sync.Pool{New: func() interface{} {
+		res := &HttpMotanResponse{}
+		res.MotanResponse = &MotanResponse{}
+		res.RPCContext = &RPCContext{}
+		return res
 	}}
 )
 
@@ -610,6 +617,36 @@ func (req *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
 	return nil
 }
 
+// HttpMotanResponse Resposne used in http provider to deal with http response
+type HttpMotanResponse struct {
+	*MotanResponse
+	HttpResponse *fasthttp.Response
+}
+
+func (m *HttpMotanResponse) Reset() {
+	m.RequestID = 0
+	m.Value = nil
+	m.Exception = nil
+	m.ProcessTime = 0
+	m.Attachment = nil
+	m.RPCContext.Reset()
+	m.HttpResponse = nil
+}
+
+func AcquireHttpMotanResponse() *HttpMotanResponse {
+	return httpResponsePool.Get().(*HttpMotanResponse)
+}
+
+func ReleaseHttpMotanResponse(m *HttpMotanResponse) {
+	if m != nil {
+		if m.HttpResponse != nil {
+			fasthttp.ReleaseResponse(m.HttpResponse)
+		}
+		m.Reset()
+		httpResponsePool.Put(m)
+	}
+}
+
 type MotanResponse struct {
 	RequestID   uint64
 	Value       interface{}
@@ -709,7 +746,10 @@ func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
 }
 
 func BuildExceptionResponse(requestid uint64, e *Exception) *MotanResponse {
-	return &MotanResponse{RequestID: requestid, Exception: e}
+	resp := AcquireMotanResponse()
+	resp.RequestID = requestid
+	resp.Exception = e
+	return resp
 }
 
 // extensions factory-func

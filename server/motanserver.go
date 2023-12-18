@@ -280,6 +280,9 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	if motanResp, ok := mres.(*motan.MotanResponse); ok {
 		motan.ReleaseMotanResponse(motanResp)
 	}
+	if motanHttpReq, ok := mres.(*motan.HttpMotanResponse); ok {
+		motan.ReleaseHttpMotanResponse(motanHttpReq)
+	}
 }
 
 func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip string, conn net.Conn) {
