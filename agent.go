@@ -351,6 +351,14 @@ func (a *Agent) initParam() {
 	initLog(logDir, section)
 	registerSwitchers(a.Context)
 
+	processPoolSize := 0
+	if section != nil && section["processPoolSize"] != nil {
+		processPoolSize = section["processPoolSize"].(int)
+	}
+	if processPoolSize > 0 {
+		mserver.SetProcessPoolSize(processPoolSize)
+	}
+
 	port := *motan.Port
 	if port == 0 && section != nil && section["port"] != nil {
 		port = section["port"].(int)

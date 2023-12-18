@@ -20,7 +20,15 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
-var processV2Pool, _ = ants.NewPool(5*10000, ants.WithMaxBlockingTasks(1024))
+var processPool, _ = ants.NewPool(5*10000, ants.WithMaxBlockingTasks(1024))
+
+func SetProcessPoolSize(size int) {
+	processPool.Tune(size)
+}
+
+func GetProcessPoolSize() int {
+	return processPool.Cap()
+}
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
@@ -177,7 +185,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			}
 
 			//go m.processV2(msg, t, ip, conn)
-			processV2Pool.Submit(func() {
+			processPool.Submit(func() {
 				m.processV2(msg, t, ip, conn)
 			})
 		} else {

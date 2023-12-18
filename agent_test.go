@@ -11,6 +11,7 @@ import (
 	vlog "github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/registry"
 	"github.com/weibocom/motan-go/serialize"
+	"github.com/weibocom/motan-go/server"
 	_ "github.com/weibocom/motan-go/server"
 	_ "golang.org/x/net/context"
 	"io/ioutil"
@@ -63,6 +64,7 @@ motan-agent:
   log_dir: "stdout"
   snapshot_dir: "./snapshot"
   application: "testing"
+  processPoolSize: 100
 
 motan-registry:
   direct:
@@ -87,6 +89,7 @@ motan-refer:
 	resp := c1.BaseCall(req, nil)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
+	assert.Equal(t, 100, server.GetProcessPoolSize())
 }
 func Test_unixClientCall2(t *testing.T) {
 	t.Parallel()
