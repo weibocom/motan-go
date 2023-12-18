@@ -490,7 +490,7 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 		}
 
 		service := url.Path
-		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "1.0"), url.Protocol, url.Path)
 
 		// find exists old serviceMap
 		var serviceMapValue serviceMapItem
@@ -589,7 +589,7 @@ func (a *Agent) initCluster(url *motan.URL) {
 		}
 		a.serviceMap.UnsafeStore(url.Path, serviceMapItemArr)
 	})
-	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "1.0"), url.Protocol, url.Path)
 	a.clsLock.Lock() // Mutually exclusive with the reloadClusters method
 	defer a.clsLock.Unlock()
 	a.clusterMap.Store(mapKey, c)

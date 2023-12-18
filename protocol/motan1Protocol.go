@@ -114,13 +114,6 @@ func DecodeMotanV1Request(msg *MotanV1Message) (motan.Request, error) {
 	ctx := request.GetRPCContext(true)
 	ctx.OriginalMessage = msg
 	ctx.IsMotanV1 = true
-	// fill v2 attachment
-	if request.GetAttachment(MGroup) == "" {
-		request.SetAttachment(MGroup, request.GetAttachment(V1Group))
-	}
-	if request.GetAttachment(MVersion) == "" {
-		request.SetAttachment(MVersion, request.GetAttachment(V1Version))
-	}
 	return request, nil
 }
 
