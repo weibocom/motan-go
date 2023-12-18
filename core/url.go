@@ -2,6 +2,8 @@ package core
 
 import (
 	"bytes"
+	"github.com/weibocom/motan-go/endpoint"
+	"github.com/weibocom/motan-go/server"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,7 +56,17 @@ func (u *URL) IsMatch(service, group, protocol, version string) bool {
 	if group != "" && u.Group != group {
 		return false
 	}
-	if protocol != "" && u.Protocol != protocol {
+	// for motan v1 request, parameter protocol should be empty
+	if protocol != "" {
+		if u.Protocol == endpoint.MotanV1Compatible {
+			if protocol != server.Motan2 {
+				return false
+			}
+		} else {
+			if u.Protocol != protocol {
+				return false
+			}
+		}
 		return false
 	}
 	if version != "" && u.GetParam(VersionKey, "") != version {
