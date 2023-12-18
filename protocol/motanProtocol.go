@@ -285,10 +285,8 @@ func (msg *Message) EncodeWithoutBody() *motan.BytesBuffer {
 		// remove last char '\n'
 		metaSize -= 1
 	}
-	bodySize := len(msg.Body)
 	if msg.bytesBuffer == nil {
-		// apply body zoom, but not use, for Message.Encode()
-		msg.bytesBuffer = motan.NewBytesBuffer(HeaderLength + bodySize + metaSize + 8)
+		msg.bytesBuffer = motan.NewBytesBuffer(HeaderLength + metaSize + 8)
 	} else {
 		msg.bytesBuffer.Reset()
 	}
@@ -317,6 +315,7 @@ func (msg *Message) EncodeWithoutBody() *motan.BytesBuffer {
 	}
 
 	// encode body size
+	bodySize := len(msg.Body)
 	msg.bytesBuffer.WriteUint32(uint32(bodySize))
 	return msg.bytesBuffer
 }
