@@ -20,7 +20,7 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
-var processV2Pool, _ = ants.NewPool(5 * 10000)
+var processV2Pool, _ = ants.NewPool(5*10000, ants.WithMaxBlockingTasks(1024))
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
