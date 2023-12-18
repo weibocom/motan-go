@@ -292,16 +292,11 @@ func (m *MotanCommonEndpoint) keepalive() {
 }
 
 func (m *MotanCommonEndpoint) defaultErrMotanResponse(request motan.Request, errMsg string) motan.Response {
-	response := &motan.MotanResponse{
-		RequestID:  request.GetRequestID(),
-		Attachment: motan.NewStringMap(motan.DefaultAttachmentSize),
-		Exception: &motan.Exception{
-			ErrCode: 400,
-			ErrMsg:  errMsg,
-			ErrType: motan.ServiceException,
-		},
-	}
-	return response
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+		ErrCode: 400,
+		ErrMsg:  errMsg,
+		ErrType: motan.ServiceException,
+	})
 }
 
 func (m *MotanCommonEndpoint) GetName() string {
