@@ -797,33 +797,15 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	return res
 }
 
-func (a *agentMessageHandler) fillMatch(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string, match *[]serviceMapItem) error {
-	if cond == "" {
-		return fmt.Errorf("empty %s is not supported", typ)
-	}
-	for _, item := range data {
-		if f(item.url) == cond {
-			*match = append(*match, item)
-		}
-	}
-	if len(*match) == 0 {
-		return fmt.Errorf("cluster not found. cluster:%s", key)
-	}
-	return nil
-}
-
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
-	group := request.GetAttachment(mpro.MGroup)
-	version := request.GetAttachment(mpro.MVersion)
-	protocol := request.GetAttachment(mpro.MProxyProtocol)
 	if service == "" {
-		err = fmt.Errorf("empty service is not supported. info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
+		err = fmt.Errorf("empty service is not supported. service: %s", service)
 		return
 	}
 	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
 	if !exists {
-		err = fmt.Errorf("cluster not found. info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
+		err = fmt.Errorf("cluster not found. service: %s", service)
 		return
 	}
 	clusters := serviceItemArrI.([]serviceMapItem)
@@ -832,10 +814,13 @@ func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.Mot
 		c = clusters[0].cluster
 		return
 	}
+	group := request.GetAttachment(mpro.MGroup)
 	if group == "" {
 		err = fmt.Errorf("multiple clusters are matched with service: %s, but the group is empty", service)
 		return
 	}
+	version := request.GetAttachment(mpro.MVersion)
+	protocol := request.GetAttachment(mpro.MProxyProtocol)
 	for _, j := range clusters {
 		if j.url.IsMatch(service, group, protocol, version) {
 			c = j.cluster
