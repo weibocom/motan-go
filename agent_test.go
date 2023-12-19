@@ -387,7 +387,7 @@ func TestAgent_InitCall(t *testing.T) {
 	}
 
 	//test init cluster with one path and one groups in clusterMap
-	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
+	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
 
 	//test agentHandler call with group

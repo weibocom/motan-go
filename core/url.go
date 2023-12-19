@@ -54,11 +54,20 @@ func (u *URL) IsMatch(service, group, protocol, version string) bool {
 	if group != "" && u.Group != group {
 		return false
 	}
-	if protocol != "" && u.Protocol != protocol {
-		return false
+	// for motan v1 request, parameter protocol should be empty
+	if protocol != "" {
+		if u.Protocol == "motanV1Compatible" {
+			if protocol != "motan2" {
+				return false
+			}
+		} else {
+			if u.Protocol != protocol {
+				return false
+			}
+		}
 	}
-	if version != "" && u.GetParam(VersionKey, "") != version {
-		return false
+	if version != "" && u.GetParam(VersionKey, "") != "" {
+		return version == u.GetParam(VersionKey, "")
 	}
 	return true
 }
@@ -276,7 +285,7 @@ func (u *URL) CanServe(other *URL) bool {
 		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
 		return false
 	}
-	if !IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") {
+	if !(IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") || IsSame(u.Parameters, other.Parameters, VersionKey, "1.0")) {
 		vlog.Errorf("can not serve version, err : v1:%s, v2:%s", u.Parameters[VersionKey], other.Parameters[VersionKey])
 		return false
 	}
