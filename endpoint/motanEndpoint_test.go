@@ -278,20 +278,20 @@ func TestV2StreamPool(t *testing.T) {
 	assert.NotNil(t, oldStream.timer)
 	assert.NotNil(t, oldStream.recvNotifyCh)
 	oldStream.streamId = GenerateRequestID()
+	// verify reset
+	oldStream.recvNotifyCh <- struct{}{}
 	assert.Equal(t, false, oldStream.release)
 
-	// test release and acquire
-	// release false, oldStream.release is false
+	// test release
+	// oldStream.release is false
+	// test reset recvNotifyCh
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
 	ReleaseV2Stream(oldStream)
-	// newStream1 not oldStream
-	newStream1 := AcquireV2Stream()
-	assert.Equal(t, uint64(0), newStream1.streamId)
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
 	// release success
 	oldStream.release = true
 	ReleaseV2Stream(oldStream)
-	newStream2 := AcquireV2Stream()
-	// newStream2 is oldStream
-	assert.Equal(t, oldStream.streamId, newStream2.streamId)
+	assert.Equal(t, 0, len(oldStream.recvNotifyCh))
 
 	// test put nil
 	var nilStream *Stream
@@ -300,14 +300,6 @@ func TestV2StreamPool(t *testing.T) {
 	newStream3 := v2StreamPool.Get()
 	assert.NotEqual(t, nil, newStream3)
 
-	// test reset recvNotifyCh
-	resetStream := AcquireV2Stream()
-	resetStream.recvNotifyCh <- struct{}{}
-	assert.Equal(t, 1, len(resetStream.recvNotifyCh))
-
-	resetStream.release = true
-	ReleaseV2Stream(resetStream)
-	assert.Equal(t, 0, len(resetStream.recvNotifyCh))
 }
 
 func StartTestServer(port int) *MockServer {

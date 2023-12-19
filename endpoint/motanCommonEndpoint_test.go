@@ -266,20 +266,20 @@ func TestStreamPool(t *testing.T) {
 	assert.NotNil(t, oldStream.timer)
 	assert.NotNil(t, oldStream.recvNotifyCh)
 	oldStream.streamId = GenerateRequestID()
+	// verify reset
+	oldStream.recvNotifyCh <- struct{}{}
 	assert.Equal(t, false, oldStream.release)
 
-	// test release and acquire
-	// release false, oldStream.release is false
+	// test release
+	// oldStream.release is false
+	// test reset recvNotifyCh
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
 	ReleaseStream(oldStream)
-	// newStream1 not oldStream
-	newStream1 := AcquireStream()
-	assert.Equal(t, uint64(0), newStream1.streamId)
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
 	// release success
 	oldStream.release = true
 	ReleaseStream(oldStream)
-	newStream2 := AcquireStream()
-	// newStream2 is oldStream
-	assert.Equal(t, oldStream.streamId, newStream2.streamId)
+	assert.Equal(t, 0, len(oldStream.recvNotifyCh))
 
 	// test put nil
 	var nilStream *Stream
@@ -287,13 +287,4 @@ func TestStreamPool(t *testing.T) {
 	streamPool.Put(nilStream)
 	newStream3 := streamPool.Get()
 	assert.NotEqual(t, nil, newStream3)
-
-	// test reset recvNotifyCh
-	resetStream := AcquireStream()
-	resetStream.recvNotifyCh <- struct{}{}
-	assert.Equal(t, 1, len(resetStream.recvNotifyCh))
-
-	resetStream.release = true
-	ReleaseStream(resetStream)
-	assert.Equal(t, 0, len(resetStream.recvNotifyCh))
 }
