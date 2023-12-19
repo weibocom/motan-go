@@ -482,9 +482,9 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		{"test3", "111", "222", "333", "cluster not found. info: {service: test3"},
+		{"test3", "111", "222", "333", "cluster not found. service: test3"},
 		{"test5", "", "", "", "No refers for request"},
-		{"helloService2", "", "", "", "cluster not found. info: {service: helloService2"},
+		{"helloService2", "", "", "", "cluster not found. service: helloService2"},
 	} {
 		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)
