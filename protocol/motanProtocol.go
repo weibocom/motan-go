@@ -398,6 +398,7 @@ func DecodeWithoutBody(buf *bufio.Reader, rs *[]byte, maxContentLength int) (msg
 	msg = AcquireMessage()
 	defer func() {
 		if err != nil {
+			msg.SetAlreadySend()
 			ReleaseMessage(msg)
 		}
 	}()
@@ -739,12 +740,14 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = b
 			} else {
 				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
+				res.SetAlreadySend()
 				ReleaseMessage(res)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
+				res.SetAlreadySend()
 				ReleaseMessage(res)
 				return nil, err
 			}
@@ -816,10 +819,16 @@ func VerifyMeta(k, v string) bool {
 }
 
 func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
-	header := BuildHeader(Res, false, defaultSerialize, requestID, Exception)
-	msg := &Message{Header: header, Metadata: motan.NewStringMap(DefaultMetaSize)}
-	msg.Metadata.Store(MException, errmsg)
-	return msg
+	message := AcquireMessage()
+	message.Header.RequestID = requestID
+	message.Header.SetRequest(false)
+	message.Header.SetProxy(false)
+	message.Header.SetVersion(Version2)
+	message.Header.SetStatus(Exception)
+	message.Header.SetSerialize(defaultSerialize)
+	message.Metadata.Store(MException, errmsg)
+
+	return message
 }
 
 func ExceptionToJSON(e *motan.Exception) string {

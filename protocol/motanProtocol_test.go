@@ -590,6 +590,35 @@ func TestConcurrentGzip(t *testing.T) {
 	fmt.Printf("count:%v, errCount: %v\n", count, errCount)
 }
 
+func TestBuildExceptionResponse(t *testing.T) {
+	// BuildExceptionResponse
+	var requestId uint64 = 1234
+	err := fmt.Errorf("test error")
+	exception := &core.Exception{ErrCode: 500, ErrMsg: err.Error(), ErrType: core.ServiceException}
+	msg := ExceptionToJSON(exception)
+
+	// verify exception message
+	message := BuildExceptionResponse(requestId, msg)
+	assert.Equal(t, requestId, message.Header.RequestID)
+	assert.Equal(t, false, message.Header.isRequest())
+	assert.Equal(t, Res, int(message.Header.MsgType))
+	assert.Equal(t, false, message.Header.IsProxy())
+	assert.Equal(t, Exception, message.Header.GetStatus())
+	assert.Equal(t, msg, message.Metadata.LoadOrEmpty(MException))
+
+	buf := message.Encode()
+	readSlice := make([]byte, 100)
+	newMessage, err := Decode(bufio.NewReader(buf), &readSlice)
+
+	// verify encode and decode exception message
+	assert.Equal(t, message.Header.RequestID, newMessage.Header.RequestID)
+	assert.Equal(t, message.Header.IsProxy(), newMessage.Header.IsProxy())
+	assert.Equal(t, Res, int(message.Header.MsgType))
+	assert.Equal(t, message.Header.isRequest(), newMessage.Header.isRequest())
+	assert.Equal(t, Exception, newMessage.Header.GetStatus())
+	assert.Equal(t, msg, message.Metadata.LoadOrEmpty(MException))
+}
+
 func buildBytes(size int) []byte {
 	baseBytes := []byte("0123456789abcdefghijklmnopqrstuvwxyz")
 	result := bytes.NewBuffer(make([]byte, 0, size))
