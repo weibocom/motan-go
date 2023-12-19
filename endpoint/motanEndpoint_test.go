@@ -227,6 +227,89 @@ func TestAsyncInit(t *testing.T) {
 	time.Sleep(time.Second * 5)
 }
 
+// TestMotanEndpoint_AsyncCallNoResponse verify V2Channel streams memory leak when server not reply response
+// bugs to be fixed
+func TestMotanEndpoint_AsyncCallNoResponse(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+	url.PutParam(motan.TimeOutKey, "2000")
+	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
+	ep := &MotanEndpoint{}
+	ep.SetURL(url)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
+	var resStr string
+	request := &motan.MotanRequest{ServiceName: "test", Method: "test", RPCContext: &motan.RPCContext{AsyncCall: true, Result: &motan.AsyncResult{Reply: &resStr, Done: make(chan *motan.AsyncResult, 5)}}}
+	request.Attachment = motan.NewStringMap(0)
+
+	// server not reply
+	request.SetAttachment("no_response", "true")
+
+	res := ep.Call(request)
+	assert.Nil(t, res.GetException())
+	timeoutTimer := time.NewTimer(time.Second * 3)
+	defer timeoutTimer.Stop()
+	select {
+	case <-request.GetRPCContext(false).Result.Done:
+		t.Errorf("unexpect condition, recv response singnal")
+	case <-timeoutTimer.C:
+		t.Logf("expect condition, not recv response singnal")
+	}
+
+	// Channel.streams will not release stream
+	c := <-ep.channels.getChannels()
+	// it will be zero if server not reply response, bug to be fixed
+	assert.Equal(t, 1, len(c.streams))
+}
+
+func TestV2StreamPool(t *testing.T) {
+	var oldStream *V2Stream
+	// consume v2stream poll until call New func
+	for {
+		oldStream = AcquireV2Stream()
+		if oldStream.release == false {
+			break
+		}
+	}
+	// test new Stream
+	assert.NotNil(t, oldStream)
+	assert.NotNil(t, oldStream.timer)
+	assert.NotNil(t, oldStream.recvNotifyCh)
+	oldStream.streamId = GenerateRequestID()
+	assert.Equal(t, false, oldStream.release)
+
+	// test release and acquire
+	// release false, oldStream.release is false
+	ReleaseV2Stream(oldStream)
+	// newStream1 not oldStream
+	newStream1 := AcquireV2Stream()
+	assert.Equal(t, uint64(0), newStream1.streamId)
+	// release success
+	oldStream.release = true
+	ReleaseV2Stream(oldStream)
+	newStream2 := AcquireV2Stream()
+	// newStream2 is oldStream
+	assert.Equal(t, oldStream.streamId, newStream2.streamId)
+
+	// test put nil
+	var nilStream *Stream
+	// can not put nil to pool
+	v2StreamPool.Put(nilStream)
+	newStream3 := v2StreamPool.Get()
+	assert.NotEqual(t, nil, newStream3)
+
+	// test reset recvNotifyCh
+	resetStream := AcquireV2Stream()
+	resetStream.recvNotifyCh <- struct{}{}
+	assert.Equal(t, 1, len(resetStream.recvNotifyCh))
+
+	resetStream.release = true
+	ReleaseV2Stream(resetStream)
+	assert.Equal(t, 0, len(resetStream.recvNotifyCh))
+}
+
 func StartTestServer(port int) *MockServer {
 	m := &MockServer{Port: port}
 	m.Start()
@@ -280,6 +363,10 @@ func handleConnection(conn net.Conn, timeout int) {
 }
 
 func processMsg(msg *protocol.Message, conn net.Conn) {
+	// mock async call, but server not reply response
+	if _, ok := msg.Metadata.Load("no_response"); ok {
+		return
+	}
 	var res *protocol.Message
 	var tc *motan.TraceContext
 	var err error

@@ -34,7 +34,14 @@ var (
 
 	errPanic     = errors.New("panic error")
 	v2StreamPool = sync.Pool{New: func() interface{} {
-		return new(V2Stream)
+		return &V2Stream{
+			recvNotifyCh: make(chan struct{}, 1),
+			timer: func() *time.Timer {
+				t := time.NewTimer(time.Duration(0))
+				t.Stop()
+				return t
+			}(),
+		}
 	}}
 )
 
@@ -394,6 +401,11 @@ type V2Stream struct {
 }
 
 func (s *V2Stream) Reset() {
+	// not consume when timeout between Channel.handleMsg and Stream.Recv
+	select {
+	case <-s.recvNotifyCh:
+	default:
+	}
 	//use atomic.Swap avoid data race between goroutines(Channel.Call and Stream.notify) when ReleaseStream
 	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.channel)), nil)
 	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.sendMsg)), nil)
@@ -846,11 +858,7 @@ func GetDefaultMotanEPAsynInit() bool {
 }
 
 func AcquireV2Stream() *V2Stream {
-	v := v2StreamPool.Get()
-	if v == nil {
-		return &V2Stream{}
-	}
-	return v.(*V2Stream)
+	return v2StreamPool.Get().(*V2Stream)
 }
 
 func ReleaseV2Stream(stream *V2Stream) {

@@ -215,3 +215,85 @@ func TestV1AsyncInit(t *testing.T) {
 	ep.Initialize()
 	time.Sleep(time.Second * 5)
 }
+
+// TestMotanCommonEndpoint_AsyncCallNoResponse verify V2Channel streams memory leak when server not reply response
+// TODO::  bugs to be fixed
+func TestMotanCommonEndpoint_AsyncCallNoResponse(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url.PutParam(motan.TimeOutKey, "2000")
+	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
+	ep := &MotanCommonEndpoint{}
+	ep.SetURL(url)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
+	var resStr string
+	request := &motan.MotanRequest{ServiceName: "test", Method: "test", RPCContext: &motan.RPCContext{AsyncCall: true, Result: &motan.AsyncResult{Reply: &resStr, Done: make(chan *motan.AsyncResult, 5)}}}
+	request.Attachment = motan.NewStringMap(0)
+	// server not reply
+	request.SetAttachment("no_response", "true")
+
+	res := ep.Call(request)
+	assert.Nil(t, res.GetException())
+	timeoutTimer := time.NewTimer(time.Second * 3)
+	defer timeoutTimer.Stop()
+	select {
+	case <-request.GetRPCContext(false).Result.Done:
+		t.Errorf("unexpect condition, recv response singnal")
+	case <-timeoutTimer.C:
+		t.Logf("expect condition, not recv response singnal")
+	}
+
+	// Channel.streams will not release stream
+	c := <-ep.channels.getChannels()
+	// it will be zero if server not reply response, bug to be fixed
+	assert.Equal(t, 1, len(c.streams))
+}
+
+func TestStreamPool(t *testing.T) {
+	var oldStream *Stream
+	// consume stream poll until call New func
+	for {
+		oldStream = AcquireStream()
+		if oldStream.release == false {
+			break
+		}
+	}
+	// test new Stream
+	assert.NotNil(t, oldStream)
+	assert.NotNil(t, oldStream.timer)
+	assert.NotNil(t, oldStream.recvNotifyCh)
+	oldStream.streamId = GenerateRequestID()
+	assert.Equal(t, false, oldStream.release)
+
+	// test release and acquire
+	// release false, oldStream.release is false
+	ReleaseStream(oldStream)
+	// newStream1 not oldStream
+	newStream1 := AcquireStream()
+	assert.Equal(t, uint64(0), newStream1.streamId)
+	// release success
+	oldStream.release = true
+	ReleaseStream(oldStream)
+	newStream2 := AcquireStream()
+	// newStream2 is oldStream
+	assert.Equal(t, oldStream.streamId, newStream2.streamId)
+
+	// test put nil
+	var nilStream *Stream
+	// can not put nil to pool
+	streamPool.Put(nilStream)
+	newStream3 := streamPool.Get()
+	assert.NotEqual(t, nil, newStream3)
+
+	// test reset recvNotifyCh
+	resetStream := AcquireStream()
+	resetStream.recvNotifyCh <- struct{}{}
+	assert.Equal(t, 1, len(resetStream.recvNotifyCh))
+
+	resetStream.release = true
+	ReleaseStream(resetStream)
+	assert.Equal(t, 0, len(resetStream.recvNotifyCh))
+}

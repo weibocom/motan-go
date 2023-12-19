@@ -17,7 +17,14 @@ import (
 
 var (
 	streamPool = sync.Pool{New: func() interface{} {
-		return new(Stream)
+		return &Stream{
+			recvNotifyCh: make(chan struct{}, 1),
+			timer: func() *time.Timer {
+				t := time.NewTimer(time.Duration(0))
+				t.Stop()
+				return t
+			}(),
+		}
 	}}
 )
 
@@ -358,6 +365,11 @@ type Stream struct {
 }
 
 func (s *Stream) Reset() {
+	// not consume when timeout between Channel.handleMsg and Stream.Recv
+	select {
+	case <-s.recvNotifyCh:
+	default:
+	}
 	//use atomic.Swap avoid data race between goroutines(Channel.Call and Stream.notify) when ReleaseStream
 	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.channel)), nil)
 	atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&s.req)), nil)
@@ -366,11 +378,7 @@ func (s *Stream) Reset() {
 }
 
 func (s *Stream) Send() (err error) {
-	if s.timer == nil {
-		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
-	} else {
-		s.timer.Reset(s.deadline.Sub(time.Now()))
-	}
+	s.timer.Reset(s.deadline.Sub(time.Now()))
 	defer s.timer.Stop()
 
 	var bytes []byte
@@ -438,11 +446,7 @@ func (s *Stream) Recv() (motan.Response, error) {
 			s.release = true
 		}
 	}()
-	if s.timer == nil {
-		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
-	} else {
-		s.timer.Reset(s.deadline.Sub(time.Now()))
-	}
+	s.timer.Reset(s.deadline.Sub(time.Now()))
 	defer s.timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
@@ -542,9 +546,6 @@ func (c *Channel) NewStream(req motan.Request, rc *motan.RPCContext) (*Stream, e
 	s.channel = c
 	s.isHeartbeat = false
 	s.req = req
-	if s.recvNotifyCh == nil {
-		s.recvNotifyCh = make(chan struct{}, 1)
-	}
 	s.deadline = time.Now().Add(defaultRequestTimeout)
 	s.rc = rc
 	s.isClose.Store(false)
@@ -564,9 +565,6 @@ func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 	s.channel = c
 	s.isHeartbeat = true
 	s.heartbeatVersion = heartbeatVersion
-	if s.recvNotifyCh == nil {
-		s.recvNotifyCh = make(chan struct{}, 1)
-	}
 	s.deadline = time.Now().Add(defaultRequestTimeout)
 	s.isClose.Store(false)
 	s.release = true
@@ -905,11 +903,7 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 }
 
 func AcquireStream() *Stream {
-	v := streamPool.Get()
-	if v == nil {
-		return &Stream{}
-	}
-	return v.(*Stream)
+	return streamPool.Get().(*Stream)
 }
 
 func ReleaseStream(stream *Stream) {
