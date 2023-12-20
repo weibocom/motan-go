@@ -242,6 +242,8 @@ func TestZigzag(t *testing.T) {
 
 func TestBytesBuffer_WriteString_Grow(t *testing.T) {
 	a := BytesBuffer{}
+	a.WriteString("")
+	assert.Equal(t, 0, len(a.buf))
 	a.WriteString("abc")
 	assert.Equal(t, "abc", string(a.Bytes()))
 	assert.Equal(t, 3, len(a.buf))
