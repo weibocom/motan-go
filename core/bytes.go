@@ -8,8 +8,11 @@ import (
 )
 
 var (
-	defaultBytesBufferPool = sync.Pool{New: func() interface{} {
-		return new(BytesBuffer)
+	byteBufferPool = sync.Pool{New: func() interface{} {
+		return &BytesBuffer{
+			temp:  make([]byte, 8),
+			order: binary.BigEndian,
+		}
 	}}
 )
 
@@ -29,20 +32,6 @@ var ErrOverflow = errors.New("BytesBuffer: integer overflow")
 // NewBytesBuffer create an empty BytesBuffer with initial size
 func NewBytesBuffer(initsize int) *BytesBuffer {
 	return NewBytesBufferWithOrder(initsize, binary.BigEndian)
-}
-
-// NewBytesBufferFromDefaultPool create an empty BytesBuffer with initial size and byte order from defaultBytesBufferPool
-func NewBytesBufferFromDefaultPool(initSize int) *BytesBuffer {
-	bb := AcquireBytesBufferFromDefaultPool()
-	if bb.buf == nil {
-		bb.buf = make([]byte, initSize)
-	}
-	if bb.temp == nil {
-		bb.temp = make([]byte, 8)
-	}
-	bb.order = binary.BigEndian
-
-	return bb
 }
 
 // NewBytesBufferWithOrder create an empty BytesBuffer with initial size and byte order
@@ -295,17 +284,19 @@ func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
 
-func AcquireBytesBufferFromDefaultPool() *BytesBuffer {
-	b := defaultBytesBufferPool.Get()
-	if b == nil {
-		return &BytesBuffer{}
+// AcquireBytesBuffer create an empty BytesBuffer with initial size and byte order from byteBufferPool
+func AcquireBytesBuffer(initSize int) *BytesBuffer {
+	bb := byteBufferPool.Get().(*BytesBuffer)
+	if bb.buf == nil {
+		bb.buf = make([]byte, initSize)
 	}
-	return b.(*BytesBuffer)
+	return bb
 }
 
-func ReleaseBytesBufferToDefaultPool(b *BytesBuffer) {
+// ReleaseBytesBuffer put the BytesBuffer to byteBufferPool
+func ReleaseBytesBuffer(b *BytesBuffer) {
 	if b != nil {
 		b.Reset()
-		defaultBytesBufferPool.Put(b)
+		byteBufferPool.Put(b)
 	}
 }

@@ -179,7 +179,7 @@ func TestEncode(t *testing.T) {
 	assertTrue(string(nb) == "gzip encode", "body", t)
 }
 
-func TestMessage_EncodeWithoutBody(t *testing.T) {
+func TestMessage_GetEncodedBytes(t *testing.T) {
 	h := &Header{}
 	h.SetVersion(Version2)
 	h.SetStatus(6)
@@ -195,16 +195,19 @@ func TestMessage_EncodeWithoutBody(t *testing.T) {
 	meta.Store("k1", "v1")
 	body := []byte("testbody")
 	msg := &Message{Header: h, Metadata: meta, Body: body}
-	buf := msg.EncodeWithoutBody()
+	msg.Encode0()
+	encodedBytes := msg.GetEncodedBytes()
+	buf := core.CreateBytesBuffer(encodedBytes[0])
 
+	assert.Equal(t, "testbody", string(encodedBytes[1]))
+
+	// append body to buf
+	buf.Write(msg.Body)
 	// verify decode
 	readSlice := make([]byte, 100)
-	newMsg, bodySize, err := DecodeWithoutBody(bufio.NewReader(buf), &readSlice, core.DefaultMaxContentLength)
+	newMsg, err := Decode(bufio.NewReader(buf), &readSlice)
 	if err != nil || newMsg == nil {
 		t.Fatalf("encode message fail")
-	}
-	if bodySize != len(body) {
-		t.Fatalf("bodysize not correct. body length: %d, bodySize: %d", len(body), bodySize)
 	}
 
 	// verify header
@@ -221,7 +224,7 @@ func TestMessage_EncodeWithoutBody(t *testing.T) {
 	assertTrue(newMsg.Metadata.LoadOrEmpty("k1") == "v1", "meta", t)
 
 	// verify body nil
-	assertTrue(newMsg.Body == nil, "body", t)
+	assertTrue(len(newMsg.Body) == len(msg.Body), "body", t)
 }
 
 func TestPool(t *testing.T) {
