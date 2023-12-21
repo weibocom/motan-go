@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/valyala/fasthttp"
 	"github.com/weibocom/motan-go/core"
@@ -63,7 +64,7 @@ const (
 var (
 	WhitespaceSplitPattern        = regexp.MustCompile(`\s+`)
 	findRewriteVarPattern         = regexp.MustCompile(`\{[0-9a-zA-Z_-]+\}`)
-	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString, core.HostKey, "Host"}
+	httpProxySpecifiedAttachments = []string{Proxy, Method, QueryString, core.HostKey, HeaderHost}
 	InnerAttachmentsConvertMap    = map[string]string{
 		mpro.MPath:          "MOTAN-p",
 		mpro.MMethod:        "MOTAN-m",
@@ -88,7 +89,42 @@ var (
 		}
 		return uri
 	}
+	httpResponsePool = sync.Pool{New: func() interface{} {
+		res := &HttpMotanResponse{}
+		res.RPCContext = &core.RPCContext{}
+		return res
+	}}
 )
+
+// HttpMotanResponse Resposne used in http provider to deal with http response
+type HttpMotanResponse struct {
+	core.MotanResponse
+	HttpResponse *fasthttp.Response
+}
+
+func (m *HttpMotanResponse) Reset() {
+	m.RequestID = 0
+	m.Value = nil
+	m.Exception = nil
+	m.ProcessTime = 0
+	m.Attachment = nil
+	m.RPCContext.Reset()
+	m.HttpResponse = nil
+}
+
+func AcquireHttpMotanResponse() *HttpMotanResponse {
+	return httpResponsePool.Get().(*HttpMotanResponse)
+}
+
+func ReleaseHttpMotanResponse(m *HttpMotanResponse) {
+	if m != nil {
+		if m.HttpResponse != nil {
+			fasthttp.ReleaseResponse(m.HttpResponse)
+		}
+		m.Reset()
+		httpResponsePool.Put(m)
+	}
+}
 
 func PatternSplit(s string, pattern *regexp.Regexp) []string {
 	matches := pattern.FindAllStringIndex(s, -1)
@@ -446,6 +482,11 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		fasthttpRequest.URI().SetQueryString(queryString)
 	}
 	motanRequest.GetAttachments().Range(func(k, v string) bool {
+		if convertK, ok := InnerAttachmentsConvertMap[k]; ok {
+			k = convertK
+			fasthttpRequest.Header.Set(k, v)
+			return true
+		}
 		// ignore some specified key
 		for _, attachmentKey := range httpProxySpecifiedAttachments {
 			if k == attachmentKey {
@@ -460,9 +501,6 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 		if k == HeaderContentType || k == HeaderContentTypeLowerCase {
 			fasthttpRequest.Header.SetContentType(v)
 			return true
-		}
-		if convertK, ok := InnerAttachmentsConvertMap[k]; ok {
-			k = convertK
 		}
 		// http header private prefix
 		if strings.HasPrefix(k, HeaderPrefix) {
@@ -520,12 +558,10 @@ func FasthttpResponseToMotanResponse(motanResponse core.Response, fasthttpRespon
 	fasthttpResponse.Header.VisitAll(func(k, v []byte) {
 		motanResponse.SetAttachment(string(k), string(v))
 	})
-	if resp, ok := motanResponse.(*core.HttpMotanResponse); ok {
+	if resp, ok := motanResponse.(*HttpMotanResponse); ok {
 		httpResponseBody := fasthttpResponse.Body()
-		if httpResponseBody != nil {
-			// direct assign to resp.Value
-			resp.Value = httpResponseBody
-		}
+		// direct assign to resp.Value
+		resp.Value = httpResponseBody
 		// record this http response, release it when releasing HttpMotanResponse
 		resp.HttpResponse = fasthttpResponse
 	}

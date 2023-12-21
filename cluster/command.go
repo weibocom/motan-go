@@ -151,7 +151,7 @@ func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) m
 	mixGroups := cluster.GetURL().GetParam(motan.MixGroups, "")
 	if mixGroups != "" {
 		groups := strings.Split(mixGroups, ",")
-		command := &ClientCommand{CommandType: CMDTrafficControl, Index: 0, Version: "1.0", MergeGroups: make([]string, 0, len(groups)+1)}
+		command := &ClientCommand{CommandType: CMDTrafficControl, Index: 0, Version: motan.DefaultReferVersion, MergeGroups: make([]string, 0, len(groups)+1)}
 		ownGroup := cluster.GetURL().Group
 		command.MergeGroups = append(command.MergeGroups, ownGroup)
 		for _, group := range groups {

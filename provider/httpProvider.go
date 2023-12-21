@@ -140,18 +140,21 @@ func (h *HTTPProvider) SetContext(context *motan.Context) {
 	h.gctx = context
 }
 
-// Rewrite do rewrite
-func (h *HTTPProvider) Rewrite(httpReq *fasthttp.Request, request motan.Request) (string, error) {
-	var query []byte
-	// init query string bytes if needed.
-	if h.locationMatcher.NeedURLQueryString() {
-		query = httpReq.URI().QueryString()
+// rewrite do rewrite
+func (h *HTTPProvider) rewrite(httpReq *fasthttp.Request, request motan.Request) (string, error) {
+	if h.enableRewrite {
+		var query []byte
+		// init query string bytes if needed.
+		if h.locationMatcher.NeedURLQueryString() {
+			query = httpReq.URI().QueryString()
+		}
+		_, path, ok := h.locationMatcher.Pick(request.GetMethod(), query, true)
+		if !ok {
+			return "", errors.New("service not found")
+		}
+		return path, nil
 	}
-	_, path, ok := h.locationMatcher.Pick(request.GetMethod(), query, true)
-	if !ok {
-		return "", errors.New("service not found")
-	}
-	return path, nil
+	return request.GetMethod(), nil
 }
 
 func buildReqURL(request motan.Request, h *HTTPProvider) (string, string, error) {
@@ -234,7 +237,8 @@ func buildQueryStr(request motan.Request, url *motan.URL, mixVars []string) (res
 }
 
 func (h *HTTPProvider) DoTransparentProxy(request motan.Request, t int64, ip string) motan.Response {
-	resp := motan.AcquireHttpMotanResponse()
+	resp := mhttp.AcquireHttpMotanResponse()
+	resp.RequestID = request.GetRequestID()
 	var headerBytes []byte
 	var bodyBytes []byte
 	toType := []interface{}{&headerBytes, &bodyBytes}
@@ -252,12 +256,10 @@ func (h *HTTPProvider) DoTransparentProxy(request motan.Request, t int64, ip str
 	//do rewrite
 	rewritePath := request.GetMethod()
 	var err error
-	if h.enableRewrite {
-		rewritePath, err = h.Rewrite(httpReq, request)
-		if err != nil {
-			fillHttpException(resp, http.StatusNotFound, t, err.Error())
-			return resp
-		}
+	rewritePath, err = h.rewrite(httpReq, request)
+	if err != nil {
+		fillHttpException(resp, http.StatusNotFound, t, err.Error())
+		return resp
 	}
 	// sets rewrite
 	httpReq.URI().SetScheme(h.proxySchema)
@@ -280,11 +282,9 @@ func (h *HTTPProvider) DoTransparentProxy(request motan.Request, t int64, ip str
 		fillHttpException(resp, http.StatusServiceUnavailable, t, err.Error())
 		return resp
 	}
-	if h.enableHttpException {
-		if httpRes.StatusCode() >= 400 {
-			fillHttpException(resp, httpRes.StatusCode(), t, string(httpRes.Body()))
-			return resp
-		}
+	if h.enableHttpException && httpRes.StatusCode() >= 400 {
+		fillHttpException(resp, httpRes.StatusCode(), t, string(httpRes.Body()))
+		return resp
 	}
 	headerBuffer := &bytes.Buffer{}
 	httpRes.Header.Del("Connection")
@@ -300,7 +300,8 @@ func (h *HTTPProvider) DoTransparentProxy(request motan.Request, t int64, ip str
 
 // DoProxy deal with Request start from a rpc client
 func (h *HTTPProvider) DoProxy(request motan.Request, t int64, ip string) motan.Response {
-	resp := motan.AcquireHttpMotanResponse()
+	resp := mhttp.AcquireHttpMotanResponse()
+	resp.RequestID = request.GetRequestID()
 	if err := request.ProcessDeserializable(nil); err != nil {
 		fillHttpException(resp, http.StatusBadRequest, t, err.Error())
 		return resp
@@ -319,12 +320,10 @@ func (h *HTTPProvider) DoProxy(request motan.Request, t int64, ip string) motan.
 		return resp
 	}
 	rewritePath := request.GetMethod()
-	if h.enableRewrite {
-		rewritePath, err = h.Rewrite(httpReq, request)
-		if err != nil {
-			fillHttpException(resp, http.StatusNotFound, t, err.Error())
-			return resp
-		}
+	rewritePath, err = h.rewrite(httpReq, request)
+	if err != nil {
+		fillHttpException(resp, http.StatusNotFound, t, err.Error())
+		return resp
 	}
 	httpReq.URI().SetScheme(h.proxySchema)
 	httpReq.URI().SetPath(rewritePath)
@@ -339,11 +338,9 @@ func (h *HTTPProvider) DoProxy(request motan.Request, t int64, ip string) motan.
 		fillHttpException(resp, http.StatusServiceUnavailable, t, err.Error())
 		return resp
 	}
-	if h.enableHttpException {
-		if httpRes.StatusCode() >= 400 {
-			fillHttpException(resp, httpRes.StatusCode(), t, string(httpRes.Body()))
-			return resp
-		}
+	if h.enableHttpException && httpRes.StatusCode() >= 400 {
+		fillHttpException(resp, httpRes.StatusCode(), t, string(httpRes.Body()))
+		return resp
 	}
 	mhttp.FasthttpResponseToMotanResponse(resp, httpRes)
 	resp.ProcessTime = (time.Now().UnixNano() - t) / 1e6
@@ -353,7 +350,8 @@ func (h *HTTPProvider) DoProxy(request motan.Request, t int64, ip string) motan.
 
 // DoFormatURLQuery use ordinary client and parse the format url
 func (h *HTTPProvider) DoFormatURLQuery(request motan.Request, t int64, ip string) motan.Response {
-	resp := motan.AcquireHttpMotanResponse()
+	resp := mhttp.AcquireHttpMotanResponse()
+	resp.RequestID = request.GetRequestID()
 	toType := make([]interface{}, 1)
 	if err := request.ProcessDeserializable(toType); err != nil {
 		fillHttpException(resp, http.StatusBadRequest, t, err.Error())
@@ -431,11 +429,9 @@ func (h *HTTPProvider) DoFormatURLQuery(request motan.Request, t int64, ip strin
 			ErrMsg: fmt.Sprintf("%s", err), ErrType: http.StatusServiceUnavailable}
 		return resp
 	}
-	if h.enableHttpException {
-		if statusCode >= 400 {
-			fillHttpException(resp, statusCode, t, string(body))
-			return resp
-		}
+	if h.enableHttpException && statusCode >= 400 {
+		fillHttpException(resp, statusCode, t, string(body))
+		return resp
 	}
 	request.GetAttachments().Range(func(k, v string) bool {
 		resp.SetAttachment(k, v)
@@ -514,12 +510,12 @@ func fillExceptionWithCode(resp *motan.MotanResponse, code int, start int64, err
 	resp.Exception = &motan.Exception{ErrCode: code, ErrMsg: fmt.Sprintf("%s", err), ErrType: code}
 }
 
-func fillHttpExceptionWithCode(resp *motan.HttpMotanResponse, statusCode int, errType int, start int64, msg string) {
+func fillHttpExceptionWithCode(resp *mhttp.HttpMotanResponse, statusCode int, errType int, start int64, msg string) {
 	resp.ProcessTime = (time.Now().UnixNano() - start) / 1e6
 	resp.Exception = &motan.Exception{ErrCode: statusCode, ErrMsg: msg, ErrType: errType}
 }
 
-func fillHttpException(resp *motan.HttpMotanResponse, statusCode int, start int64, msg string) {
+func fillHttpException(resp *mhttp.HttpMotanResponse, statusCode int, start int64, msg string) {
 	fillHttpExceptionWithCode(resp, statusCode, motan.BizException, start, msg)
 }
 
@@ -527,6 +523,6 @@ func fillException(resp *motan.MotanResponse, start int64, err error) {
 	fillExceptionWithCode(resp, http.StatusServiceUnavailable, start, err)
 }
 
-func updateUpstreamStatusCode(resp *motan.HttpMotanResponse, statusCode int) {
+func updateUpstreamStatusCode(resp *mhttp.HttpMotanResponse, statusCode int) {
 	resp.SetAttachment(motan.MetaUpstreamCode, strconv.Itoa(statusCode))
 }

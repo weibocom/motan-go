@@ -416,7 +416,7 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		// 只传service，且只有一个cluster，findcCluster 会正常返回
+		// only input service，and there is only one cluster，findCluster would return successfully
 		{"test0", "", "", "", "No refers for request"},
 		{"test0", "g0", "", "", "No refers for request"},
 		{"test0", "g0", "http", "", "No refers for request"},
@@ -426,7 +426,7 @@ func TestAgent_InitCall(t *testing.T) {
 		{"test", "g1", "motan2", "", "No refers for request"},
 		{"test", "g1", "http", "1.3", "No refers for request"},
 		{"test", "b", "c", "d", "no cluster matches the request"},
-		// 同一个service有多个cluster可以匹配，但是group没有传
+		// one service matches multiple clusters, without passing group
 		{"test", "", "c", "d", "multiple clusters are matched with service"},
 	} {
 		request.ServiceName = v.service

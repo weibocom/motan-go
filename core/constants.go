@@ -129,3 +129,7 @@ const (
 	EUnkonwnMsg  = 1003
 	EConvertMsg  = 1004
 )
+
+const (
+	DefaultReferVersion = "1.0"
+)
