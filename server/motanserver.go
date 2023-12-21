@@ -184,7 +184,6 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				break
 			}
 
-			//go m.processV2(msg, t, ip, conn)
 			processPool.Submit(func() {
 				m.processV2(msg, t, ip, conn)
 			})

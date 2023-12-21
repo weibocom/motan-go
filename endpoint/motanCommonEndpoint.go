@@ -672,7 +672,7 @@ func (c *Channel) recvLoop() error {
 		if err != nil {
 			return err
 		}
-		//go c.handleMsg(msg, t)
+
 		handleMsgPool.Submit(func() {
 			c.handleMsg(msg, t)
 		})
