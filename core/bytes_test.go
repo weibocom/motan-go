@@ -260,6 +260,13 @@ func TestBytesBuffer_WriteString_NoGrow(t *testing.T) {
 }
 
 func TestDefaultBytesBufferPool(t *testing.T) {
+	// consume pool
+	for {
+		bb := bytesBufferPool.Get().(*BytesBuffer)
+		if bb.buf == nil {
+			break
+		}
+	}
 	// test new BytesBuffer
 	bb := AcquireBytesBuffer(10)
 	assert.Equal(t, 0, bb.Len())
@@ -277,10 +284,10 @@ func TestDefaultBytesBufferPool(t *testing.T) {
 	// test put nil
 	var nilByteBuffer *BytesBuffer
 	// can not put nil to pool
-	byteBufferPool.Put(nilByteBuffer)
-	nilBb := byteBufferPool.Get()
+	ReleaseBytesBuffer(nilByteBuffer)
+	nilBb := bytesBufferPool.Get().(*BytesBuffer)
 	assert.NotEqual(t, nil, nilBb)
-	byteBufferPool.Put(nilBb)
+	ReleaseBytesBuffer(nilBb)
 	notNilBb := AcquireBytesBuffer(10)
 	assert.NotEqual(t, nil, notNilBb)
 }

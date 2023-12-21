@@ -21,7 +21,7 @@ import (
 const (
 	DefaultMetaSize         = 16
 	DefaultMaxContentLength = 10 * 1024 * 1024
-	DefaultDecodeLength     = 100
+	DefaultBufferSize       = 256
 )
 
 // message type
@@ -112,8 +112,8 @@ var (
 	DefaultGzipLevel = gzip.BestSpeed
 
 	defaultSerialize = Simple
-	writerPool       = &sync.Pool{}                         // for gzip writer
-	readBufPool      = &sync.Pool{}                         // for gzip read buffer
+	writerPool       = &sync.Pool{} // for gzip writer
+	readBufPool      = &sync.Pool{} // for gzip read buffer
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
 	}}
@@ -277,7 +277,7 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 // unexpected if call Message.GetEncodedBytes after rewrite result(*motan.BytesBuffer)
 func (msg *Message) Encode0() {
 	if msg.bytesBuffer == nil {
-		msg.bytesBuffer = motan.NewBytesBuffer(HeaderLength + 256 + 8)
+		msg.bytesBuffer = motan.NewBytesBuffer(DefaultBufferSize)
 	} else {
 		msg.bytesBuffer.Reset()
 	}
@@ -307,19 +307,16 @@ func (msg *Message) Encode0() {
 		return true
 	})
 	metaWpos := msg.bytesBuffer.GetWPos()
-	metaSize := metaWpos - HeaderLength - 4
-
+	metaSize := 0
+	if metaWpos != HeaderLength+4 {
+		// rewrite meta last char '\n'
+		metaSize = metaWpos - HeaderLength - 4 - 1
+		metaWpos -= 1
+	}
 	msg.bytesBuffer.SetWPos(HeaderLength)
-	if metaSize > 0 {
-		// remove last char '\n'
-		metaSize -= 1
-	}
 	msg.bytesBuffer.WriteUint32(uint32(metaSize))
-	if metaSize > 0 {
-		// rewrite last char '\n'
-		msg.bytesBuffer.SetWPos(metaWpos - 1)
-	}
 
+	msg.bytesBuffer.SetWPos(metaWpos)
 	// encode body size
 	bodySize := len(msg.Body)
 	msg.bytesBuffer.WriteUint32(uint32(bodySize))

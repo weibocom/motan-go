@@ -610,7 +610,7 @@ func (c *V2Channel) recv() {
 }
 
 func (c *V2Channel) recvLoop() error {
-	decodeBuf := make([]byte, mpro.DefaultDecodeLength)
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		res, t, err := mpro.DecodeWithTime(c.bufRead, &decodeBuf, c.config.MaxContentLength)
 		if err != nil {

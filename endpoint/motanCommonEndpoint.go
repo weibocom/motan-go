@@ -365,8 +365,8 @@ func (s *Stream) Reset() {
 	}
 	s.channel = nil
 	s.req = nil
-	s.req = nil
-	s.req = nil
+	s.res = nil
+	s.rc = nil
 }
 
 func (s *Stream) Send() (err error) {
@@ -650,7 +650,7 @@ func (c *Channel) recv() {
 }
 
 func (c *Channel) recvLoop() error {
-	decodeBuf := make([]byte, mpro.DefaultDecodeLength)
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		v, err := mpro.CheckMotanVersion(c.bufRead)
 		if err != nil {

@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	byteBufferPool = sync.Pool{New: func() interface{} {
+	bytesBufferPool = sync.Pool{New: func() interface{} {
 		return &BytesBuffer{
 			temp:  make([]byte, 8),
 			order: binary.BigEndian,
@@ -284,19 +284,19 @@ func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
 
-// AcquireBytesBuffer create an empty BytesBuffer with initial size and byte order from byteBufferPool
+// AcquireBytesBuffer create an empty BytesBuffer with initial size and byte order from bytesBufferPool
 func AcquireBytesBuffer(initSize int) *BytesBuffer {
-	bb := byteBufferPool.Get().(*BytesBuffer)
+	bb := bytesBufferPool.Get().(*BytesBuffer)
 	if bb.buf == nil {
 		bb.buf = make([]byte, initSize)
 	}
 	return bb
 }
 
-// ReleaseBytesBuffer put the BytesBuffer to byteBufferPool
+// ReleaseBytesBuffer put the BytesBuffer to bytesBufferPool
 func ReleaseBytesBuffer(b *BytesBuffer) {
 	if b != nil {
 		b.Reset()
-		byteBufferPool.Put(b)
+		bytesBufferPool.Put(b)
 	}
 }

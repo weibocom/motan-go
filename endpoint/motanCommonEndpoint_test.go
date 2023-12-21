@@ -258,7 +258,7 @@ func TestMotanCommonEndpoint_AsyncCallNoResponse(t *testing.T) {
 		t.Logf("expect condition, not recv response singnal")
 	}
 
-	// Channel.streams will not canRelease stream
+	// Channel.streams can`t release stream
 	c := <-ep.channels.getChannels()
 	// it will be zero if server not reply response, bug to be fixed
 	assert.Equal(t, 1, len(c.streams))
@@ -281,12 +281,12 @@ func TestStreamPool(t *testing.T) {
 	oldStream.recvNotifyCh <- struct{}{}
 
 	// test canRelease
-	// oldStream.canRelease is false
+	// oldStream.canRelease is not ture，release fail
 	// test reset recvNotifyCh
 	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
 	releaseStream(oldStream)
 	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
-	// canRelease success
+	// release success
 	oldStream.canRelease.Store(true)
 	releaseStream(oldStream)
 	assert.Equal(t, 0, len(oldStream.recvNotifyCh))
@@ -294,8 +294,8 @@ func TestStreamPool(t *testing.T) {
 	// test put nil
 	var nilStream *Stream
 	// can not put nil to pool
-	streamPool.Put(nilStream)
-	newStream3 := streamPool.Get()
+	releaseStream(nilStream)
+	newStream3 := acquireStream()
 	assert.NotEqual(t, nil, newStream3)
 }
 

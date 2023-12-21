@@ -151,7 +151,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	} else {
 		ip = getRemoteIP(conn.RemoteAddr().String())
 	}
-	decodeBuf := make([]byte, mpro.DefaultDecodeLength)
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		v, err := mpro.CheckMotanVersion(buf)
 		if err != nil {
