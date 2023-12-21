@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"errors"
+	"github.com/panjf2000/ants/v2"
 	"net"
 	"strconv"
 	"strings"
@@ -19,6 +20,15 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
+var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
+
+func SetProcessPoolSize(size int) {
+	processPool.Tune(size)
+}
+
+func GetProcessPoolSize() int {
+	return processPool.Cap()
+}
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
@@ -151,7 +161,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	} else {
 		ip = getRemoteIP(conn.RemoteAddr().String())
 	}
-	decodeBuf := make([]byte, motan.DefaultDecodeLength)
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		v, err := mpro.CheckMotanVersion(buf)
 		if err != nil {
@@ -174,7 +184,9 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				break
 			}
 
-			go m.processV2(msg, t, ip, conn)
+			processPool.Submit(func() {
+				m.processV2(msg, t, ip, conn)
+			})
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s", v, conn.RemoteAddr().String())
 			break
@@ -246,14 +258,14 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	// recover the communication identifier
 	res.Header.RequestID = lastRequestID
-	res.EncodeWithoutBody()
+	res.Encode0()
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
 	var sendBuf net.Buffers = res.GetEncodedBytes()
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
 	_, err := sendBuf.WriteTo(conn)
-	res.SetAlreadySend()
+	res.SetCanRelease()
 	if err != nil {
 		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()

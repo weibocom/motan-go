@@ -7,7 +7,7 @@ import (
 
 func TestWrite(t *testing.T) {
 	// new BytesBuffer
-	buf := newInnerBytesBuffer()
+	buf := acquireBytesBuffer()
 	if buf.Len() != 0 {
 		t.Errorf("new buf length not zero.")
 	}
@@ -69,7 +69,7 @@ func TestWrite(t *testing.T) {
 }
 
 func TestRead(t *testing.T) {
-	buf := newInnerBytesBuffer()
+	buf := acquireBytesBuffer()
 	string1 := "aaaaaaaaaaaa"
 	buf.WriteString(string1)
 	buf.WriteUint64String(uint64(len(string1)))
@@ -83,7 +83,7 @@ func TestRead(t *testing.T) {
 	buf.WriteInt64String(int64(-len(string2)))
 
 	data := buf.Bytes()
-	buf2 := createInnerBytesBuffer(data)
+	buf2 := &innerBytesBuffer{data}
 	rsize := len(string1) + 2 + 5 + 3 + len(string2) + 2 + 4 + 3
 	if buf2.Len() != rsize {
 		t.Errorf("read buf len not correct. buf:%v\n", buf2)
