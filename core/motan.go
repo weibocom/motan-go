@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"github.com/valyala/fasthttp"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,12 +26,6 @@ var (
 		return &MotanResponse{
 			RPCContext: &RPCContext{},
 		}
-	}}
-	httpResponsePool = sync.Pool{New: func() interface{} {
-		res := &HttpMotanResponse{}
-		res.MotanResponse = &MotanResponse{}
-		res.RPCContext = &RPCContext{}
-		return res
 	}}
 )
 
@@ -408,6 +401,9 @@ type RPCContext struct {
 }
 
 func (c *RPCContext) Reset() {
+	// because there is a binding between RPCContext and request/response,
+	// some attributes such as RequestSendTime、RequestReceiveTime will be reset by request/response
+	// therefore, these attributes do not need to be reset here.
 	c.ExtFactory = nil
 	c.OriginalMessage = nil
 	c.Oneway = false
@@ -617,36 +613,6 @@ func (req *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
 	return nil
 }
 
-// HttpMotanResponse Resposne used in http provider to deal with http response
-type HttpMotanResponse struct {
-	*MotanResponse
-	HttpResponse *fasthttp.Response
-}
-
-func (m *HttpMotanResponse) Reset() {
-	m.RequestID = 0
-	m.Value = nil
-	m.Exception = nil
-	m.ProcessTime = 0
-	m.Attachment = nil
-	m.RPCContext.Reset()
-	m.HttpResponse = nil
-}
-
-func AcquireHttpMotanResponse() *HttpMotanResponse {
-	return httpResponsePool.Get().(*HttpMotanResponse)
-}
-
-func ReleaseHttpMotanResponse(m *HttpMotanResponse) {
-	if m != nil {
-		if m.HttpResponse != nil {
-			fasthttp.ReleaseResponse(m.HttpResponse)
-		}
-		m.Reset()
-		httpResponsePool.Put(m)
-	}
-}
-
 type MotanResponse struct {
 	RequestID   uint64
 	Value       interface{}
@@ -668,78 +634,78 @@ func ReleaseMotanResponse(m *MotanResponse) {
 	}
 }
 
-func (m *MotanResponse) Reset() {
-	m.RequestID = 0
-	m.Value = nil
-	m.Exception = nil
-	m.ProcessTime = 0
-	m.Attachment = nil
-	m.RPCContext.Reset()
+func (res *MotanResponse) Reset() {
+	res.RequestID = 0
+	res.Value = nil
+	res.Exception = nil
+	res.ProcessTime = 0
+	res.Attachment = nil
+	res.RPCContext.Reset()
 }
 
-func (m *MotanResponse) GetAttachment(key string) string {
-	if m.Attachment == nil {
+func (res *MotanResponse) GetAttachment(key string) string {
+	if res.Attachment == nil {
 		return ""
 	}
-	return m.Attachment.LoadOrEmpty(key)
+	return res.Attachment.LoadOrEmpty(key)
 }
 
-func (m *MotanResponse) SetAttachment(key string, value string) {
-	m.GetAttachments().Store(key, value)
+func (res *MotanResponse) SetAttachment(key string, value string) {
+	res.GetAttachments().Store(key, value)
 }
 
-func (m *MotanResponse) GetValue() interface{} {
-	return m.Value
+func (res *MotanResponse) GetValue() interface{} {
+	return res.Value
 }
 
-func (m *MotanResponse) GetException() *Exception {
-	return m.Exception
+func (res *MotanResponse) GetException() *Exception {
+	return res.Exception
 }
 
-func (m *MotanResponse) GetRequestID() uint64 {
-	return m.RequestID
+func (res *MotanResponse) GetRequestID() uint64 {
+	return res.RequestID
 }
 
-func (m *MotanResponse) GetProcessTime() int64 {
-	return m.ProcessTime
+func (res *MotanResponse) GetProcessTime() int64 {
+	return res.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() *StringMap {
-	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+func (res *MotanResponse) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&res.Attachment))))
 	if attachment != nil {
 		return attachment
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.Attachment == nil {
+	res.mu.Lock()
+	defer res.mu.Unlock()
+	if res.Attachment == nil {
 		attachment = NewStringMap(DefaultAttachmentSize)
-		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&res.Attachment)), unsafe.Pointer(attachment))
 	} else {
-		attachment = m.Attachment
+		attachment = res.Attachment
 	}
 	return attachment
 }
 
-func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
-	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{}
+func (res *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
+	if res.RPCContext == nil && canCreate {
+		res.RPCContext = &RPCContext{}
 	}
-	return m.RPCContext
+	return res.RPCContext
 }
 
-func (m *MotanResponse) SetProcessTime(time int64) {
-	m.ProcessTime = time
+func (res *MotanResponse) SetProcessTime(time int64) {
+	res.ProcessTime = time
 }
 
 // ProcessDeserializable : same with MotanRequest
-func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
-	if m.GetValue() != nil {
-		if d, ok := m.GetValue().(*DeserializableValue); ok {
+func (res *MotanResponse) ProcessDeserializable(toType interface{}) error {
+	if res.GetValue() != nil {
+		if d, ok := res.GetValue().(*DeserializableValue); ok {
 			v, err := d.Deserialize(toType)
 			if err != nil {
 				return err
 			}
-			m.Value = v
+			res.Value = v
 		}
 	}
 	return nil

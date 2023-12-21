@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"github.com/panjf2000/ants/v2"
+	mhttp "github.com/weibocom/motan-go/http"
 	"net"
 	"strconv"
 	"strings"
@@ -291,9 +292,8 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	if motanResp, ok := mres.(*motan.MotanResponse); ok {
 		motan.ReleaseMotanResponse(motanResp)
-	}
-	if motanHttpReq, ok := mres.(*motan.HttpMotanResponse); ok {
-		motan.ReleaseHttpMotanResponse(motanHttpReq)
+	} else if motanHttpRes, ok := mres.(*mhttp.HttpMotanResponse); ok {
+		mhttp.ReleaseHttpMotanResponse(motanHttpRes)
 	}
 }
 
