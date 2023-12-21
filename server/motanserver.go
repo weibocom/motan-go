@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"errors"
+	"github.com/panjf2000/ants/v2"
 	"net"
 	"strconv"
 	"strings"
@@ -19,6 +20,15 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
+var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
+
+func SetProcessPoolSize(size int) {
+	processPool.Tune(size)
+}
+
+func GetProcessPoolSize() int {
+	return processPool.Cap()
+}
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
@@ -174,7 +184,9 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				break
 			}
 
-			go m.processV2(msg, t, ip, conn)
+			processPool.Submit(func() {
+				m.processV2(msg, t, ip, conn)
+			})
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s", v, conn.RemoteAddr().String())
 			break

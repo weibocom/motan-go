@@ -3,6 +3,7 @@ package endpoint
 import (
 	"bufio"
 	"errors"
+	"github.com/panjf2000/ants/v2"
 	motan "github.com/weibocom/motan-go/core"
 	vlog "github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
@@ -20,6 +21,7 @@ var (
 			recvNotifyCh: make(chan struct{}, 1),
 		}
 	}}
+	handleMsgPool, _ = ants.NewPool(10000)
 )
 
 // MotanCommonEndpoint supports motan v1, v2 protocols
@@ -669,7 +671,10 @@ func (c *Channel) recvLoop() error {
 		if err != nil {
 			return err
 		}
-		go c.handleMsg(msg, t)
+
+		handleMsgPool.Submit(func() {
+			c.handleMsg(msg, t)
+		})
 	}
 }
 
