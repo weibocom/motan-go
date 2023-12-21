@@ -391,7 +391,7 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.String("exception", logObject.Exception),
 			zap.String("upstreamCode", logObject.UpstreamCode))
 	} else {
-		buffer := newInnerBytesBuffer()
+		buffer := acquireBytesBuffer()
 
 		buffer.WriteString(logObject.FilterName)
 		buffer.WriteString("|")
@@ -497,11 +497,7 @@ func (d *defaultLogger) SetMetricsLogAvailable(status bool) {
 }
 
 func AcquireAccessLogEntity() *AccessLogEntity {
-	v := accessLogEntityPool.Get()
-	if v == nil {
-		return &AccessLogEntity{}
-	}
-	return v.(*AccessLogEntity)
+	return accessLogEntityPool.Get().(*AccessLogEntity)
 }
 
 func ReleaseAccessLogEntity(entity *AccessLogEntity) {

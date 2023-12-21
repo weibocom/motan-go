@@ -57,6 +57,8 @@ func TestRecordErrEmptyThreshold(t *testing.T) {
 		ep.Call(request)
 		assert.True(t, ep.IsAvailable())
 	}
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -89,6 +91,8 @@ func TestRecordErrWithErrThreshold(t *testing.T) {
 	ep.channels.channels <- buildV2Channel(conn, ep.channels.config, ep.channels.serialization)
 	time.Sleep(time.Second * 2)
 	//assert.True(t, ep.IsAvailable())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -111,6 +115,8 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	s, ok := v.(string)
 	assert.True(t, ok)
 	assert.Equal(t, s, "hello")
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -133,6 +139,8 @@ func TestMotanEndpoint_AsyncCall(t *testing.T) {
 	resp := <-request.GetRPCContext(false).Result.Done
 	assert.Nil(t, resp.Error)
 	assert.Equal(t, resStr, "hello")
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -158,6 +166,8 @@ func TestMotanEndpoint_ErrorCall(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -184,6 +194,8 @@ func TestMotanEndpoint_RequestTimeout(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -211,6 +223,8 @@ func TestLazyInit(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -258,7 +272,7 @@ func TestMotanEndpoint_AsyncCallNoResponse(t *testing.T) {
 		t.Logf("expect condition, not recv response singnal")
 	}
 
-	// Channel.streams will not release stream
+	// Channel.streams cant`t release stream
 	c := <-ep.channels.getChannels()
 	// it will be zero if server not reply response, bug to be fixed
 	assert.Equal(t, 1, len(c.streams))
@@ -268,38 +282,61 @@ func TestV2StreamPool(t *testing.T) {
 	var oldStream *V2Stream
 	// consume v2stream poll until call New func
 	for {
-		oldStream = AcquireV2Stream()
-		if oldStream.release == false {
+		oldStream = acquireV2Stream()
+		if v, ok := oldStream.canRelease.Load().(bool); !ok || !v {
 			break
 		}
 	}
 	// test new Stream
 	assert.NotNil(t, oldStream)
-	assert.NotNil(t, oldStream.timer)
 	assert.NotNil(t, oldStream.recvNotifyCh)
 	oldStream.streamId = GenerateRequestID()
 	// verify reset
 	oldStream.recvNotifyCh <- struct{}{}
-	assert.Equal(t, false, oldStream.release)
 
-	// test release
-	// oldStream.release is false
+	// test canRelease
+	// oldStream.canRelease is not ture，release fail
 	// test reset recvNotifyCh
 	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
-	ReleaseV2Stream(oldStream)
+	releaseV2Stream(oldStream)
 	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
-	// release success
-	oldStream.release = true
-	ReleaseV2Stream(oldStream)
+	// canRelease success
+	oldStream.canRelease.Store(true)
+	releaseV2Stream(oldStream)
 	assert.Equal(t, 0, len(oldStream.recvNotifyCh))
 
 	// test put nil
-	var nilStream *Stream
+	var nilStream *V2Stream
 	// can not put nil to pool
-	v2StreamPool.Put(nilStream)
-	newStream3 := v2StreamPool.Get()
+	releaseV2Stream(nilStream)
+	newStream3 := acquireV2Stream()
 	assert.NotEqual(t, nil, newStream3)
+}
 
+func assertV2ChanelStreamEmpty(ep *MotanEndpoint, t *testing.T) {
+	if ep == nil {
+		return
+	}
+	channels := ep.channels.getChannels()
+	for {
+		select {
+		case c, ok := <-channels:
+			if !ok || c == nil {
+				return
+			} else {
+				c.streamLock.Lock()
+				// it should be zero
+				assert.Equal(t, 0, len(c.streams))
+				c.streamLock.Unlock()
+
+				c.heartbeatLock.Lock()
+				assert.Equal(t, 0, len(c.heartbeats))
+				c.heartbeatLock.Unlock()
+			}
+		default:
+			return
+		}
+	}
 }
 
 func StartTestServer(port int) *MockServer {
@@ -343,9 +380,9 @@ func handle(netListen net.Listener) {
 }
 
 func handleConnection(conn net.Conn, timeout int) {
-	buf := bufio.NewReader(conn)
-	readSlice := make([]byte, 100)
-	msg, _, err := protocol.DecodeWithTime(buf, &readSlice, 10*1024*1024)
+	reader := bufio.NewReader(conn)
+	decodeBuf := make([]byte, 100)
+	msg, err := protocol.Decode(reader, &decodeBuf)
 	if err != nil {
 		time.Sleep(time.Millisecond * 1000)
 		conn.Close()

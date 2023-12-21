@@ -17,17 +17,6 @@ type innerBytesBuffer struct {
 	buf []byte // reuse
 }
 
-// newInnerBytesBuffer create an empty innerBytesBuffer with initial size
-func newInnerBytesBuffer() *innerBytesBuffer {
-	return acquireBytesBuffer()
-}
-
-func createInnerBytesBuffer(data []byte) *innerBytesBuffer {
-	return &innerBytesBuffer{
-		buf: data,
-	}
-}
-
 // WriteString write a str string append the innerBytesBuffer
 func (b *innerBytesBuffer) WriteString(str string) {
 	b.buf = append(b.buf, str...)
@@ -67,11 +56,7 @@ func (b *innerBytesBuffer) Len() int { return len(b.buf) }
 func (b *innerBytesBuffer) Cap() int { return cap(b.buf) }
 
 func acquireBytesBuffer() *innerBytesBuffer {
-	b := innerBytesBufferPool.Get()
-	if b == nil {
-		return &innerBytesBuffer{buf: make([]byte, 0, 256)}
-	}
-	return b.(*innerBytesBuffer)
+	return innerBytesBufferPool.Get().(*innerBytesBuffer)
 }
 
 func releaseBytesBuffer(b *innerBytesBuffer) {
