@@ -34,6 +34,7 @@ const (
 const (
 	MotanMagic      = 0xf1f1
 	HeaderLength    = 13
+	MetaStartOffset = HeaderLength + 4
 	Version1        = 0
 	Version2        = 1
 	defaultProtocol = "motan2"
@@ -112,8 +113,8 @@ var (
 	DefaultGzipLevel = gzip.BestSpeed
 
 	defaultSerialize = Simple
-	writerPool       = &sync.Pool{} // for gzip writer
-	readBufPool      = &sync.Pool{} // for gzip read buffer
+	writerPool       = &sync.Pool{}                         // for gzip writer
+	readBufPool      = &sync.Pool{}                         // for gzip read buffer
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
 	}}
@@ -290,7 +291,7 @@ func (msg *Message) Encode0() {
 	msg.bytesBuffer.WriteUint64(msg.Header.RequestID)
 
 	// 4 byte for meta size
-	msg.bytesBuffer.SetWPos(HeaderLength + 4)
+	msg.bytesBuffer.SetWPos(MetaStartOffset)
 	// encode meta
 	msg.Metadata.Range(func(k, v string) bool {
 		if k == "" || v == "" {
@@ -308,10 +309,11 @@ func (msg *Message) Encode0() {
 	})
 	metaWpos := msg.bytesBuffer.GetWPos()
 	metaSize := 0
-	if metaWpos != HeaderLength+4 {
+	if metaWpos != MetaStartOffset {
 		// rewrite meta last char '\n'
-		metaSize = metaWpos - HeaderLength - 4 - 1
 		metaWpos -= 1
+		metaSize = metaWpos - MetaStartOffset
+
 	}
 	msg.bytesBuffer.SetWPos(HeaderLength)
 	msg.bytesBuffer.WriteUint32(uint32(metaSize))
