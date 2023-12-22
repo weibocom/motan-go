@@ -198,6 +198,11 @@ func TestIntParamCache(t *testing.T) {
 	v = url.GetMethodIntValue("method", "desc", "testKey", 10)
 	assert.Equal(t, int64(100), v)
 	url.ClearCachedInfo()
+	// test init with method params
+	assert.True(t, url.hasMethodParams())
+	// test init without method params
+	delete(url.Parameters, "method(desc).testKey")
+	url.ClearCachedInfo()
 	assert.False(t, url.hasMethodParams())
 
 	// test GetPortStr

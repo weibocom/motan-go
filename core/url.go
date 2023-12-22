@@ -178,7 +178,7 @@ func (u *URL) hasMethodParams() bool {
 				if strings.Contains(k, defaultMethodParamsSubStr) {
 					v = "t"
 					u.hasMethodParamsCache.Store("t")
-					break
+					return true
 				}
 			}
 		}
