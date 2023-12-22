@@ -43,6 +43,7 @@ type MotanCommonEndpoint struct {
 	lazyInit                     bool
 	maxContentLength             int
 	heartbeatVersion             int
+	gzipSize                     int
 
 	keepaliveRunning bool
 	serialization    motan.Serialization
@@ -77,6 +78,7 @@ func (m *MotanCommonEndpoint) Initialize() {
 	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, GetDefaultMotanEPAsynInit())
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
+	m.gzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
 		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
@@ -117,9 +119,12 @@ func (m *MotanCommonEndpoint) GetRequestTimeout(request motan.Request) time.Dura
 	if maxTimeout == 0 {
 		maxTimeout = timeout * 2
 	}
-	reqTimeout, _ := strconv.ParseInt(request.GetAttachment(mpro.MTimeout), 10, 64)
-	if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
-		timeout = reqTimeout
+	rt := request.GetAttachment(mpro.MTimeout)
+	if rt != "" {
+		reqTimeout, _ := strconv.ParseInt(rt, 10, 64)
+		if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
+			timeout = reqTimeout
+		}
 	}
 	return time.Duration(timeout) * time.Millisecond
 }
@@ -127,7 +132,7 @@ func (m *MotanCommonEndpoint) GetRequestTimeout(request motan.Request) time.Dura
 func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 	rc := request.GetRPCContext(true)
 	rc.Proxy = m.proxy
-	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
+	rc.GzipSize = m.gzipSize
 
 	if m.channels == nil {
 		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
