@@ -29,10 +29,11 @@ const (
 	Error
 )
 
-// location / { # directive location
-//    if ($request_uri ~= '/*') { # directive if
-//    }
-// }
+// Directive location / { # directive location
+//
+//	   if ($request_uri ~= '/*') { # directive if
+//	   }
+//	}
 type Directive struct {
 	name       string
 	args       []string
@@ -69,6 +70,7 @@ func init() {
 func NewParser(reader io.Reader) *Parser {
 	return &Parser{reader: bufio.NewReader(reader)}
 }
+
 func (p *Parser) readToken() token {
 	buf := bytes.Buffer{}
 	sharpComment := false

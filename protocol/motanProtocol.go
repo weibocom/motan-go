@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -20,9 +21,10 @@ import (
 const (
 	DefaultMetaSize         = 16
 	DefaultMaxContentLength = 10 * 1024 * 1024
+	DefaultBufferSize       = 256
 )
 
-//message type
+// message type
 const (
 	Req = iota
 	Res
@@ -32,6 +34,7 @@ const (
 const (
 	MotanMagic      = 0xf1f1
 	HeaderLength    = 13
+	MetaStartOffset = HeaderLength + 4
 	Version1        = 0
 	Version2        = 1
 	defaultProtocol = "motan2"
@@ -40,7 +43,7 @@ const (
 const (
 	MPath          = "M_p"
 	MMethod        = "M_m"
-	MExceptionn    = "M_e"
+	MException     = "M_e"
 	MProcessTime   = "M_pt"
 	MMethodDesc    = "M_md"
 	MGroup         = "M_g"
@@ -60,6 +63,14 @@ type Header struct {
 	RequestID     uint64
 }
 
+func (h *Header) Reset() {
+	h.Magic = 0
+	h.MsgType = 0
+	h.VersionStatus = 0
+	h.Serialize = 0
+	h.RequestID = 0
+}
+
 func (h *Header) Clone() *Header {
 	return &Header{
 		Magic:         h.Magic,
@@ -71,13 +82,16 @@ func (h *Header) Clone() *Header {
 }
 
 type Message struct {
-	Header   *Header
-	Metadata *motan.StringMap
-	Body     []byte
-	Type     int
+	Header     *Header
+	Metadata   *motan.StringMap
+	Body       []byte
+	Type       int
+	canRelease atomic.Value
+	// lazy init or reset when call Message.Encode or Message.Encode0
+	bytesBuffer *motan.BytesBuffer
 }
 
-//serialize
+// serialize
 const (
 	Hessian = iota
 	GrpcPb
@@ -103,6 +117,9 @@ var (
 	readBufPool      = &sync.Pool{}                         // for gzip read buffer
 	writeBufPool     = &sync.Pool{New: func() interface{} { // for gzip write buffer
 		return &bytes.Buffer{}
+	}}
+	messagePool = sync.Pool{New: func() interface{} {
+		return &Message{Metadata: motan.NewStringMap(DefaultMetaSize), Header: &Header{}}
 	}}
 )
 
@@ -248,16 +265,34 @@ func BuildHeader(msgType int, proxy bool, serialize int, requestID uint64, msgSt
 	}
 
 	//status
-	status := uint8(0x08 | (uint8(msgStatus) & 0x07))
+	status := 0x08 | (uint8(msgStatus) & 0x07)
 
-	serial := uint8(0x00 | (uint8(serialize) << 3))
+	serial := 0x00 | (uint8(serialize) << 3)
 
 	header := &Header{MotanMagic, mtype, status, serial, requestID}
 	return header
 }
 
-func (msg *Message) Encode() (buf *motan.BytesBuffer) {
-	metabuf := motan.NewBytesBuffer(256)
+// Encode0 encode header、meta、body size
+// used with GetEncodedBytes method
+// unexpected if call Message.GetEncodedBytes after rewrite result(*motan.BytesBuffer)
+func (msg *Message) Encode0() {
+	if msg.bytesBuffer == nil {
+		msg.bytesBuffer = motan.NewBytesBuffer(DefaultBufferSize)
+	} else {
+		msg.bytesBuffer.Reset()
+	}
+
+	// encode header.
+	msg.bytesBuffer.WriteUint16(MotanMagic)
+	msg.bytesBuffer.WriteByte(msg.Header.MsgType)
+	msg.bytesBuffer.WriteByte(msg.Header.VersionStatus)
+	msg.bytesBuffer.WriteByte(msg.Header.Serialize)
+	msg.bytesBuffer.WriteUint64(msg.Header.RequestID)
+
+	// 4 byte for meta size
+	msg.bytesBuffer.SetWPos(MetaStartOffset)
+	// encode meta
 	msg.Metadata.Range(func(k, v string) bool {
 		if k == "" || v == "" {
 			return true
@@ -266,38 +301,60 @@ func (msg *Message) Encode() (buf *motan.BytesBuffer) {
 			vlog.Errorf("metadata not correct.k:%s, v:%s", k, v)
 			return true
 		}
-		metabuf.Write([]byte(k))
-		metabuf.WriteByte('\n')
-		metabuf.Write([]byte(v))
-		metabuf.WriteByte('\n')
+		msg.bytesBuffer.WriteString(k)
+		msg.bytesBuffer.WriteByte('\n')
+		msg.bytesBuffer.WriteString(v)
+		msg.bytesBuffer.WriteByte('\n')
 		return true
 	})
+	metaWpos := msg.bytesBuffer.GetWPos()
+	metaSize := 0
+	if metaWpos != MetaStartOffset {
+		// rewrite meta last char '\n'
+		metaWpos -= 1
+		metaSize = metaWpos - MetaStartOffset
 
-	if metabuf.Len() > 0 {
-		metabuf.SetWPos(metabuf.GetWPos() - 1)
 	}
-	metasize := metabuf.Len()
-	bodysize := len(msg.Body)
-	buf = motan.NewBytesBuffer(int(HeaderLength + bodysize + metasize + 8))
-	// encode header.
-	buf.WriteUint16(MotanMagic)
-	buf.WriteByte(msg.Header.MsgType)
-	buf.WriteByte(msg.Header.VersionStatus)
-	buf.WriteByte(msg.Header.Serialize)
-	buf.WriteUint64(msg.Header.RequestID)
+	msg.bytesBuffer.SetWPos(HeaderLength)
+	msg.bytesBuffer.WriteUint32(uint32(metaSize))
 
-	// encode meta
-	buf.WriteUint32(uint32(metasize))
-	if metasize > 0 {
-		buf.Write(metabuf.Bytes())
-	}
+	msg.bytesBuffer.SetWPos(metaWpos)
+	// encode body size
+	bodySize := len(msg.Body)
+	msg.bytesBuffer.WriteUint32(uint32(bodySize))
+}
 
-	// encode body
-	buf.WriteUint32(uint32(bodysize))
-	if bodysize > 0 {
-		buf.Write(msg.Body)
+// GetEncodedBytes get encoded headers Message.Body
+// used with Encode0 method
+// unexpected if repeat call Message.GetEncodedBytes after rewrite result([][]byte)
+func (msg *Message) GetEncodedBytes() [][]byte {
+	if msg.bytesBuffer == nil { // maybe not call Message.Encode or Message.Encode0
+		msg.Encode0()
 	}
-	return buf
+	return [][]byte{msg.bytesBuffer.Bytes(), msg.Body}
+}
+
+// Encode result encoded result
+// unexpected if call Message.GetEncodedBytes after rewrite result(*motan.BytesBuffer)
+func (msg *Message) Encode() *motan.BytesBuffer {
+	msg.Encode0()
+	bodySize := len(msg.Body)
+	if bodySize > 0 {
+		msg.bytesBuffer.Write(msg.Body)
+	}
+	return msg.bytesBuffer
+}
+
+func (msg *Message) Reset() bool {
+	if ok, v := msg.canRelease.Load().(bool); ok && v {
+		msg.Type = 0
+		msg.Body = msg.Body[:0]
+		msg.Header.Reset()
+		msg.Metadata.Reset()
+		msg.canRelease.Store(false)
+		return true
+	}
+	return false
 }
 
 func (msg *Message) Clone() interface{} {
@@ -310,6 +367,10 @@ func (msg *Message) Clone() interface{} {
 		newMessage.Metadata = msg.Metadata.Copy()
 	}
 	return newMessage
+}
+
+func (msg *Message) SetCanRelease() {
+	msg.canRelease.Store(true)
 }
 
 func CheckMotanVersion(buf *bufio.Reader) (version int, err error) {
@@ -326,93 +387,111 @@ func CheckMotanVersion(buf *bufio.Reader) (version int, err error) {
 	return int(b[3] >> 3 & 0x1f), nil
 }
 
-func Decode(buf *bufio.Reader) (msg *Message, err error) {
-	msg, _, err = DecodeWithTime(buf, motan.DefaultMaxContentLength)
+func Decode(reader *bufio.Reader, buf *[]byte) (msg *Message, err error) {
+	msg, _, err = DecodeWithTime(reader, buf, motan.DefaultMaxContentLength)
 	return msg, err
 }
 
-func DecodeWithTime(buf *bufio.Reader, maxContentLength int) (msg *Message, start time.Time, err error) {
-	temp := make([]byte, HeaderLength, HeaderLength)
-
+// DecodeWithTime the parameter buf is a slice pointer, so the
+// extension of *buf will affect the slice outside in order to
+// reuse the buf which is used by reading header info from reader
+func DecodeWithTime(reader *bufio.Reader, buf *[]byte, maxContentLength int) (msg *Message, start time.Time, err error) {
+	start = time.Now() // record time when starting to reader data
+	readSlice := *buf
 	// decode header
-	_, err = io.ReadAtLeast(buf, temp, HeaderLength)
-	start = time.Now() // record time when starting to read data
+	_, err = io.ReadAtLeast(reader, readSlice[:HeaderLength], HeaderLength)
 	if err != nil {
 		return nil, start, err
 	}
-	mn := binary.BigEndian.Uint16(temp[:2]) // TODO 不再验证
+	mn := binary.BigEndian.Uint16(readSlice[:2]) // TODO 不再验证
 	if mn != MotanMagic {
 		vlog.Errorf("wrong magic num:%d, err:%v", mn, err)
 		return nil, start, ErrMagicNum
 	}
-
-	header := &Header{Magic: MotanMagic}
-	header.MsgType = temp[2]
-	header.VersionStatus = temp[3]
-	version := header.GetVersion()
+	// get a message from pool
+	msg = AcquireMessage()
+	defer func() {
+		if err != nil {
+			msg.SetCanRelease()
+			ReleaseMessage(msg)
+		}
+	}()
+	msg.Header.Magic = MotanMagic
+	msg.Header.MsgType = readSlice[2]
+	msg.Header.VersionStatus = readSlice[3]
+	version := msg.Header.GetVersion()
 	if version != Version2 { // TODO 不再验证
+		err = ErrVersion
 		vlog.Errorf("unsupported protocol version number: %d", version)
 		return nil, start, ErrVersion
 	}
-	header.Serialize = temp[4]
-	header.RequestID = binary.BigEndian.Uint64(temp[5:])
+	msg.Header.Serialize = readSlice[4]
+	msg.Header.RequestID = binary.BigEndian.Uint64(readSlice[5:HeaderLength])
 
 	// decode meta
-	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	_, err = io.ReadAtLeast(reader, readSlice[:4], 4)
 	if err != nil {
 		return nil, start, err
 	}
-	metasize := int(binary.BigEndian.Uint32(temp[:4]))
+	metasize := int(binary.BigEndian.Uint32(readSlice[:4]))
 	if metasize > maxContentLength {
+		err = ErrOverSize
 		vlog.Errorf("meta over size. meta size:%d, max size:%d", metasize, maxContentLength)
 		return nil, start, ErrOverSize
 	}
-	metamap := motan.NewStringMap(DefaultMetaSize)
 	if metasize > 0 {
-		metadata, err := readBytes(buf, metasize)
+		if cap(readSlice) < metasize {
+			readSlice = make([]byte, metasize)
+			*buf = readSlice
+		}
+		err = readBytes(reader, readSlice, metasize)
 		if err != nil {
 			return nil, start, err
 		}
 		s, e := 0, 0
 		var k string
 		for i := 0; i <= metasize; i++ {
-			if i == metasize || metadata[i] == '\n' {
+			if i == metasize || readSlice[i] == '\n' {
 				e = i
 				if k == "" {
-					k = string(metadata[s:e])
+					k = string(readSlice[s:e])
 				} else {
-					metamap.Store(k, string(metadata[s:e]))
+					msg.Metadata.Store(k, string(readSlice[s:e]))
 					k = ""
 				}
 				s = i + 1
 			}
 		}
 		if k != "" {
-			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", header, metadata)
+			err = ErrMetadata
+			vlog.Errorf("decode message fail, metadata not paired. header:%v, meta:%s", msg.Header, readSlice)
 			return nil, start, ErrMetadata
 		}
 	}
 
 	//decode body
-	_, err = io.ReadAtLeast(buf, temp[:4], 4)
+	_, err = io.ReadAtLeast(reader, readSlice[:4], 4)
 	if err != nil {
 		return nil, start, err
 	}
-	bodysize := int(binary.BigEndian.Uint32(temp[:4]))
-	if bodysize > maxContentLength {
-		vlog.Errorf("body over size. body size:%d, max size:%d", bodysize, maxContentLength)
+	bodySize := int(binary.BigEndian.Uint32(readSlice[:4]))
+	if bodySize > maxContentLength {
+		err = ErrOverSize
+		vlog.Errorf("body over size. body size:%d, max size:%d", bodySize, maxContentLength)
 		return nil, start, ErrOverSize
 	}
-	var body []byte
-	if bodysize > 0 {
-		body, err = readBytes(buf, bodysize)
+	if bodySize > 0 {
+		if cap(msg.Body) < bodySize {
+			msg.Body = make([]byte, bodySize)
+		}
+		msg.Body = msg.Body[:bodySize]
+		err = readBytes(reader, msg.Body, bodySize)
 	} else {
-		body = make([]byte, 0)
+		msg.Body = make([]byte, 0)
 	}
 	if err != nil {
 		return nil, start, err
 	}
-	msg = &Message{header, metamap, body, Req}
 	return msg, start, err
 }
 
@@ -425,15 +504,14 @@ func DecodeGzipBody(body []byte) []byte {
 	return ret
 }
 
-func readBytes(buf *bufio.Reader, size int) ([]byte, error) {
-	tempbytes := make([]byte, size)
+func readBytes(buf *bufio.Reader, readSlice []byte, size int) error {
 	var s, n = 0, 0
 	var err error
 	for s < size && err == nil {
-		n, err = buf.Read(tempbytes[s:])
+		n, err = buf.Read(readSlice[s:size])
 		s += n
 	}
-	return tempbytes, err
+	return err
 }
 
 func EncodeGzip(data []byte) ([]byte, error) {
@@ -523,7 +601,7 @@ func DecodeGzip(data []byte) (ret []byte, err error) {
 
 // ConvertToRequest convert motan2 protocol request message  to motan Request
 func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Request, error) {
-	motanRequest := &motan.MotanRequest{Arguments: make([]interface{}, 0)}
+	motanRequest := motan.AcquireMotanRequest()
 	motanRequest.RequestID = request.Header.RequestID
 	if idStr, ok := request.Metadata.Load(MRequestID); !ok {
 		if request.Header.IsProxy() {
@@ -549,12 +627,11 @@ func ConvertToRequest(request *Message, serialize motan.Serialization) (motan.Re
 			request.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
+			motan.ReleaseMotanRequest(motanRequest)
 			return nil, ErrSerializeNil
 		}
-		dv := &motan.DeserializableValue{Body: request.Body, Serialization: serialize}
-		motanRequest.Arguments = []interface{}{dv}
+		motanRequest.Arguments = append(motanRequest.Arguments, &motan.DeserializableValue{Body: request.Body, Serialization: serialize})
 	}
-
 	return motanRequest, nil
 }
 
@@ -633,12 +710,11 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 			return msg, nil
 		}
 	}
-
-	res := &Message{}
+	res := AcquireMessage()
 	var msgType int
 	if response.GetException() != nil {
 		msgType = Exception
-		response.SetAttachment(MExceptionn, ExceptionToJSON(response.GetException()))
+		response.SetAttachment(MException, ExceptionToJSON(response.GetException()))
 		if rc.Proxy {
 			rc.Serialized = true
 		}
@@ -660,11 +736,15 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 				res.Body = b
 			} else {
 				vlog.Warningf("convert response value fail! serialized value not []byte. res:%+v", response)
+				res.SetCanRelease()
+				ReleaseMessage(res)
 				return nil, ErrSerializedData
 			}
 		} else {
 			b, err := serialize.Serialize(response.GetValue())
 			if err != nil {
+				res.SetCanRelease()
+				ReleaseMessage(res)
 				return nil, err
 			}
 			res.Body = b
@@ -683,7 +763,7 @@ func ConvertToResMessage(response motan.Response, serialize motan.Serialization)
 
 // ConvertToResponse convert protocol response to motan Response
 func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.Response, error) {
-	mres := &motan.MotanResponse{}
+	mres := motan.AcquireMotanResponse()
 	rc := mres.GetRPCContext(true)
 	rc.Proxy = response.Header.IsProxy()
 	mres.RequestID = response.Header.RequestID
@@ -699,17 +779,19 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 			response.Header.SetGzip(false)
 		}
 		if !rc.Proxy && serialize == nil {
+			motan.ReleaseMotanResponse(mres)
 			return nil, ErrSerializeNil
 		}
 		dv := &motan.DeserializableValue{Body: response.Body, Serialization: serialize}
 		mres.Value = dv
 	}
 	if response.Header.GetStatus() == Exception {
-		e := response.Metadata.LoadOrEmpty(MExceptionn)
+		e := response.Metadata.LoadOrEmpty(MException)
 		if e != "" {
 			var exception *motan.Exception
 			err := json.Unmarshal([]byte(e), &exception)
 			if err != nil {
+				motan.ReleaseMotanResponse(mres)
 				return nil, err
 			}
 			mres.Exception = exception
@@ -722,13 +804,29 @@ func ConvertToResponse(response *Message, serialize motan.Serialization) (motan.
 }
 
 func BuildExceptionResponse(requestID uint64, errmsg string) *Message {
-	header := BuildHeader(Res, false, defaultSerialize, requestID, Exception)
-	msg := &Message{Header: header, Metadata: motan.NewStringMap(DefaultMetaSize)}
-	msg.Metadata.Store(MExceptionn, errmsg)
-	return msg
+	message := AcquireMessage()
+	message.Header.RequestID = requestID
+	message.Header.SetRequest(false)
+	message.Header.SetProxy(false)
+	message.Header.SetVersion(Version2)
+	message.Header.SetStatus(Exception)
+	message.Header.SetSerialize(defaultSerialize)
+	message.Metadata.Store(MException, errmsg)
+
+	return message
 }
 
 func ExceptionToJSON(e *motan.Exception) string {
 	errmsg, _ := json.Marshal(e)
 	return string(errmsg)
+}
+
+func AcquireMessage() *Message {
+	return messagePool.Get().(*Message)
+}
+
+func ReleaseMessage(msg *Message) {
+	if msg != nil && msg.Reset() {
+		messagePool.Put(msg)
+	}
 }

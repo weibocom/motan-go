@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -237,4 +238,56 @@ func TestZigzag(t *testing.T) {
 			t.Errorf("zigzag64 not correct. ni: %d, i:%d, err :%v, buf:%v\n", ni, i, err, buf2)
 		}
 	}
+}
+
+func TestBytesBuffer_WriteString_Grow(t *testing.T) {
+	a := BytesBuffer{}
+	a.WriteString("")
+	assert.Equal(t, 0, len(a.buf))
+	a.WriteString("abc")
+	assert.Equal(t, "abc", string(a.Bytes()))
+	assert.Equal(t, 3, len(a.buf))
+	a.WriteString("abc")
+	assert.Equal(t, "abcabc", string(a.Bytes()))
+	assert.Equal(t, 9, len(a.buf))
+}
+
+func TestBytesBuffer_WriteString_NoGrow(t *testing.T) {
+	a := BytesBuffer{buf: make([]byte, 4)}
+	a.WriteString("abc")
+	assert.Equal(t, "abc", string(a.Bytes()))
+	assert.Equal(t, 4, len(a.buf))
+}
+
+func TestDefaultBytesBufferPool(t *testing.T) {
+	// consume pool
+	for {
+		bb := bytesBufferPool.Get().(*BytesBuffer)
+		if bb.buf == nil {
+			break
+		}
+	}
+	// test new BytesBuffer
+	bb := AcquireBytesBuffer(10)
+	assert.Equal(t, 0, bb.Len())
+	assert.Equal(t, 10, len(bb.buf))
+	assert.Equal(t, 10, bb.Cap())
+
+	// test release and acquire
+	ReleaseBytesBuffer(bb)
+	newBb := AcquireBytesBuffer(10)
+	assert.NotEqual(t, nil, newBb)
+	assert.Equal(t, 0, bb.Len())
+	assert.Equal(t, 10, len(bb.buf))
+	assert.Equal(t, 10, bb.Cap())
+
+	// test put nil
+	var nilByteBuffer *BytesBuffer
+	// can not put nil to pool
+	ReleaseBytesBuffer(nilByteBuffer)
+	nilBb := bytesBufferPool.Get().(*BytesBuffer)
+	assert.NotEqual(t, nil, nilBb)
+	ReleaseBytesBuffer(nilBb)
+	notNilBb := AcquireBytesBuffer(10)
+	assert.NotEqual(t, nil, notNilBb)
 }

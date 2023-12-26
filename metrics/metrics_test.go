@@ -19,19 +19,19 @@ var (
 func TestGetStatItem(t *testing.T) {
 	ClearStatItems()
 	// get
-	si := GetStatItem(group, service)
+	si := GetStatItem(group, "", service)
 	assert.Nil(t, si, "GetStatItem")
 	assert.Equal(t, 0, StatItemSize(), "item size")
 
 	// register
-	si = GetOrRegisterStatItem(group, service)
+	si = GetOrRegisterStatItem(group, "", service)
 	assert.NotNil(t, si, "GetOrRegisterStatItem")
 	assert.Equal(t, group, si.GetGroup(), "StatItem group")
 	assert.Equal(t, service, si.GetService(), "StatItem service")
 	assert.Equal(t, 1, StatItemSize(), "item size")
-	again := GetStatItem(group, service)
+	again := GetStatItem(group, "", service)
 	assert.True(t, si == again, "get StatItem not the same one")
-	si2 := GetOrRegisterStatItem(group+"2", service+"2")
+	si2 := GetOrRegisterStatItem(group+"2", "", service+"2")
 	assert.NotNil(t, si2, "GetOrRegisterStatItem")
 	assert.Equal(t, group+"2", si2.GetGroup(), "StatItem group")
 	assert.Equal(t, service+"2", si2.GetService(), "StatItem service")
@@ -39,17 +39,17 @@ func TestGetStatItem(t *testing.T) {
 	assert.Equal(t, 2, StatItemSize(), "item size")
 
 	// rm
-	RMStatItem(group, service)
-	si = GetStatItem(group, service)
+	RMStatItem(group, "", service)
+	si = GetStatItem(group, "", service)
 	assert.Nil(t, si, "GetStatItem")
-	si2 = GetStatItem(group+"2", service+"2")
+	si2 = GetStatItem(group+"2", "", service+"2")
 	assert.NotNil(t, si2, "GetOrRegisterStatItem")
 
 	// clear
 	ClearStatItems()
-	si = GetStatItem(group, service)
+	si = GetStatItem(group, "", service)
 	assert.Nil(t, si, "clear not work")
-	si2 = GetStatItem(group+"2", service+"2")
+	si2 = GetStatItem(group+"2", "", service+"2")
 	assert.Nil(t, si2, "clear not work")
 
 	// multi thread
@@ -59,7 +59,7 @@ func TestGetStatItem(t *testing.T) {
 	for i := 0; i < size; i++ {
 		j := i
 		go func() {
-			s := GetOrRegisterStatItem(group, service)
+			s := GetOrRegisterStatItem(group, "", service)
 			lock.Lock()
 			sia[j] = s
 			lock.Unlock()
@@ -75,14 +75,14 @@ func TestGetStatItem(t *testing.T) {
 }
 
 func TestNewDefaultStatItem(t *testing.T) {
-	si := NewStatItem(group, service)
+	si := NewStatItem(group, "", service)
 	assert.NotNil(t, si, "NewStatItem")
 	_, ok := si.(StatItem)
 	assert.True(t, ok, "type not StatItem")
 }
 
 func TestDefaultStatItem(t *testing.T) {
-	item := NewDefaultStatItem(group, service)
+	item := NewDefaultStatItem(group, "", service)
 	assert.NotNil(t, item, "GetOrRegisterStatItem")
 	assert.Equal(t, group, item.GetGroup(), "StatItem group")
 	assert.Equal(t, service, item.GetService(), "StatItem service")
@@ -161,7 +161,7 @@ func TestStat(t *testing.T) {
 		AddGauge(group, service, "g2", 200)
 	}
 	time.Sleep(100 * time.Millisecond)
-	item := GetStatItem(group, service)
+	item := GetStatItem(group, "", service)
 	assert.NotNil(t, item, "item not exist")
 	snap := item.SnapshotAndClear()
 	// test counters
@@ -236,7 +236,7 @@ func (m *mockWriter) GetSnapshot() []Snapshot {
 
 func TestReadonlyStatItem(t *testing.T) {
 	assert := assert.New(t)
-	item := NewDefaultStatItem(group, service)
+	item := NewDefaultStatItem(group, "", service)
 	item.SetService(service)
 	item.SetGroup(group)
 	roItem := item.SnapshotAndClear()
@@ -281,7 +281,7 @@ func TestReadonlyStatItem(t *testing.T) {
 }
 
 func TestDefaultStatItem_1(t *testing.T) {
-	item := NewDefaultStatItem(group, service)
+	item := NewDefaultStatItem(group, "", service)
 	assert.Equal(t, "str", Escape("str"))
 	assert.NotNil(t, item, "GetOrRegisterStatItem")
 	assert.Equal(t, group, item.GetGroup(), "StatItem group")

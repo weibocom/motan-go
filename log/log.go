@@ -1,14 +1,12 @@
 package vlog
 
 import (
-	"bytes"
 	"flag"
 	"github.com/weibocom/motan-go/metrics/sampler"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +16,9 @@ import (
 )
 
 var (
+	accessLogEntityPool = sync.Pool{New: func() interface{} {
+		return new(AccessLogEntity)
+	}}
 	loggerInstance     Logger
 	once               sync.Once
 	logDir             = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
@@ -390,12 +391,13 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.String("exception", logObject.Exception),
 			zap.String("upstreamCode", logObject.UpstreamCode))
 	} else {
-		var buffer bytes.Buffer
+		buffer := acquireBytesBuffer()
+
 		buffer.WriteString(logObject.FilterName)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Role)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatUint(logObject.RequestID, 10))
+		buffer.WriteUint64String(logObject.RequestID)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Service)
 		buffer.WriteString("|")
@@ -405,15 +407,15 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.RemoteAddress)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.Itoa(logObject.ReqSize))
+		buffer.WriteInt64String(int64(logObject.ReqSize))
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.Itoa(logObject.ResSize))
+		buffer.WriteInt64String(int64(logObject.ResSize))
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatInt(logObject.BizTime, 10))
+		buffer.WriteInt64String(logObject.BizTime)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatInt(logObject.TotalTime, 10))
+		buffer.WriteInt64String(logObject.TotalTime)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatBool(logObject.Success))
+		buffer.WriteBoolString(logObject.Success)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.ResponseCode)
 		buffer.WriteString("|")
@@ -421,7 +423,10 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.UpstreamCode)
 		d.accessLogger.Info(buffer.String())
+
+		releaseBytesBuffer(buffer)
 	}
+	ReleaseAccessLogEntity(logObject)
 }
 
 func (d *defaultLogger) MetricsLog(msg string) {
@@ -488,5 +493,15 @@ func (d *defaultLogger) SetMetricsLogAvailable(status bool) {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel))
 	} else {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel + 1))
+	}
+}
+
+func AcquireAccessLogEntity() *AccessLogEntity {
+	return accessLogEntityPool.Get().(*AccessLogEntity)
+}
+
+func ReleaseAccessLogEntity(entity *AccessLogEntity) {
+	if entity != nil {
+		accessLogEntityPool.Put(entity)
 	}
 }

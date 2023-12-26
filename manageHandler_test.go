@@ -20,7 +20,7 @@ func TestGetAllService(t *testing.T) {
 	i := InfoHandler{}
 	ctx := &motan.Context{
 		ServiceURLs: map[string]*motan.URL{
-			"test": &motan.URL{
+			"test": {
 				Group: "testgroup",
 				Path:  "testpath",
 			},

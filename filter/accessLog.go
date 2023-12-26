@@ -2,11 +2,10 @@ package filter
 
 import (
 	"encoding/json"
-	"strconv"
-	"time"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"strconv"
+	"time"
 )
 
 const (
@@ -34,15 +33,17 @@ func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	role := defaultRole
 	var ip string
+	var start time.Time
 	switch caller.(type) {
 	case motan.Provider:
 		role = serverAgentRole
 		ip = request.GetAttachment(motan.HostKey)
+		start = request.GetRPCContext(true).RequestReceiveTime
 	case motan.EndPoint:
 		role = clientAgentRole
 		ip = caller.GetURL().Host
+		start = time.Now()
 	}
-	start := time.Now()
 	response := t.GetNext().Filter(caller, request)
 	address := ip + ":" + caller.GetURL().GetPortStr()
 	if _, ok := caller.(motan.Provider); ok {
@@ -81,9 +82,6 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 	// response code should be same as upstream
 	responseCode := ""
 	metaUpstreamCode, _ := response.GetAttachments().Load(motan.MetaUpstreamCode)
-	if resCtx.Meta != nil {
-		responseCode = resCtx.Meta.LoadOrEmpty(motan.MetaUpstreamCode)
-	}
 	var exceptionData []byte
 	if exception != nil {
 		exceptionData, _ = json.Marshal(exception)
@@ -94,21 +92,23 @@ func doAccessLog(filterName string, role string, address string, totalTime int64
 			responseCode = "200"
 		}
 	}
-	vlog.AccessLog(&vlog.AccessLogEntity{
-		FilterName:    filterName,
-		Role:          role,
-		RequestID:     response.GetRequestID(),
-		Service:       request.GetServiceName(),
-		Method:        request.GetMethod(),
-		RemoteAddress: address,
-		Desc:          request.GetMethodDesc(),
-		ReqSize:       reqCtx.BodySize,
-		ResSize:       resCtx.BodySize,
-		BizTime:       response.GetProcessTime(), //ms
-		TotalTime:     totalTime,                 //ms
-		ResponseCode:  responseCode,
-		Success:       exception == nil,
-		Exception:     string(exceptionData),
-		UpstreamCode:  metaUpstreamCode,
-	})
+
+	logEntity := vlog.AcquireAccessLogEntity()
+	logEntity.FilterName = filterName
+	logEntity.Role = role
+	logEntity.RequestID = response.GetRequestID()
+	logEntity.Service = request.GetServiceName()
+	logEntity.Method = request.GetMethod()
+	logEntity.RemoteAddress = address
+	logEntity.Desc = request.GetMethodDesc()
+	logEntity.ReqSize = reqCtx.BodySize
+	logEntity.ResSize = resCtx.BodySize
+	logEntity.BizTime = response.GetProcessTime() //ms
+	logEntity.TotalTime = totalTime               //ms
+	logEntity.ResponseCode = responseCode
+	logEntity.Success = exception == nil
+	logEntity.Exception = string(exceptionData)
+	logEntity.UpstreamCode = metaUpstreamCode
+
+	vlog.AccessLog(logEntity)
 }

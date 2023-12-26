@@ -13,11 +13,13 @@ type RandomLB struct {
 func (r *RandomLB) OnRefresh(endpoints []motan.EndPoint) {
 	r.endpoints = endpoints
 }
+
 func (r *RandomLB) Select(request motan.Request) motan.EndPoint {
 	eps := r.endpoints
 	_, endpoint := SelectOneAtRandom(eps)
 	return endpoint
 }
+
 func (r *RandomLB) SelectArray(request motan.Request) []motan.EndPoint {
 	eps := r.endpoints
 	index, endpoint := SelectOneAtRandom(eps)

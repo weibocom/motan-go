@@ -133,7 +133,7 @@ func (a *Agent) RegisterCommandHandler(f CommandHandler) {
 	a.commandHandlers = append(a.commandHandlers, f)
 }
 
-func (a *Agent) GetDynamicRegistryInfo() *registrySnapInfoStorage {
+func (a *Agent) GetDynamicRegistryInfo() *RegistrySnapInfoStorage {
 	return a.configurer.getRegistryInfo()
 }
 
@@ -150,7 +150,7 @@ func (a *Agent) RuntimeDir() string {
 	return a.runtimedir
 }
 
-// get Agent server
+// GetAgentServer get Agent server
 func (a *Agent) GetAgentServer() motan.Server {
 	return a.agentServer
 }
@@ -300,7 +300,7 @@ func (a *Agent) initStatus() {
 
 func (a *Agent) saveStatus() {
 	statSnapFile := a.runtimedir + string(filepath.Separator) + defaultStatusSnap
-	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(int(http.StatusOK))), 0644)
+	err := ioutil.WriteFile(statSnapFile, []byte(strconv.Itoa(http.StatusOK)), 0644)
 	if err != nil {
 		vlog.Errorln("Save status error: " + err.Error())
 		return
@@ -350,6 +350,14 @@ func (a *Agent) initParam() {
 	}
 	initLog(logDir, section)
 	registerSwitchers(a.Context)
+
+	processPoolSize := 0
+	if section != nil && section["processPoolSize"] != nil {
+		processPoolSize = section["processPoolSize"].(int)
+	}
+	if processPoolSize > 0 {
+		mserver.SetProcessPoolSize(processPoolSize)
+	}
 
 	port := *motan.Port
 	if port == 0 && section != nil && section["port"] != nil {
@@ -474,7 +482,7 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 	serviceItemKeep := make(map[string]bool)
 	clusterMap := make(map[interface{}]interface{})
 	serviceMap := make(map[interface{}]interface{})
-	var allRefersURLs = []*motan.URL{}
+	var allRefersURLs []*motan.URL
 	if a.configurer != nil {
 		//keep all dynamic refers
 		for _, url := range a.configurer.subscribeNodes {
@@ -490,7 +498,7 @@ func (a *Agent) reloadClusters(ctx *motan.Context) {
 		}
 
 		service := url.Path
-		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+		mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, motan.DefaultReferVersion), url.Protocol, url.Path)
 
 		// find exists old serviceMap
 		var serviceMapValue serviceMapItem
@@ -589,7 +597,7 @@ func (a *Agent) initCluster(url *motan.URL) {
 		}
 		a.serviceMap.UnsafeStore(url.Path, serviceMapItemArr)
 	})
-	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, "0.1"), url.Protocol, url.Path)
+	mapKey := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, motan.DefaultReferVersion), url.Protocol, url.Path)
 	a.clsLock.Lock() // Mutually exclusive with the reloadClusters method
 	defer a.clsLock.Unlock()
 	a.clusterMap.Store(mapKey, c)
@@ -748,7 +756,9 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	if err != nil {
 		return getDefaultResponse(request.GetRequestID(), "do http request failed : "+err.Error())
 	}
-	res = &motan.MotanResponse{RequestID: request.GetRequestID()}
+	httpMotanResp := mhttp.AcquireHttpMotanResponse()
+	httpMotanResp.RequestID = request.GetRequestID()
+	res = httpMotanResp
 	mhttp.FasthttpResponseToMotanResponse(res, httpResponse)
 	return res
 }
@@ -794,61 +804,38 @@ func (a *agentMessageHandler) Call(request motan.Request) (res motan.Response) {
 	}
 	return res
 }
-func (a *agentMessageHandler) matchRule(typ, cond, key string, data []serviceMapItem, f func(u *motan.URL) string) (foundClusters []serviceMapItem, err error) {
-	if cond == "" {
-		err = fmt.Errorf("empty %s is not supported", typ)
-		return
-	}
-	for _, item := range data {
-		if f(item.url) == cond {
-			foundClusters = append(foundClusters, item)
-		}
-	}
-	if len(foundClusters) == 0 {
-		err = fmt.Errorf("cluster not found. cluster:%s", key)
-		return
-	}
-	return
-}
+
 func (a *agentMessageHandler) findCluster(request motan.Request) (c *cluster.MotanCluster, key string, err error) {
 	service := request.GetServiceName()
-	group := request.GetAttachment(mpro.MGroup)
-	version := request.GetAttachment(mpro.MVersion)
-	protocol := request.GetAttachment(mpro.MProxyProtocol)
-	reqInfo := fmt.Sprintf("request information: {service: %s, group: %s, protocol: %s, version: %s}",
-		service, group, protocol, version)
-	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
-	if !exists {
-		err = fmt.Errorf("cluster not found. cluster:%s, %s", service, reqInfo)
+	if service == "" {
+		err = fmt.Errorf("empty service is not supported. service: %s", service)
 		return
 	}
-	search := []struct {
-		tip    string
-		cond   string
-		condFn func(u *motan.URL) string
-	}{
-		{"service", service, func(u *motan.URL) string { return u.Path }},
-		{"group", group, func(u *motan.URL) string { return u.Group }},
-		{"protocol", protocol, func(u *motan.URL) string { return u.Protocol }},
-		{"version", version, func(u *motan.URL) string { return u.GetParam(motan.VersionKey, "") }},
+	serviceItemArrI, exists := a.agent.serviceMap.Load(service)
+	if !exists {
+		err = fmt.Errorf("cluster not found. service: %s", service)
+		return
 	}
-	foundClusters := serviceItemArrI.([]serviceMapItem)
-	for i, rule := range search {
-		if i == 0 {
-			key = rule.cond
-		} else {
-			key += "_" + rule.cond
-		}
-		foundClusters, err = a.matchRule(rule.tip, rule.cond, key, foundClusters, rule.condFn)
-		if err != nil {
-			return
-		}
-		if len(foundClusters) == 1 {
-			c = foundClusters[0].cluster
+	clusters := serviceItemArrI.([]serviceMapItem)
+	if len(clusters) == 1 {
+		//TODO: add strict mode to avoid incorrect group call
+		c = clusters[0].cluster
+		return
+	}
+	group := request.GetAttachment(mpro.MGroup)
+	if group == "" {
+		err = fmt.Errorf("multiple clusters are matched with service: %s, but the group is empty", service)
+		return
+	}
+	version := request.GetAttachment(mpro.MVersion)
+	protocol := request.GetAttachment(mpro.MProxyProtocol)
+	for _, j := range clusters {
+		if j.url.IsMatch(service, group, protocol, version) {
+			c = j.cluster
 			return
 		}
 	}
-	err = fmt.Errorf("less condition to select cluster, maybe this service belongs to multiple group, protocol, version; cluster: %s, %s", key, reqInfo)
+	err = fmt.Errorf("no cluster matches the request; info: {service: %s, group: %s, protocol: %s, version: %s}", service, group, protocol, version)
 	return
 }
 
@@ -1145,7 +1132,7 @@ func (a *Agent) startMServer() {
 				continue
 			}
 			a.mport = port
-			managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
+			managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 			break
 		}
 		if managementListener == nil {
@@ -1158,7 +1145,7 @@ func (a *Agent) startMServer() {
 			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
 			return
 		}
-		managementListener = motan.TCPKeepAliveListener{listener.(*net.TCPListener)}
+		managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 	}
 
 	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())

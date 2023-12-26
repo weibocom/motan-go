@@ -3,6 +3,7 @@ package endpoint
 import (
 	"bufio"
 	"errors"
+	"github.com/panjf2000/ants/v2"
 	motan "github.com/weibocom/motan-go/core"
 	vlog "github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
@@ -12,6 +13,15 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+)
+
+var (
+	streamPool = sync.Pool{New: func() interface{} {
+		return &Stream{
+			recvNotifyCh: make(chan struct{}, 1),
+		}
+	}}
+	handleMsgPool, _ = ants.NewPool(10000)
 )
 
 // MotanCommonEndpoint supports motan v1, v2 protocols
@@ -33,6 +43,7 @@ type MotanCommonEndpoint struct {
 	lazyInit                     bool
 	maxContentLength             int
 	heartbeatVersion             int
+	gzipSize                     int
 
 	keepaliveRunning bool
 	serialization    motan.Serialization
@@ -67,6 +78,7 @@ func (m *MotanCommonEndpoint) Initialize() {
 	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, GetDefaultMotanEPAsynInit())
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
+	m.gzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
 		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
@@ -107,9 +119,12 @@ func (m *MotanCommonEndpoint) GetRequestTimeout(request motan.Request) time.Dura
 	if maxTimeout == 0 {
 		maxTimeout = timeout * 2
 	}
-	reqTimeout, _ := strconv.ParseInt(request.GetAttachment(mpro.MTimeout), 10, 64)
-	if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
-		timeout = reqTimeout
+	rt := request.GetAttachment(mpro.MTimeout)
+	if rt != "" {
+		reqTimeout, _ := strconv.ParseInt(rt, 10, 64)
+		if reqTimeout >= minTimeout && reqTimeout <= maxTimeout {
+			timeout = reqTimeout
+		}
 	}
 	return time.Duration(timeout) * time.Millisecond
 }
@@ -117,7 +132,7 @@ func (m *MotanCommonEndpoint) GetRequestTimeout(request motan.Request) time.Dura
 func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 	rc := request.GetRPCContext(true)
 	rc.Proxy = m.proxy
-	rc.GzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
+	rc.GzipSize = m.gzipSize
 
 	if m.channels == nil {
 		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
@@ -285,16 +300,11 @@ func (m *MotanCommonEndpoint) keepalive() {
 }
 
 func (m *MotanCommonEndpoint) defaultErrMotanResponse(request motan.Request, errMsg string) motan.Response {
-	response := &motan.MotanResponse{
-		RequestID:  request.GetRequestID(),
-		Attachment: motan.NewStringMap(motan.DefaultAttachmentSize),
-		Exception: &motan.Exception{
-			ErrCode: 400,
-			ErrMsg:  errMsg,
-			ErrType: motan.ServiceException,
-		},
-	}
-	return response
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+		ErrCode: 400,
+		ErrMsg:  errMsg,
+		ErrType: motan.ServiceException,
+	})
 }
 
 func (m *MotanCommonEndpoint) GetName() string {
@@ -348,14 +358,31 @@ type Stream struct {
 	recvNotifyCh     chan struct{}
 	deadline         time.Time // for timeout
 	rc               *motan.RPCContext
-	isClose          atomic.Value // bool
-	isHeartbeat      bool         // for heartbeat
-	heartbeatVersion int          // for heartbeat
+	isHeartbeat      bool // for heartbeat
+	heartbeatVersion int  // for heartbeat
+	timer            *time.Timer
+	canRelease       atomic.Value // state indicates whether the stream needs to be recycled by the channel
+}
+
+func (s *Stream) Reset() {
+	// try consume
+	select {
+	case <-s.recvNotifyCh:
+	default:
+	}
+	s.channel = nil
+	s.req = nil
+	s.res = nil
+	s.rc = nil
 }
 
 func (s *Stream) Send() (err error) {
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.timer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.timer.Stop()
 
 	var bytes []byte
 	var msg *mpro.Message
@@ -386,13 +413,16 @@ func (s *Stream) Send() (err error) {
 		}
 	}
 
+	ready := sendReady{}
 	if msg != nil { // encode v2 message
-		bytes = msg.Encode().Bytes()
+		msg.Encode0()
+		ready.message = msg
+	} else {
+		ready.v1Message = bytes
 	}
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: bytes}
 	select {
 	case s.channel.sendCh <- ready:
 		if s.rc != nil {
@@ -401,9 +431,13 @@ func (s *Stream) Send() (err error) {
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
 			}
+			if s.rc.AsyncCall {
+				// only return send success, it can release in Stream.notify
+				s.canRelease.Store(true)
+			}
 		}
 		return nil
-	case <-timer.C:
+	case <-s.timer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -413,10 +447,18 @@ func (s *Stream) Send() (err error) {
 // Recv sync recv
 func (s *Stream) Recv() (motan.Response, error) {
 	defer func() {
-		s.Close()
+		// only timeout or shutdown before channel.handleMsg, call RemoveFromChannel will be true,
+		// which means stream can release
+		if s.RemoveFromChannel() {
+			s.canRelease.Store(true)
+		}
 	}()
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.timer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.res
@@ -424,17 +466,18 @@ func (s *Stream) Recv() (motan.Response, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-timer.C:
+	case <-s.timer.C:
+		// stream may be referenced by V2Stream.notify, can`t release
+		s.canRelease.Store(false)
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		// stream may be referenced by V2Stream.notify, can`t release
+		s.canRelease.Store(false)
 		return nil, ErrChannelShutdown
 	}
 }
 
 func (s *Stream) notify(msg interface{}, t time.Time) {
-	defer func() {
-		s.Close()
-	}()
 	decodeTime := time.Now()
 	var res motan.Response
 	var v2Msg *mpro.Message
@@ -481,6 +524,10 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer func() {
+				s.RemoveFromChannel()
+				releaseStream(s)
+			}()
 			result := s.rc.Result
 			if err != nil {
 				result.Error = err
@@ -503,70 +550,78 @@ func (s *Stream) SetDeadline(deadline time.Duration) {
 	s.deadline = time.Now().Add(deadline)
 }
 
-func (c *Channel) NewStream(req motan.Request, rc *motan.RPCContext) (*Stream, error) {
+func (c *Channel) newStream(req motan.Request, rc *motan.RPCContext, deadline time.Duration) (*Stream, error) {
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &Stream{
-		streamId:     GenerateRequestID(),
-		channel:      c,
-		req:          req,
-		recvNotifyCh: make(chan struct{}, 1),
-		deadline:     time.Now().Add(defaultRequestTimeout), // default deadline
-		rc:           rc,
+	s := acquireStream()
+	s.streamId = GenerateRequestID()
+	s.channel = c
+	s.isHeartbeat = false
+	s.req = req
+	s.deadline = time.Now().Add(deadline)
+	s.rc = rc
+	if rc != nil && rc.AsyncCall { // release by Stream.Notify
+		s.canRelease.Store(false)
+	} else { // release by Channel self
+		s.canRelease.Store(true)
 	}
-	s.isClose.Store(false)
 	c.streamLock.Lock()
 	c.streams[s.streamId] = s
 	c.streamLock.Unlock()
 	return s, nil
 }
 
-func (c *Channel) NewHeartbeatStream(heartbeatVersion int) (*Stream, error) {
+func (c *Channel) newHeartbeatStream(heartbeatVersion int) (*Stream, error) {
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &Stream{
-		streamId:         GenerateRequestID(),
-		channel:          c,
-		isHeartbeat:      true,
-		heartbeatVersion: heartbeatVersion,
-		recvNotifyCh:     make(chan struct{}, 1),
-		deadline:         time.Now().Add(defaultRequestTimeout),
-	}
-	s.isClose.Store(false)
+	s := acquireStream()
+	s.streamId = GenerateRequestID()
+	s.channel = c
+	s.isHeartbeat = true
+	s.heartbeatVersion = heartbeatVersion
+	s.deadline = time.Now().Add(defaultRequestTimeout)
+	s.canRelease.Store(true)
 	c.heartbeatLock.Lock()
 	c.heartbeats[s.streamId] = s
 	c.heartbeatLock.Unlock()
 	return s, nil
 }
 
-func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
-		if s.isHeartbeat {
-			s.channel.heartbeatLock.Lock()
+func (s *Stream) RemoveFromChannel() bool {
+	var exist bool
+	if s.isHeartbeat {
+		s.channel.heartbeatLock.Lock()
+		if _, exist = s.channel.heartbeats[s.streamId]; exist {
 			delete(s.channel.heartbeats, s.streamId)
-			s.channel.heartbeatLock.Unlock()
-		} else {
-			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.streamId)
-			s.channel.streamLock.Unlock()
 		}
-		s.isClose.Store(true)
+		s.channel.heartbeatLock.Unlock()
+	} else {
+		s.channel.streamLock.Lock()
+		if _, exist = s.channel.streams[s.streamId]; exist {
+			delete(s.channel.streams, s.streamId)
+		}
+		s.channel.streamLock.Unlock()
 	}
+	return exist
 }
 
 // Call send request to the server.
 //
 //	about return: exception in response will record error count, err will not.
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
-	stream, err := c.NewStream(req, rc)
+	stream, err := c.newStream(req, rc, deadline)
 	if err != nil {
 		return nil, err
 	}
-	stream.SetDeadline(deadline)
-	err = stream.Send()
-	if err != nil {
+	defer func() {
+		if rc == nil || !rc.AsyncCall {
+			releaseStream(stream)
+		}
+	}()
+
+	if err = stream.Send(); err != nil {
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
@@ -576,12 +631,13 @@ func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCC
 }
 
 func (c *Channel) HeartBeat(heartbeatVersion int) (motan.Response, error) {
-	stream, err := c.NewHeartbeatStream(heartbeatVersion)
+	stream, err := c.newHeartbeatStream(heartbeatVersion)
 	if err != nil {
 		return nil, err
 	}
-	err = stream.Send()
-	if err != nil {
+	defer releaseStream(stream)
+
+	if err = stream.Send(); err != nil {
 		return nil, err
 	}
 	return stream.Recv()
@@ -601,6 +657,7 @@ func (c *Channel) recv() {
 }
 
 func (c *Channel) recvLoop() error {
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		v, err := mpro.CheckMotanVersion(c.bufRead)
 		if err != nil {
@@ -611,7 +668,7 @@ func (c *Channel) recvLoop() error {
 		if v == mpro.Version1 {
 			msg, t, err = mpro.ReadV1Message(c.bufRead, c.config.MaxContentLength)
 		} else if v == mpro.Version2 {
-			msg, t, err = mpro.DecodeWithTime(c.bufRead, c.config.MaxContentLength)
+			msg, t, err = mpro.DecodeWithTime(c.bufRead, &decodeBuf, c.config.MaxContentLength)
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s.", v, c.conn.RemoteAddr().String())
 			err = mpro.ErrVersion
@@ -619,7 +676,10 @@ func (c *Channel) recvLoop() error {
 		if err != nil {
 			return err
 		}
-		go c.handleMsg(msg, t)
+
+		handleMsgPool.Submit(func() {
+			c.handleMsg(msg, t)
+		})
 	}
 }
 
@@ -647,10 +707,12 @@ func (c *Channel) handleMsg(msg interface{}, t time.Time) {
 	if isHeartbeat {
 		c.heartbeatLock.Lock()
 		stream = c.heartbeats[rid]
+		delete(c.heartbeats, rid)
 		c.heartbeatLock.Unlock()
 	} else {
 		c.streamLock.Lock()
 		stream = c.streams[rid]
+		delete(c.streams, rid)
 		c.streamLock.Unlock()
 	}
 	if stream == nil {
@@ -667,18 +729,24 @@ func (c *Channel) send() {
 	for {
 		select {
 		case ready := <-c.sendCh:
-			if ready.data != nil {
-				c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-				sent := 0
-				for sent < len(ready.data) {
-					n, err := c.conn.Write(ready.data[sent:])
-					if err != nil {
-						vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
-						c.closeOnErr(err)
-						return
-					}
-					sent += n
-				}
+			// can`t reuse net.Buffers
+			// len and cap will be 0 after writev, 'out of range panic' will happen when reuse
+			var sendBuf net.Buffers
+			if ready.message != nil { // motan2
+				sendBuf = ready.message.GetEncodedBytes()
+			} else {
+				sendBuf = [][]byte{ready.v1Message}
+			}
+			c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
+			_, err := sendBuf.WriteTo(c.conn)
+			if ready.message != nil {
+				// message canRelease condition before reset
+				ready.message.SetCanRelease()
+			}
+			if err != nil {
+				vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
+				c.closeOnErr(err)
+				return
 			}
 		case <-c.shutdownCh:
 			return
@@ -844,4 +912,17 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 	go channel.send()
 
 	return channel
+}
+
+func acquireStream() *Stream {
+	return streamPool.Get().(*Stream)
+}
+
+func releaseStream(stream *Stream) {
+	if stream != nil {
+		if v, ok := stream.canRelease.Load().(bool); ok && v {
+			stream.Reset()
+			streamPool.Put(stream)
+		}
+	}
 }

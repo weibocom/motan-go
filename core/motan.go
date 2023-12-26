@@ -14,7 +14,20 @@ import (
 
 type taskHandler func()
 
-var refreshTaskPool = make(chan taskHandler, 100)
+var (
+	refreshTaskPool = make(chan taskHandler, 100)
+	requestPool     = sync.Pool{New: func() interface{} {
+		return &MotanRequest{
+			RPCContext: &RPCContext{},
+			Arguments:  []interface{}{},
+		}
+	}}
+	responsePool = sync.Pool{New: func() interface{} {
+		return &MotanResponse{
+			RPCContext: &RPCContext{},
+		}
+	}}
+)
 
 func init() {
 	go func() {
@@ -28,10 +41,8 @@ func init() {
 }
 
 const (
-	DefaultAttachmentSize     = 16
-	DefaultRPCContextMetaSize = 8
-
-	ProtocolLocal = "local"
+	DefaultAttachmentSize = 16
+	ProtocolLocal         = "local"
 )
 
 var (
@@ -373,8 +384,6 @@ type RPCContext struct {
 	AsyncCall bool
 	Result    *AsyncResult
 	Reply     interface{}
-
-	Meta *StringMap
 	// various time, it's owned by motan request context
 	RequestSendTime     time.Time
 	RequestReceiveTime  time.Time
@@ -389,6 +398,27 @@ type RPCContext struct {
 	// ----  internal vars ----
 	IsMotanV1  bool
 	RemoteAddr string // remote address
+}
+
+func (c *RPCContext) Reset() {
+	// because there is a binding between RPCContext and request/response,
+	// some attributes such as RequestSendTime、RequestReceiveTime will be reset by request/response
+	// therefore, these attributes do not need to be reset here.
+	c.ExtFactory = nil
+	c.OriginalMessage = nil
+	c.Oneway = false
+	c.Proxy = false
+	c.GzipSize = 0
+	c.BodySize = 0
+	c.SerializeNum = 0
+	c.Serialized = false
+	c.AsyncCall = false
+	c.Result = nil
+	c.Reply = nil
+	c.FinishHandlers = c.FinishHandlers[:0]
+	c.Tc = nil
+	c.IsMotanV1 = false
+	c.RemoteAddr = ""
 }
 
 func (c *RPCContext) AddFinishHandler(handler FinishHandler) {
@@ -443,105 +473,125 @@ type MotanRequest struct {
 	mu          sync.Mutex
 }
 
+func AcquireMotanRequest() *MotanRequest {
+	return requestPool.Get().(*MotanRequest)
+}
+
+func ReleaseMotanRequest(req *MotanRequest) {
+	if req != nil {
+		req.Reset()
+		requestPool.Put(req)
+	}
+}
+
+// Reset reset motan request
+func (req *MotanRequest) Reset() {
+	req.Method = ""
+	req.RequestID = 0
+	req.ServiceName = ""
+	req.MethodDesc = ""
+	req.RPCContext.Reset()
+	req.Attachment = nil
+	req.Arguments = req.Arguments[:0]
+}
+
 // GetAttachment GetAttachment
-func (m *MotanRequest) GetAttachment(key string) string {
-	if m.Attachment == nil {
+func (req *MotanRequest) GetAttachment(key string) string {
+	if req.Attachment == nil {
 		return ""
 	}
-	return m.Attachment.LoadOrEmpty(key)
+	return req.Attachment.LoadOrEmpty(key)
 }
 
 // SetAttachment : SetAttachment
-func (m *MotanRequest) SetAttachment(key string, value string) {
-	m.GetAttachments().Store(key, value)
+func (req *MotanRequest) SetAttachment(key string, value string) {
+	req.GetAttachments().Store(key, value)
 }
 
 // GetServiceName GetServiceName
-func (m *MotanRequest) GetServiceName() string {
-	return m.ServiceName
+func (req *MotanRequest) GetServiceName() string {
+	return req.ServiceName
 }
 
 // GetMethod GetMethod
-func (m *MotanRequest) GetMethod() string {
-	return m.Method
+func (req *MotanRequest) GetMethod() string {
+	return req.Method
 }
 
 // GetMethodDesc GetMethodDesc
-func (m *MotanRequest) GetMethodDesc() string {
-	return m.MethodDesc
+func (req *MotanRequest) GetMethodDesc() string {
+	return req.MethodDesc
 }
 
-func (m *MotanRequest) GetArguments() []interface{} {
-	return m.Arguments
-}
-func (m *MotanRequest) GetRequestID() uint64 {
-	return m.RequestID
+func (req *MotanRequest) GetArguments() []interface{} {
+	return req.Arguments
 }
 
-func (m *MotanRequest) SetArguments(arguments []interface{}) {
-	m.Arguments = arguments
+func (req *MotanRequest) GetRequestID() uint64 {
+	return req.RequestID
 }
 
-func (m *MotanRequest) GetAttachments() *StringMap {
-	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+func (req *MotanRequest) SetArguments(arguments []interface{}) {
+	req.Arguments = arguments
+}
+
+func (req *MotanRequest) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&req.Attachment))))
 	if attachment != nil {
 		return attachment
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.Attachment == nil {
+	req.mu.Lock()
+	defer req.mu.Unlock()
+	if req.Attachment == nil {
 		attachment = NewStringMap(DefaultAttachmentSize)
-		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&req.Attachment)), unsafe.Pointer(attachment))
 	} else {
-		attachment = m.Attachment
+		attachment = req.Attachment
 	}
 	return attachment
 }
 
-func (m *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
-	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{
-			Meta: NewStringMap(DefaultRPCContextMetaSize),
-		}
+func (req *MotanRequest) GetRPCContext(canCreate bool) *RPCContext {
+	if req.RPCContext == nil && canCreate {
+		req.RPCContext = &RPCContext{}
 	}
-	return m.RPCContext
+	return req.RPCContext
 }
 
-func (m *MotanRequest) Clone() interface{} {
+func (req *MotanRequest) Clone() interface{} {
 	newRequest := &MotanRequest{
-		RequestID:   m.RequestID,
-		ServiceName: m.ServiceName,
-		Method:      m.Method,
-		MethodDesc:  m.MethodDesc,
-		Arguments:   m.Arguments,
+		RequestID:   req.RequestID,
+		ServiceName: req.ServiceName,
+		Method:      req.Method,
+		MethodDesc:  req.MethodDesc,
+		Arguments:   req.Arguments,
 	}
-	if m.Attachment != nil {
-		newRequest.Attachment = m.Attachment.Copy()
+	if req.Attachment != nil {
+		newRequest.Attachment = req.Attachment.Copy()
 	}
-	if m.RPCContext != nil {
+	if req.RPCContext != nil {
 		newRequest.RPCContext = &RPCContext{
-			ExtFactory:          m.RPCContext.ExtFactory,
-			Oneway:              m.RPCContext.Oneway,
-			Proxy:               m.RPCContext.Proxy,
-			GzipSize:            m.RPCContext.GzipSize,
-			SerializeNum:        m.RPCContext.SerializeNum,
-			Serialized:          m.RPCContext.Serialized,
-			AsyncCall:           m.RPCContext.AsyncCall,
-			Result:              m.RPCContext.Result,
-			Reply:               m.RPCContext.Reply,
-			Meta:                m.RPCContext.Meta,
-			RequestSendTime:     m.RPCContext.RequestSendTime,
-			RequestReceiveTime:  m.RPCContext.RequestReceiveTime,
-			ResponseSendTime:    m.RPCContext.ResponseSendTime,
-			ResponseReceiveTime: m.RPCContext.ResponseReceiveTime,
-			FinishHandlers:      m.RPCContext.FinishHandlers,
-			Tc:                  m.RPCContext.Tc,
+			ExtFactory:          req.RPCContext.ExtFactory,
+			Oneway:              req.RPCContext.Oneway,
+			Proxy:               req.RPCContext.Proxy,
+			GzipSize:            req.RPCContext.GzipSize,
+			SerializeNum:        req.RPCContext.SerializeNum,
+			Serialized:          req.RPCContext.Serialized,
+			AsyncCall:           req.RPCContext.AsyncCall,
+			Result:              req.RPCContext.Result,
+			Reply:               req.RPCContext.Reply,
+			RequestSendTime:     req.RPCContext.RequestSendTime,
+			RequestReceiveTime:  req.RPCContext.RequestReceiveTime,
+			ResponseSendTime:    req.RPCContext.ResponseSendTime,
+			ResponseReceiveTime: req.RPCContext.ResponseReceiveTime,
+			FinishHandlers:      req.RPCContext.FinishHandlers,
+			Tc:                  req.RPCContext.Tc,
 		}
-		if m.RPCContext.OriginalMessage != nil {
-			if oldMessage, ok := m.RPCContext.OriginalMessage.(Cloneable); ok {
+		if req.RPCContext.OriginalMessage != nil {
+			if oldMessage, ok := req.RPCContext.OriginalMessage.(Cloneable); ok {
 				newRequest.RPCContext.OriginalMessage = oldMessage.Clone()
 			} else {
-				newRequest.RPCContext.OriginalMessage = m.RPCContext.OriginalMessage
+				newRequest.RPCContext.OriginalMessage = req.RPCContext.OriginalMessage
 			}
 		}
 	}
@@ -550,14 +600,14 @@ func (m *MotanRequest) Clone() interface{} {
 
 // ProcessDeserializable : DeserializableValue to real params according toType
 // some serialization can deserialize without toType, so nil toType can be accepted in these serializations
-func (m *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
-	if m.GetArguments() != nil && len(m.GetArguments()) == 1 {
-		if d, ok := m.GetArguments()[0].(*DeserializableValue); ok {
+func (req *MotanRequest) ProcessDeserializable(toTypes []interface{}) error {
+	if req.GetArguments() != nil && len(req.GetArguments()) == 1 {
+		if d, ok := req.GetArguments()[0].(*DeserializableValue); ok {
 			v, err := d.DeserializeMulti(toTypes)
 			if err != nil {
 				return err
 			}
-			m.SetArguments(v)
+			req.SetArguments(v)
 		}
 	}
 	return nil
@@ -573,78 +623,99 @@ type MotanResponse struct {
 	mu          sync.Mutex
 }
 
-func (m *MotanResponse) GetAttachment(key string) string {
-	if m.Attachment == nil {
+func AcquireMotanResponse() *MotanResponse {
+	return responsePool.Get().(*MotanResponse)
+}
+
+func ReleaseMotanResponse(m *MotanResponse) {
+	if m != nil {
+		m.Reset()
+		responsePool.Put(m)
+	}
+}
+
+func (res *MotanResponse) Reset() {
+	res.RequestID = 0
+	res.Value = nil
+	res.Exception = nil
+	res.ProcessTime = 0
+	res.Attachment = nil
+	res.RPCContext.Reset()
+}
+
+func (res *MotanResponse) GetAttachment(key string) string {
+	if res.Attachment == nil {
 		return ""
 	}
-	return m.Attachment.LoadOrEmpty(key)
+	return res.Attachment.LoadOrEmpty(key)
 }
 
-func (m *MotanResponse) SetAttachment(key string, value string) {
-	m.GetAttachments().Store(key, value)
+func (res *MotanResponse) SetAttachment(key string, value string) {
+	res.GetAttachments().Store(key, value)
 }
 
-func (m *MotanResponse) GetValue() interface{} {
-	return m.Value
+func (res *MotanResponse) GetValue() interface{} {
+	return res.Value
 }
 
-func (m *MotanResponse) GetException() *Exception {
-	return m.Exception
+func (res *MotanResponse) GetException() *Exception {
+	return res.Exception
 }
 
-func (m *MotanResponse) GetRequestID() uint64 {
-	return m.RequestID
+func (res *MotanResponse) GetRequestID() uint64 {
+	return res.RequestID
 }
 
-func (m *MotanResponse) GetProcessTime() int64 {
-	return m.ProcessTime
+func (res *MotanResponse) GetProcessTime() int64 {
+	return res.ProcessTime
 }
 
-func (m *MotanResponse) GetAttachments() *StringMap {
-	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment))))
+func (res *MotanResponse) GetAttachments() *StringMap {
+	attachment := (*StringMap)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&res.Attachment))))
 	if attachment != nil {
 		return attachment
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.Attachment == nil {
+	res.mu.Lock()
+	defer res.mu.Unlock()
+	if res.Attachment == nil {
 		attachment = NewStringMap(DefaultAttachmentSize)
-		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&m.Attachment)), unsafe.Pointer(attachment))
+		atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&res.Attachment)), unsafe.Pointer(attachment))
 	} else {
-		attachment = m.Attachment
+		attachment = res.Attachment
 	}
 	return attachment
 }
 
-func (m *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
-	if m.RPCContext == nil && canCreate {
-		m.RPCContext = &RPCContext{
-			Meta: NewStringMap(DefaultRPCContextMetaSize),
-		}
+func (res *MotanResponse) GetRPCContext(canCreate bool) *RPCContext {
+	if res.RPCContext == nil && canCreate {
+		res.RPCContext = &RPCContext{}
 	}
-	return m.RPCContext
+	return res.RPCContext
 }
 
-func (m *MotanResponse) SetProcessTime(time int64) {
-	m.ProcessTime = time
+func (res *MotanResponse) SetProcessTime(time int64) {
+	res.ProcessTime = time
 }
 
 // ProcessDeserializable : same with MotanRequest
-func (m *MotanResponse) ProcessDeserializable(toType interface{}) error {
-	if m.GetValue() != nil {
-		if d, ok := m.GetValue().(*DeserializableValue); ok {
+func (res *MotanResponse) ProcessDeserializable(toType interface{}) error {
+	if res.GetValue() != nil {
+		if d, ok := res.GetValue().(*DeserializableValue); ok {
 			v, err := d.Deserialize(toType)
 			if err != nil {
 				return err
 			}
-			m.Value = v
+			res.Value = v
 		}
 	}
 	return nil
 }
 
 func BuildExceptionResponse(requestid uint64, e *Exception) *MotanResponse {
-	return &MotanResponse{RequestID: requestid, Exception: e}
+	resp := AcquireMotanResponse()
+	resp.RequestID = requestid
+	resp.Exception = e
+	return resp
 }
 
 // extensions factory-func
@@ -695,8 +766,8 @@ func (d *DefaultExtensionFactory) GetLB(url *URL) LoadBalance {
 }
 
 func (d *DefaultExtensionFactory) GetFilter(name string) Filter {
-	if newDefualt, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
-		return newDefualt()
+	if newDefault, ok := d.filterFactories[strings.TrimSpace(name)]; ok {
+		return newDefault()
 	}
 	vlog.Errorf("filter name %s is not found in DefaultExtensionFactory!", name)
 	return nil
@@ -870,12 +941,15 @@ func (l *lastEndPointFilter) HasNext() bool {
 func (l *lastEndPointFilter) SetNext(nextFilter EndPointFilter) {
 	vlog.Errorf("should not set next in lastEndPointFilter! filer:%s", nextFilter.GetName())
 }
+
 func (l *lastEndPointFilter) GetNext() EndPointFilter {
 	return nil
 }
+
 func (l *lastEndPointFilter) GetIndex() int {
 	return 100
 }
+
 func (l *lastEndPointFilter) GetType() int32 {
 	return EndPointFilterType
 }
@@ -885,6 +959,7 @@ type lastClusterFilter struct{}
 func (l *lastClusterFilter) GetName() string {
 	return "lastClusterFilter"
 }
+
 func (l *lastClusterFilter) NewFilter(url *URL) Filter {
 	return GetLastClusterFilter()
 }
@@ -905,15 +980,19 @@ func (l *lastClusterFilter) Filter(haStrategy HaStrategy, loadBalance LoadBalanc
 func (l *lastClusterFilter) HasNext() bool {
 	return false
 }
+
 func (l *lastClusterFilter) SetNext(nextFilter ClusterFilter) {
 	vlog.Errorf("should not set next in lastClusterFilter! filer:%s", nextFilter.GetName())
 }
+
 func (l *lastClusterFilter) GetNext() ClusterFilter {
 	return nil
 }
+
 func (l *lastClusterFilter) GetIndex() int {
 	return 100
 }
+
 func (l *lastClusterFilter) GetType() int32 {
 	return ClusterFilterType
 }
@@ -931,12 +1010,15 @@ func (f *FilterEndPoint) Call(request Request) Response {
 	}
 	return f.Filter.Filter(f.Caller, request)
 }
+
 func (f *FilterEndPoint) GetURL() *URL {
 	return f.URL
 }
+
 func (f *FilterEndPoint) SetURL(url *URL) {
 	f.URL = url
 }
+
 func (f *FilterEndPoint) GetName() string {
 	return "FilterEndPoint"
 }
@@ -1034,7 +1116,7 @@ func newRegistryGroupServiceCacheInfo(sr ServiceDiscoverableRegistry, group stri
 func (c *registryGroupServiceCacheInfo) getServices() ([]string, map[string]string) {
 	if time.Now().Sub(c.lastUpdTime.Load().(time.Time)) >= registryGroupServiceInfoMaxCacheTime {
 		select {
-		case refreshTaskPool <- taskHandler(func() { c.refreshServices() }):
+		case refreshTaskPool <- func() { c.refreshServices() }:
 		default:
 			vlog.Warningf("Task pool is full, refresh service of group [%s] delay", c.group)
 		}

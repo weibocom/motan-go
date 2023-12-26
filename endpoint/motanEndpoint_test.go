@@ -21,7 +21,7 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-//TODO more UT
+// TODO more UT
 func TestGetName(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
@@ -57,6 +57,8 @@ func TestRecordErrEmptyThreshold(t *testing.T) {
 		ep.Call(request)
 		assert.True(t, ep.IsAvailable())
 	}
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -89,6 +91,8 @@ func TestRecordErrWithErrThreshold(t *testing.T) {
 	ep.channels.channels <- buildV2Channel(conn, ep.channels.config, ep.channels.serialization)
 	time.Sleep(time.Second * 2)
 	//assert.True(t, ep.IsAvailable())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -111,6 +115,8 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	s, ok := v.(string)
 	assert.True(t, ok)
 	assert.Equal(t, s, "hello")
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -133,6 +139,8 @@ func TestMotanEndpoint_AsyncCall(t *testing.T) {
 	resp := <-request.GetRPCContext(false).Result.Done
 	assert.Nil(t, resp.Error)
 	assert.Equal(t, resStr, "hello")
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -158,6 +166,8 @@ func TestMotanEndpoint_ErrorCall(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -184,6 +194,8 @@ func TestMotanEndpoint_RequestTimeout(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -211,6 +223,8 @@ func TestLazyInit(t *testing.T) {
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
+
+	assertV2ChanelStreamEmpty(ep, t)
 	ep.Destroy()
 }
 
@@ -225,6 +239,104 @@ func TestAsyncInit(t *testing.T) {
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
 	time.Sleep(time.Second * 5)
+}
+
+// TestMotanEndpoint_AsyncCallNoResponse verify V2Channel streams memory leak when server not reply response
+// bugs to be fixed
+func TestMotanEndpoint_AsyncCallNoResponse(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan2"}
+	url.PutParam(motan.TimeOutKey, "2000")
+	url.PutParam(motan.ErrorCountThresholdKey, "1")
+	url.PutParam(motan.ClientConnectionKey, "1")
+	url.PutParam(motan.AsyncInitConnection, "false")
+	ep := &MotanEndpoint{}
+	ep.SetURL(url)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 1, ep.clientConnection)
+	var resStr string
+	request := &motan.MotanRequest{ServiceName: "test", Method: "test", RPCContext: &motan.RPCContext{AsyncCall: true, Result: &motan.AsyncResult{Reply: &resStr, Done: make(chan *motan.AsyncResult, 5)}}}
+	request.Attachment = motan.NewStringMap(0)
+
+	// server not reply
+	request.SetAttachment("no_response", "true")
+
+	res := ep.Call(request)
+	assert.Nil(t, res.GetException())
+	timeoutTimer := time.NewTimer(time.Second * 3)
+	defer timeoutTimer.Stop()
+	select {
+	case <-request.GetRPCContext(false).Result.Done:
+		t.Errorf("unexpect condition, recv response singnal")
+	case <-timeoutTimer.C:
+		t.Logf("expect condition, not recv response singnal")
+	}
+
+	// Channel.streams cant`t release stream
+	c := <-ep.channels.getChannels()
+	// it will be zero if server not reply response, bug to be fixed
+	assert.Equal(t, 1, len(c.streams))
+}
+
+func TestV2StreamPool(t *testing.T) {
+	var oldStream *V2Stream
+	// consume v2stream poll until call New func
+	for {
+		oldStream = acquireV2Stream()
+		if v, ok := oldStream.canRelease.Load().(bool); !ok || !v {
+			break
+		}
+	}
+	// test new Stream
+	assert.NotNil(t, oldStream)
+	assert.NotNil(t, oldStream.recvNotifyCh)
+	oldStream.streamId = GenerateRequestID()
+	// verify reset
+	oldStream.recvNotifyCh <- struct{}{}
+
+	// test canRelease
+	// oldStream.canRelease is not ture，release fail
+	// test reset recvNotifyCh
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
+	releaseV2Stream(oldStream)
+	assert.Equal(t, 1, len(oldStream.recvNotifyCh))
+	// canRelease success
+	oldStream.canRelease.Store(true)
+	releaseV2Stream(oldStream)
+	assert.Equal(t, 0, len(oldStream.recvNotifyCh))
+
+	// test put nil
+	var nilStream *V2Stream
+	// can not put nil to pool
+	releaseV2Stream(nilStream)
+	newStream3 := acquireV2Stream()
+	assert.NotEqual(t, nil, newStream3)
+}
+
+func assertV2ChanelStreamEmpty(ep *MotanEndpoint, t *testing.T) {
+	if ep == nil {
+		return
+	}
+	channels := ep.channels.getChannels()
+	for {
+		select {
+		case c, ok := <-channels:
+			if !ok || c == nil {
+				return
+			} else {
+				c.streamLock.Lock()
+				// it should be zero
+				assert.Equal(t, 0, len(c.streams))
+				c.streamLock.Unlock()
+
+				c.heartbeatLock.Lock()
+				assert.Equal(t, 0, len(c.heartbeats))
+				c.heartbeatLock.Unlock()
+			}
+		default:
+			return
+		}
+	}
 }
 
 func StartTestServer(port int) *MockServer {
@@ -268,8 +380,9 @@ func handle(netListen net.Listener) {
 }
 
 func handleConnection(conn net.Conn, timeout int) {
-	buf := bufio.NewReader(conn)
-	msg, _, err := protocol.DecodeWithTime(buf, 10*1024*1024)
+	reader := bufio.NewReader(conn)
+	decodeBuf := make([]byte, 100)
+	msg, err := protocol.Decode(reader, &decodeBuf)
 	if err != nil {
 		time.Sleep(time.Millisecond * 1000)
 		conn.Close()
@@ -279,6 +392,10 @@ func handleConnection(conn net.Conn, timeout int) {
 }
 
 func processMsg(msg *protocol.Message, conn net.Conn) {
+	// mock async call, but server not reply response
+	if _, ok := msg.Metadata.Load("no_response"); ok {
+		return
+	}
 	var res *protocol.Message
 	var tc *motan.TraceContext
 	var err error

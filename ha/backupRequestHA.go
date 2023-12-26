@@ -67,7 +67,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	successCh := make(chan motan.Response, retries+1)
 	if delay <= 0 { //no delay time configuration
 		// TODO: we should use metrics of the cluster, with traffic control the group may changed
-		item := metrics.GetStatItem(metrics.Escape(request.GetAttachment(protocol.MGroup)), metrics.Escape(request.GetAttachment(protocol.MPath)))
+		item := metrics.GetStatItem(request.GetAttachment(protocol.MGroup), "", request.GetAttachment(protocol.MPath))
 		if item == nil || item.LastSnapshot() == nil {
 			initDelay := int(br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestInitDelayTime", 0))
 			if initDelay == 0 {

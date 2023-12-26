@@ -3,6 +3,8 @@ package server
 import (
 	"bufio"
 	"errors"
+	"github.com/panjf2000/ants/v2"
+	mhttp "github.com/weibocom/motan-go/http"
 	"net"
 	"strconv"
 	"strings"
@@ -19,6 +21,15 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
+var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
+
+func SetProcessPoolSize(size int) {
+	processPool.Tune(size)
+}
+
+func GetProcessPoolSize() int {
+	return processPool.Cap()
+}
 
 func incrConnections() {
 	atomic.AddInt64(&currentConnections, 1)
@@ -61,7 +72,7 @@ func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler,
 		}
 		lis = listener
 	} else {
-		addr := ":" + strconv.Itoa(int(m.URL.Port))
+		addr := ":" + strconv.Itoa(m.URL.Port)
 		if registry.IsAgent(m.URL) {
 			addr = m.URL.Host + addr
 		}
@@ -151,7 +162,7 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 	} else {
 		ip = getRemoteIP(conn.RemoteAddr().String())
 	}
-
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
 		v, err := mpro.CheckMotanVersion(buf)
 		if err != nil {
@@ -168,13 +179,15 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 			}
 			go m.processV1(v1Msg, t, ip, conn)
 		} else if v == mpro.Version2 {
-			msg, t, err := mpro.DecodeWithTime(buf, m.maxContextLength)
+			msg, t, err := mpro.DecodeWithTime(buf, &decodeBuf, m.maxContextLength)
 			if err != nil {
 				vlog.Warningf("decode motan v2 message fail! con:%s, err:%s.", conn.RemoteAddr().String(), err.Error())
 				break
 			}
 
-			go m.processV2(msg, t, ip, conn)
+			processPool.Submit(func() {
+				m.processV2(msg, t, ip, conn)
+			})
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s", v, conn.RemoteAddr().String())
 			break
@@ -219,7 +232,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 				tc.PutReqSpan(&motan.Span{Name: motan.Convert, Time: time.Now()})
 				req.GetRPCContext(true).Tc = tc
 			}
-			callStart := time.Now()
+
 			mres = m.handler.Call(req)
 			if tc != nil {
 				// clusterFilter end
@@ -229,7 +242,7 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 				resCtx := mres.GetRPCContext(true)
 				resCtx.Proxy = m.proxy
 				if mres.GetAttachment(mpro.MProcessTime) == "" {
-					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(callStart)/1e6), 10))
+					mres.SetAttachment(mpro.MProcessTime, strconv.FormatInt(int64(time.Now().Sub(start)/1e6), 10))
 				}
 				res, err = mpro.ConvertToResMessage(mres, serialization)
 				if tc != nil {
@@ -246,12 +259,14 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	}
 	// recover the communication identifier
 	res.Header.RequestID = lastRequestID
-	resBuf := res.Encode()
+	res.Encode0()
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Encode, Time: time.Now()})
 	}
+	var sendBuf net.Buffers = res.GetEncodedBytes()
 	conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-	_, err := conn.Write(resBuf.Bytes())
+	_, err := sendBuf.WriteTo(conn)
+	res.SetCanRelease()
 	if err != nil {
 		vlog.Errorf("connection will close. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		conn.Close()
@@ -268,6 +283,18 @@ func (m *MotanServer) processV2(msg *mpro.Message, start time.Time, ip string, c
 	if tc != nil {
 		tc.PutResSpan(&motan.Span{Name: motan.Send, Time: resSendTime})
 	}
+	// 回收message
+	mpro.ReleaseMessage(msg)
+	mpro.ReleaseMessage(res)
+	// 回收request
+	if motanReq, ok := mreq.(*motan.MotanRequest); ok {
+		motan.ReleaseMotanRequest(motanReq)
+	}
+	if motanResp, ok := mres.(*motan.MotanResponse); ok {
+		motan.ReleaseMotanResponse(motanResp)
+	} else if motanHttpRes, ok := mres.(*mhttp.HttpMotanResponse); ok {
+		mhttp.ReleaseHttpMotanResponse(motanHttpRes)
+	}
 }
 
 func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip string, conn net.Conn) {
@@ -276,6 +303,13 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 	var result []byte
 	var reqCtx *motan.RPCContext
 	req, err := mpro.DecodeMotanV1Request(msg)
+	// fill v2 attachment
+	if req.GetAttachment(mpro.MGroup) == "" {
+		req.SetAttachment(mpro.MGroup, req.GetAttachment(mpro.V1Group))
+	}
+	if req.GetAttachment(mpro.MVersion) == "" {
+		req.SetAttachment(mpro.MVersion, req.GetAttachment(mpro.V1Version))
+	}
 	if err != nil {
 		vlog.Errorf("decode v1 request fail. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		result = mpro.BuildV1ExceptionResponse(msg.Rid, err.Error())
@@ -337,7 +371,7 @@ func getRemoteIP(address string) string {
 	var ip string
 	index := strings.Index(address, ":")
 	if index > 0 {
-		ip = string(address[:index])
+		ip = address[:index]
 	} else {
 		ip = address
 	}

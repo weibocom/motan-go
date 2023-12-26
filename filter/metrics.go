@@ -1,11 +1,10 @@
 package filter
 
 import (
-	"time"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
+	"time"
 )
 
 const (
@@ -57,9 +56,8 @@ func (m *MetricsFilter) GetNext() motan.EndPointFilter {
 }
 
 func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
-	start := time.Now()
+	start := getFilterStartTime(caller, request)
 	response := m.GetNext().Filter(caller, request)
-
 	proxy := false
 	provider := false
 	ctx := request.GetRPCContext(false)
@@ -86,30 +84,28 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	if provider {
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
-	key := metrics.Escape(role) +
-		":" + metrics.Escape(application) +
-		":" + metrics.Escape(request.GetMethod())
-	addMetric(metrics.Escape(request.GetAttachment(protocol.MGroup)),
-		metrics.Escape(request.GetAttachment(protocol.MPath)),
-		key, time.Since(start).Nanoseconds()/1e6, response)
+	keys := []string{role, application, request.GetMethod()}
+	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetAttachment(protocol.MPath),
+		keys, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
 
-func addMetric(group string, service string, key string, cost int64, response motan.Response) {
-	metrics.AddCounter(group, service, key+MetricsTotalCountSuffix, 1) //total_count
-	if response.GetException() != nil {                                //err_count
+// addMetricWithKeys arguments: group & groupSuffix & service &  keys elements is text without escaped
+func addMetricWithKeys(group, groupSuffix string, service string, keys []string, cost int64, response motan.Response) {
+	metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsTotalCountSuffix, 1) //total_count
+	if response.GetException() != nil {                                                       //err_count
 		exception := response.GetException()
 		if exception.ErrType == motan.BizException {
-			metrics.AddCounter(group, service, key+MetricsBizErrorCountSuffix, 1)
+			metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsBizErrorCountSuffix, 1)
 		} else {
-			metrics.AddCounter(group, service, key+MetricsOtherErrorCountSuffix, 1)
+			metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsOtherErrorCountSuffix, 1)
 		}
 	}
-	metrics.AddCounter(group, service, key+metrics.ElapseTimeSuffix(cost), 1)
+	metrics.AddCounterWithKeys(group, groupSuffix, service, keys, metrics.ElapseTimeSuffix(cost), 1)
 	if cost > 200 {
-		metrics.AddCounter(group, service, key+MetricsSlowCountSuffix, 1)
+		metrics.AddCounterWithKeys(group, groupSuffix, service, keys, MetricsSlowCountSuffix, 1)
 	}
-	metrics.AddHistograms(group, service, key, cost)
+	metrics.AddHistogramsWithKeys(group, groupSuffix, service, keys, "", cost)
 }
 
 func (m *MetricsFilter) SetContext(context *motan.Context) {

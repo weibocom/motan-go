@@ -42,6 +42,7 @@ const (
 )
 
 var (
+	metricsKeyBuilderBufferSize = 64
 	// NewStatItem is the factory func for StatItem
 	NewStatItem = NewDefaultStatItem
 	items       = make(map[string]StatItem, 64)
@@ -52,15 +53,21 @@ var (
 		processor: defaultEventProcessor, //sink processor size
 		eventBus:  make(chan *event, eventBufferSize),
 		writers:   make(map[string]StatWriter),
-		evtBuf:    &sync.Pool{New: func() interface{} { return new(event) }},
+		eventPool: &sync.Pool{New: func() interface{} {
+			return &event{}
+		}},
 	}
+	escapeCache sync.Map
 )
 
 type StatItem interface {
 	SetService(service string)
 	GetService() string
+	GetEscapedService() string
 	SetGroup(group string)
 	GetGroup() string
+	GetEscapedGroup() string
+	GetGroupSuffix() string
 	AddCounter(key string, value int64)
 	AddHistograms(key string, duration int64)
 	AddGauge(key string, value int64)
@@ -97,42 +104,43 @@ type StatWriter interface {
 	Write(snapshots []Snapshot) error
 }
 
-func GetOrRegisterStatItem(group string, service string) StatItem {
+func GetOrRegisterStatItem(group, groupSuffix string, service string) StatItem {
+	k := group + groupSuffix + service
 	itemsLock.RLock()
-	item := items[group+service]
+	item := items[k]
 	itemsLock.RUnlock()
 	if item != nil {
 		return item
 	}
 	itemsLock.Lock()
-	item = items[group+service]
+	item = items[k]
 	if item == nil {
-		item = NewStatItem(group, service)
-		items[group+service] = item
+		item = NewStatItem(group, groupSuffix, service)
+		items[k] = item
 	}
 	itemsLock.Unlock()
 	return item
 }
 
-func GetStatItem(group string, service string) StatItem {
+func GetStatItem(group, groupSuffix string, service string) StatItem {
 	itemsLock.RLock()
 	defer itemsLock.RUnlock()
-	return items[group+service]
+	return items[group+groupSuffix+service]
 }
 
 // NewDefaultStatItem create a new statistic item, you should escape input parameter before call this function
-func NewDefaultStatItem(group string, service string) StatItem {
-	return &DefaultStatItem{group: group, service: service, holder: &RegistryHolder{registry: metrics.NewRegistry()}, isReport: true}
+func NewDefaultStatItem(group, groupSuffix string, service string) StatItem {
+	return &DefaultStatItem{group: group, groupSuffix: groupSuffix, service: service, holder: &RegistryHolder{registry: metrics.NewRegistry()}, isReport: true}
 }
 
-func RMStatItem(group string, service string) {
+func RMStatItem(group, groupSuffix string, service string) {
 	itemsLock.RLock()
-	i := items[group+service]
+	i := items[group+groupSuffix+service]
 	itemsLock.RUnlock()
 	if i != nil {
 		i.Clear()
 		itemsLock.Lock()
-		delete(items, group+service)
+		delete(items, group+groupSuffix+service)
 		itemsLock.Unlock()
 	}
 }
@@ -165,14 +173,19 @@ func StatItemSize() int {
 	return len(items)
 }
 
+// Escape the string avoid invalid graphite key
 func Escape(s string) string {
-	return strings.Map(func(char rune) rune {
+	if v, ok := escapeCache.Load(s); ok {
+		return v.(string)
+	}
+	v := strings.Map(func(char rune) rune {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || (char == '-') {
 			return char
-		} else {
-			return '_'
 		}
+		return '_'
 	}, s)
+	escapeCache.Store(s, v)
+	return v
 }
 
 func AddCounter(group string, service string, key string, value int64) {
@@ -187,13 +200,29 @@ func AddGauge(group string, service string, key string, value int64) {
 	sendEvent(eventGauge, group, service, key, value)
 }
 
+// AddCounterWithKeys arguments: group & groupSuffix & service &  keys elements & keySuffix is text without escaped
+func AddCounterWithKeys(group, groupSuffix string, service string, keys []string, keySuffix string, value int64) {
+	sendEventWithKeys(eventCounter, group, groupSuffix, service, keys, keySuffix, value)
+}
+
+// AddHistogramsWithKeys arguments: group & groupSuffix & service &  keys elements & keySuffix is text without escaped
+func AddHistogramsWithKeys(group, groupSuffix string, service string, keys []string, suffix string, duration int64) {
+	sendEventWithKeys(eventHistograms, group, groupSuffix, service, keys, suffix, duration)
+}
+
 func sendEvent(eventType int32, group string, service string, key string, value int64) {
-	evt := rp.evtBuf.Get().(*event)
+	sendEventWithKeys(eventType, group, "", service, []string{key}, "", value)
+}
+
+func sendEventWithKeys(eventType int32, group, groupSuffix string, service string, keys []string, suffix string, value int64) {
+	evt := rp.eventPool.Get().(*event)
 	evt.event = eventType
-	evt.key = key
+	evt.keys = keys
 	evt.group = group
 	evt.service = service
 	evt.value = value
+	evt.keySuffix = suffix
+	evt.groupSuffix = groupSuffix
 	select {
 	case rp.eventBus <- evt:
 	default:
@@ -239,11 +268,43 @@ func startSampleStatus(application string) {
 }
 
 type event struct {
-	event   int32
-	key     string
-	group   string
-	service string
-	value   int64
+	event       int32
+	keys        []string
+	keySuffix   string
+	group       string
+	groupSuffix string
+	service     string
+	value       int64
+}
+
+// reset used to reset the event object before put it back
+// to event objects pool
+func (s *event) reset() {
+	s.event = 0
+	s.keys = s.keys[:0]
+	s.keySuffix = ""
+	s.group = ""
+	s.service = ""
+	s.value = 0
+	s.groupSuffix = ""
+}
+
+// getMetricKey get the metrics key when add metrics data into metrics object,
+// the key split by : used to when send data to graphite
+func (s *event) getMetricKey() string {
+	keyBuilder := motan.AcquireBytesBuffer(metricsKeyBuilderBufferSize)
+	defer motan.ReleaseBytesBuffer(keyBuilder)
+	l := len(s.keys)
+	for idx, k := range s.keys {
+		keyBuilder.WriteString(Escape(k))
+		if idx < l-1 {
+			keyBuilder.WriteString(":")
+		}
+	}
+	if s.keySuffix != "" {
+		keyBuilder.WriteString(s.keySuffix)
+	}
+	return string(keyBuilder.Bytes())
 }
 
 type RegistryHolder struct {
@@ -252,6 +313,7 @@ type RegistryHolder struct {
 
 type DefaultStatItem struct {
 	group        string
+	groupSuffix  string
 	service      string
 	holder       *RegistryHolder
 	isReport     bool
@@ -271,12 +333,26 @@ func (d *DefaultStatItem) GetService() string {
 	return d.service
 }
 
+// GetEscapedService return the escaped service used as graphite key
+func (d *DefaultStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
+
 func (d *DefaultStatItem) SetGroup(group string) {
 	d.group = group
 }
 
 func (d *DefaultStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *DefaultStatItem) GetGroupSuffix() string {
+	return d.groupSuffix
+}
+
+// GetEscapedGroup return the escaped group used as graphite key
+func (d *DefaultStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *DefaultStatItem) AddCounter(key string, value int64) {
@@ -315,6 +391,7 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	old := atomic.SwapPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)), unsafe.Pointer(&RegistryHolder{registry: metrics.NewRegistry()}))
 	d.lastSnapshot = &ReadonlyStatItem{
 		group:          d.group,
+		groupSuffix:    d.groupSuffix,
 		service:        d.service,
 		holder:         (*RegistryHolder)(old),
 		isReport:       d.isReport,
@@ -324,8 +401,8 @@ func (d *DefaultStatItem) SnapshotAndClear() Snapshot {
 	return d.lastSnapshot
 }
 
+// SnapshotAndClearV0 Using SnapshotAndClear instead.
 // Deprecated.
-// Using SnapshotAndClear instead.
 // Because of Snapshot(DefaultStatItem) calculates metrics will call locker to do that,
 // cause low performance
 func (d *DefaultStatItem) SnapshotAndClearV0() Snapshot {
@@ -467,6 +544,7 @@ func (d *DefaultStatItem) IsGauge(key string) bool {
 
 type ReadonlyStatItem struct {
 	group          string
+	groupSuffix    string
 	service        string
 	holder         *RegistryHolder
 	isReport       bool
@@ -477,6 +555,7 @@ type ReadonlyStatItem struct {
 func (d *ReadonlyStatItem) getRegistry() metrics.Registry {
 	return (*RegistryHolder)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&d.holder)))).registry
 }
+
 func (d *ReadonlyStatItem) getCache(key string) interface{} {
 	d.buildCacheLock.RLock()
 	if v, ok := d.cache[key]; ok {
@@ -521,12 +600,26 @@ func (d *ReadonlyStatItem) GetService() string {
 	return d.service
 }
 
+// GetEscapedService return the escaped service used as graphite key
+func (d *ReadonlyStatItem) GetEscapedService() string {
+	return Escape(d.service)
+}
+
 func (d *ReadonlyStatItem) SetGroup(group string) {
 	panic("action not supported")
 }
 
 func (d *ReadonlyStatItem) GetGroup() string {
 	return d.group
+}
+
+func (d *ReadonlyStatItem) GetGroupSuffix() string {
+	return d.groupSuffix
+}
+
+// GetEscapedGroup return the escaped group used as graphite key
+func (d *ReadonlyStatItem) GetEscapedGroup() string {
+	return Escape(d.group)
 }
 
 func (d *ReadonlyStatItem) AddCounter(key string, value int64) {
@@ -725,13 +818,16 @@ type reporter struct {
 	interval    time.Duration
 	processor   int
 	writers     map[string]StatWriter
-	evtBuf      *sync.Pool
+	eventPool   *sync.Pool
 	writersLock sync.RWMutex
 }
 
 func (r *reporter) eventLoop() {
 	for evt := range r.eventBus {
 		r.processEvent(evt)
+		// clean the event object before put it back
+		evt.reset()
+		r.eventPool.Put(evt)
 	}
 }
 
@@ -746,14 +842,15 @@ func (r *reporter) addWriter(key string, sw StatWriter) {
 
 func (r *reporter) processEvent(evt *event) {
 	defer motan.HandlePanic(nil)
-	item := GetOrRegisterStatItem(evt.group, evt.service)
+	item := GetOrRegisterStatItem(evt.group, evt.groupSuffix, evt.service)
+	key := evt.getMetricKey()
 	switch evt.event {
 	case eventCounter:
-		item.AddCounter(evt.key, evt.value)
+		item.AddCounter(key, evt.value)
 	case eventHistograms:
-		item.AddHistograms(evt.key, evt.value)
+		item.AddHistograms(key, evt.value)
 	case eventGauge:
-		item.AddGauge(evt.key, evt.value)
+		item.AddGauge(key, evt.value)
 	}
 }
 

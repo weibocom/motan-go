@@ -11,6 +11,7 @@ import (
 	vlog "github.com/weibocom/motan-go/log"
 	"github.com/weibocom/motan-go/registry"
 	"github.com/weibocom/motan-go/serialize"
+	"github.com/weibocom/motan-go/server"
 	_ "github.com/weibocom/motan-go/server"
 	_ "golang.org/x/net/context"
 	"io/ioutil"
@@ -63,6 +64,7 @@ motan-agent:
   log_dir: "stdout"
   snapshot_dir: "./snapshot"
   application: "testing"
+  processPoolSize: 100
 
 motan-registry:
   direct:
@@ -87,6 +89,7 @@ motan-refer:
 	resp := c1.BaseCall(req, nil)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
+	assert.Equal(t, 100, server.GetProcessPoolSize())
 }
 func Test_unixClientCall2(t *testing.T) {
 	t.Parallel()
@@ -387,7 +390,7 @@ func TestAgent_InitCall(t *testing.T) {
 	}
 
 	//test init cluster with one path and one groups in clusterMap
-	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
+	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
 
 	//test agentHandler call with group
@@ -413,15 +416,18 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
+		// only input service，and there is only one cluster，findCluster would return successfully
 		{"test0", "", "", "", "No refers for request"},
-		{"test-1", "111", "222", "333", "cluster not found. cluster:test-1"},
-		{"test3", "", "", "", "empty group is not supported"},
+		{"test0", "g0", "", "", "No refers for request"},
+		{"test0", "g0", "http", "", "No refers for request"},
+		{"test0", "g0", "", "1.3", "No refers for request"},
+		{"test-1", "111", "222", "333", "cluster not found"},
 		{"test", "g2", "", "", "No refers for request"},
-		{"test", "g1", "", "", "empty protocol is not supported"},
 		{"test", "g1", "motan2", "", "No refers for request"},
-		{"test", "g1", "motan", "", "empty version is not supported"},
 		{"test", "g1", "http", "1.3", "No refers for request"},
-		{"test", "g1", "http", "1.2", "less condition to select cluster"},
+		{"test", "b", "c", "d", "no cluster matches the request"},
+		// one service matches multiple clusters, without passing group
+		{"test", "", "c", "d", "multiple clusters are matched with service"},
 	} {
 		request.ServiceName = v.service
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -479,10 +485,9 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
-		{"test4", "", "", "", "empty group is not supported"},
+		{"test3", "111", "222", "333", "cluster not found. service: test3"},
 		{"test5", "", "", "", "No refers for request"},
-		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
+		{"helloService2", "", "", "", "cluster not found. service: helloService2"},
 	} {
 		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -633,7 +638,7 @@ motan-service:
 	c1.Initialize()
 	var reply []byte
 	req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
-	req.SetAttachment("HTTP_HOST", "test.com")
+	req.SetAttachment("http_Host", "test.com")
 	resp := c1.BaseCall(req, &reply)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "okay", string(reply))

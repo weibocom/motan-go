@@ -60,6 +60,11 @@ const (
 	HEARTBEAT_RESPONSE_STRING = HEARTBEAT_METHOD_NAME
 )
 
+const (
+	V1Group   = "group"
+	V1Version = "version"
+)
+
 const MAX_BLOCK_SIZE = 1024
 
 // base binary arrays

@@ -31,7 +31,7 @@ func init() {
 		Exception:     "Exception"}
 }
 
-//BenchmarkLogSprintf: 736 ns/op
+// BenchmarkLogSprintf: 736 ns/op
 func BenchmarkLogSprintf(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -52,7 +52,7 @@ func BenchmarkLogSprintf(b *testing.B) {
 	}
 }
 
-//BenchmarkLogBufferWritePlus: 438 ns/op
+// BenchmarkLogBufferWritePlus: 438 ns/op
 func BenchmarkLogBufferWritePlus(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -74,7 +74,7 @@ func BenchmarkLogBufferWritePlus(b *testing.B) {
 	}
 }
 
-//BenchmarkLogBufferWrite: 406 ns/op
+// BenchmarkLogBufferWrite: 406 ns/op
 func BenchmarkLogBufferWrite(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
