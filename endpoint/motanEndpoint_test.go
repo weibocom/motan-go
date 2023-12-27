@@ -120,30 +120,6 @@ func TestMotanEndpoint_SuccessCall(t *testing.T) {
 	ep.Destroy()
 }
 
-func TestMotanEndpoint_AsyncCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
-	url.PutParam(motan.TimeOutKey, "2000")
-	url.PutParam(motan.ErrorCountThresholdKey, "1")
-	url.PutParam(motan.ClientConnectionKey, "1")
-	url.PutParam(motan.AsyncInitConnection, "false")
-	ep := &MotanEndpoint{}
-	ep.SetURL(url)
-	ep.SetSerialization(&serialize.SimpleSerialization{})
-	ep.Initialize()
-	assert.Equal(t, 1, ep.clientConnection)
-	var resStr string
-	request := &motan.MotanRequest{ServiceName: "test", Method: "test", RPCContext: &motan.RPCContext{AsyncCall: true, Result: &motan.AsyncResult{Reply: &resStr, Done: make(chan *motan.AsyncResult, 5)}}}
-	request.Attachment = motan.NewStringMap(0)
-	res := ep.Call(request)
-	assert.Nil(t, res.GetException())
-	resp := <-request.GetRPCContext(false).Result.Done
-	assert.Nil(t, resp.Error)
-	assert.Equal(t, resStr, "hello")
-
-	assertV2ChanelStreamEmpty(ep, t)
-	ep.Destroy()
-}
-
 func TestMotanEndpoint_ErrorCall(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan2"}
 	url.PutParam(motan.TimeOutKey, "100")
@@ -239,43 +215,6 @@ func TestAsyncInit(t *testing.T) {
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
 	time.Sleep(time.Second * 5)
-}
-
-// TestMotanEndpoint_AsyncCallNoResponse verify V2Channel streams memory leak when server not reply response
-// bugs to be fixed
-func TestMotanEndpoint_AsyncCallNoResponse(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motan2"}
-	url.PutParam(motan.TimeOutKey, "2000")
-	url.PutParam(motan.ErrorCountThresholdKey, "1")
-	url.PutParam(motan.ClientConnectionKey, "1")
-	url.PutParam(motan.AsyncInitConnection, "false")
-	ep := &MotanEndpoint{}
-	ep.SetURL(url)
-	ep.SetSerialization(&serialize.SimpleSerialization{})
-	ep.Initialize()
-	assert.Equal(t, 1, ep.clientConnection)
-	var resStr string
-	request := &motan.MotanRequest{ServiceName: "test", Method: "test", RPCContext: &motan.RPCContext{AsyncCall: true, Result: &motan.AsyncResult{Reply: &resStr, Done: make(chan *motan.AsyncResult, 5)}}}
-	request.Attachment = motan.NewStringMap(0)
-
-	// server not reply
-	request.SetAttachment("no_response", "true")
-
-	res := ep.Call(request)
-	assert.Nil(t, res.GetException())
-	timeoutTimer := time.NewTimer(time.Second * 3)
-	defer timeoutTimer.Stop()
-	select {
-	case <-request.GetRPCContext(false).Result.Done:
-		t.Errorf("unexpect condition, recv response singnal")
-	case <-timeoutTimer.C:
-		t.Logf("expect condition, not recv response singnal")
-	}
-
-	// Channel.streams cant`t release stream
-	c := <-ep.channels.getChannels()
-	// it will be zero if server not reply response, bug to be fixed
-	assert.Equal(t, 1, len(c.streams))
 }
 
 func TestV2StreamPool(t *testing.T) {

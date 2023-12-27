@@ -139,10 +139,6 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
-	startTime := time.Now().UnixNano()
-	if rc.AsyncCall {
-		rc.Result.StartTime = startTime
-	}
 	// get a channel
 	channel, err := m.channels.Get()
 	if err != nil {
@@ -162,9 +158,6 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
-	}
-	if rc.AsyncCall {
-		return defaultAsyncResponse
 	}
 	excep := response.GetException()
 	if excep != nil && excep.ErrType != motan.BizException {
@@ -431,10 +424,6 @@ func (s *Stream) Send() (err error) {
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
 			}
-			if s.rc.AsyncCall {
-				// only return send success, it can release in Stream.notify
-				s.canRelease.Store(true)
-			}
 		}
 		return nil
 	case <-s.timer.C:
@@ -523,24 +512,6 @@ func (s *Stream) notify(msg interface{}, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Addr: s.channel.address, Time: decodeTime})
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 		}
-		if s.rc.AsyncCall {
-			defer func() {
-				s.RemoveFromChannel()
-				releaseStream(s)
-			}()
-			result := s.rc.Result
-			if err != nil {
-				result.Error = err
-				result.Done <- result
-				return
-			}
-			if err = res.ProcessDeserializable(result.Reply); err != nil {
-				result.Error = err
-			}
-			res.SetProcessTime((time.Now().UnixNano() - result.StartTime) / 1000000)
-			result.Done <- result
-			return
-		}
 	}
 	s.res = res
 	s.recvNotifyCh <- struct{}{}
@@ -561,11 +532,7 @@ func (c *Channel) newStream(req motan.Request, rc *motan.RPCContext, deadline ti
 	s.req = req
 	s.deadline = time.Now().Add(deadline)
 	s.rc = rc
-	if rc != nil && rc.AsyncCall { // release by Stream.Notify
-		s.canRelease.Store(false)
-	} else { // release by Channel self
-		s.canRelease.Store(true)
-	}
+	s.canRelease.Store(true)
 	c.streamLock.Lock()
 	c.streams[s.streamId] = s
 	c.streamLock.Unlock()
@@ -615,17 +582,10 @@ func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCC
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if rc == nil || !rc.AsyncCall {
-			releaseStream(stream)
-		}
-	}()
+	defer releaseStream(stream)
 
 	if err = stream.Send(); err != nil {
 		return nil, err
-	}
-	if rc != nil && rc.AsyncCall {
-		return nil, nil
 	}
 	return stream.Recv()
 }
