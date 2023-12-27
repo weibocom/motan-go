@@ -55,6 +55,14 @@ type DefaultProvider struct {
 	url     *motan.URL
 }
 
+func (d *DefaultProvider) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if d.url != nil {
+		info[motan.RuntimeUrlKey] = d.url.ToExtInfo()
+	}
+	return info
+}
+
 func (d *DefaultProvider) Initialize() {
 	d.methods = make(map[string]reflect.Value, 32)
 	if d.service != nil && d.url != nil {
@@ -131,6 +139,12 @@ type MockProvider struct {
 	URL          *motan.URL
 	MockResponse motan.Response
 	service      interface{}
+}
+
+func (m *MockProvider) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
 }
 
 func (m *MockProvider) GetName() string {

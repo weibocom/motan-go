@@ -71,3 +71,11 @@ func getFilterStartTime(caller motan.Caller, request motan.Request) time.Time {
 		return time.Now()
 	}
 }
+
+func GetFilterRuntimeInfo(filter motan.Filter) map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey:  filter.GetName(),
+		motan.RuntimeIndexKey: filter.GetIndex(),
+		motan.RuntimeTypeKey:  filter.GetType(),
+	}
+}

@@ -30,6 +30,13 @@ type CgiProvider struct {
 	url *motan.URL
 }
 
+func (c *CgiProvider) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{
+		motan.RuntimeNameKey: c.GetName(),
+	}
+	return info
+}
+
 func (c *CgiProvider) Initialize() {
 }
 

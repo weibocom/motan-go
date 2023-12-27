@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/weibocom/motan-go/filter"
 	"net/http"
 	"net/http/httputil"
 
@@ -46,6 +47,10 @@ func runAgentDemo() {
 type MyEndPointFilter struct {
 	url  *motancore.URL
 	next motancore.EndPointFilter
+}
+
+func (m *MyEndPointFilter) GetRuntimeInfo() map[string]interface{} {
+	return filter.GetFilterRuntimeInfo(m)
 }
 
 func (m *MyEndPointFilter) GetIndex() int {

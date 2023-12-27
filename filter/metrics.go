@@ -26,6 +26,10 @@ type MetricsFilter struct {
 	next motan.EndPointFilter
 }
 
+func (m *MetricsFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(m)
+}
+
 func (m *MetricsFilter) GetIndex() int {
 	return 2
 }

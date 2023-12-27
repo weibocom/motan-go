@@ -107,6 +107,16 @@ func NewHTTPCluster(url *core.URL, proxy bool, context *core.Context, extFactory
 	return c
 }
 
+func (c *HTTPCluster) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{
+		core.RuntimeNameKey: c.GetName(),
+	}
+	if c.url != nil {
+		info[core.RuntimeUrlKey] = c.url.ToExtInfo()
+	}
+	return info
+}
+
 func (c *HTTPCluster) CanServe(uri string) (string, bool) {
 	service := c.uriConverter.URIToServiceName(uri, nil)
 	if service == "" {

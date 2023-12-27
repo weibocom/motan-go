@@ -32,6 +32,12 @@ type MeshRegistry struct {
 	subscribeLock     sync.Mutex
 }
 
+func (r *MeshRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: r.GetName(),
+	}
+}
+
 func (r *MeshRegistry) Initialize() {
 	r.registeredService = make(map[string]*motan.URL)
 	r.subscribedService = make(map[string]*motan.URL)

@@ -32,6 +32,14 @@ type HTTPXProvider struct {
 	mixVars    []string
 }
 
+func (h *HTTPXProvider) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if h.url != nil {
+		info[motan.RuntimeUrlKey] = h.url.ToExtInfo()
+	}
+	return info
+}
+
 // Initialize http provider
 func (h *HTTPXProvider) Initialize() {
 	h.httpClient = &fasthttp.Client{

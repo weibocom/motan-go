@@ -47,6 +47,12 @@ type ZkRegistry struct {
 	subscribedCommandMap map[string]map[motan.CommandNotifyListener]*motan.URL // save all subscribed commands with listeners
 }
 
+func (z *ZkRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: z.GetName(),
+	}
+}
+
 // Initialize initializes all structure members and handles new session.
 func (z *ZkRegistry) Initialize() {
 	z.sessionTimeout = time.Duration(

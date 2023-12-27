@@ -29,6 +29,10 @@ type RateLimitFilter struct {
 	url                *core.URL
 }
 
+func (r *RateLimitFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(r)
+}
+
 func (r *RateLimitFilter) NewFilter(url *core.URL) core.Filter {
 	ret := &RateLimitFilter{}
 	//init bucket
