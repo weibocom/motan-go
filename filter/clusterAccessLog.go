@@ -10,6 +10,10 @@ type ClusterAccessLogFilter struct {
 	next motan.ClusterFilter
 }
 
+func (t *ClusterAccessLogFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(t)
+}
+
 func (t *ClusterAccessLogFilter) GetIndex() int {
 	return 1
 }

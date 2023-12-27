@@ -43,6 +43,16 @@ type HTTPProvider struct {
 	enableHttpException bool
 }
 
+func (h *HTTPProvider) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{
+		motan.RuntimeNameKey: h.GetName(),
+	}
+	if h.url != nil {
+		info[motan.RuntimeUrlKey] = h.url.ToExtInfo()
+	}
+	return info
+}
+
 const (
 	// DefaultMotanMethodConfKey for default motan method conf, when make a http call without a specific motan method
 	DefaultMotanMethodConfKey = "http_default_motan_method"

@@ -2,6 +2,7 @@ package core
 
 import (
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -189,4 +190,24 @@ func newDiscoverErrorRegistry() *TestRegistry {
 	registry.URL.GetIdentity()
 	registry.DiscoverError = true
 	return registry
+}
+
+func TestCircularRecorder(t *testing.T) {
+	size := 10
+	r := NewCircularRecorder(size)
+	assert.NotNil(t, r)
+	assert.Equal(t, size, r.ring.Len())
+
+	for i := 0; i < size*2; i++ {
+		r.AddRecord(i)
+	}
+	records := r.GetRecords()
+	assert.Equal(t, size, r.ring.Len())
+	assert.Equal(t, size, len(records))
+
+	for k, v := range records {
+		keyArr := strings.Split(k, ":")
+		idx, _ := strconv.Atoi(keyArr[0])
+		assert.Equal(t, idx+size, v.(int))
+	}
 }

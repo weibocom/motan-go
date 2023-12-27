@@ -13,6 +13,12 @@ type ConsulRegistry struct {
 	heartInterval time.Duration
 }
 
+func (v *ConsulRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: v.GetName(),
+	}
+}
+
 func (v *ConsulRegistry) GetURL() *motan.URL {
 	return v.url
 }

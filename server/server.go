@@ -50,6 +50,16 @@ type DefaultExporter struct {
 	// 服务管理单位，负责服务注册、心跳、导出和销毁，内部包含provider，与provider是一对一关系
 }
 
+func (d *DefaultExporter) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if d.url != nil {
+		info[motan.RuntimeUrlKey] = d.url.ToExtInfo()
+	}
+	info[motan.RuntimeProviderKey] = d.provider.GetRuntimeInfo()
+	info[motan.RuntimeIsAvailableKey] = d.available
+	return info
+}
+
 func (d *DefaultExporter) Export(server motan.Server, extFactory motan.ExtensionFactory, context *motan.Context) (err error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -145,6 +155,21 @@ type DefaultMessageHandler struct {
 	providers map[string]motan.Provider
 }
 
+func (d *DefaultMessageHandler) GetName() string {
+	return "defaultMessageHandler"
+}
+
+func (d *DefaultMessageHandler) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	info[motan.RuntimeMessageHandlerTypeKey] = d.GetName()
+	providersInfo := map[string]interface{}{}
+	for s, provider := range d.providers {
+		providersInfo[s] = provider.GetRuntimeInfo()
+	}
+	info[motan.RuntimeProvidersKey] = providersInfo
+	return info
+}
+
 func (d *DefaultMessageHandler) Initialize() {
 	d.providers = make(map[string]motan.Provider)
 }
@@ -176,13 +201,27 @@ func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
+	vlog.Errorf("%s%s%s", motan.ProviderNotExistPrefix, request.GetServiceName(), motan.GetReqInfo(request))
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: motan.EProviderNotExist, ErrMsg: motan.ProviderNotExistPrefix + request.GetServiceName(), ErrType: motan.ServiceException})
 }
 
 type FilterProviderWrapper struct {
 	provider motan.Provider
 	filter   motan.EndPointFilter
+}
+
+func (f *FilterProviderWrapper) GetRuntimeInfo() map[string]interface{} {
+	info := f.provider.GetRuntimeInfo()
+	var filterInfo []interface{}
+	filter := f.filter
+	for filter != nil {
+		filterInfo = append(filterInfo, filter.GetRuntimeInfo())
+		filter = filter.GetNext()
+	}
+	if len(filterInfo) > 0 {
+		info[motan.RuntimeFiltersKey] = filterInfo
+	}
+	return info
 }
 
 func (f *FilterProviderWrapper) SetService(s interface{}) {

@@ -38,5 +38,18 @@ func TestHTTPCluster_Call(t *testing.T) {
 	request.Method = uri
 	response := httpCluster.Call(request)
 	assert.True(t, response != nil)
+
+	// runtime info
+	info := httpCluster.GetRuntimeInfo()
+	assert.NotNil(t, info)
+
+	urlInfo, ok := info[core.RuntimeUrlKey]
+	assert.True(t, ok)
+	assert.Equal(t, httpCluster.url.ToExtInfo(), urlInfo)
+
+	name, ok := info[core.RuntimeNameKey]
+	assert.True(t, ok)
+	assert.Equal(t, httpCluster.GetName(), name)
+
 	httpCluster.Destroy()
 }
