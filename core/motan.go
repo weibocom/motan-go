@@ -412,7 +412,6 @@ func (c *RPCContext) Reset() {
 	c.BodySize = 0
 	c.SerializeNum = 0
 	c.Serialized = false
-	c.AsyncCall = false
 	c.Result = nil
 	c.Reply = nil
 	c.FinishHandlers = c.FinishHandlers[:0]
@@ -433,10 +432,8 @@ func (c *RPCContext) OnFinish() {
 
 // AsyncResult : async call result
 type AsyncResult struct {
-	StartTime int64
-	Done      chan *AsyncResult
-	Reply     interface{}
-	Error     error
+	Done  chan *AsyncResult
+	Error error
 }
 
 // DeserializableValue : for lazy deserialize
@@ -577,7 +574,6 @@ func (req *MotanRequest) Clone() interface{} {
 			GzipSize:            req.RPCContext.GzipSize,
 			SerializeNum:        req.RPCContext.SerializeNum,
 			Serialized:          req.RPCContext.Serialized,
-			AsyncCall:           req.RPCContext.AsyncCall,
 			Result:              req.RPCContext.Result,
 			Reply:               req.RPCContext.Reply,
 			RequestSendTime:     req.RPCContext.RequestSendTime,
