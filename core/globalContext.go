@@ -397,10 +397,11 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		//final filters: defaultFilter + globalFilter + filters
+		//final filters: defaultFilter + globalFilter + filters + envFilter
 		finalFilters := c.MergeFilterSet(
 			c.GetDefaultFilterSet(newURL),
 			c.GetGlobalFilterSet(newURL),
+			c.GetEnvGlobalFilterSet(),
 			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
 		)
 		if len(finalFilters) > 0 {
@@ -472,6 +473,20 @@ func (c *Context) GetGlobalFilterSet(newURL *URL) map[string]bool {
 	}
 	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
 		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
+}
+
+func (c *Context) GetEnvGlobalFilterSet() map[string]bool {
+	res := make(map[string]bool)
+	if filters := os.Getenv(FilterEnvironmentName); filters != "" {
+		for _, k := range strings.Split(filters, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			res[k] = true
+		}
+	}
+	return res
 }
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
