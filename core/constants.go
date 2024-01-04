@@ -116,7 +116,6 @@ const (
 	GroupEnvironmentName     = "MESH_SERVICE_ADDITIONAL_GROUP"
 	DirectRPCEnvironmentName = "MESH_DIRECT_RPC"
 	FilterEnvironmentName    = "MESH_FILTERS"
-	HandlerEnvironmentName   = "MESH_ADMIN_EXT_HANDLERS"
 )
 
 // meta keys

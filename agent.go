@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -76,7 +75,6 @@ type Agent struct {
 	httpProxyServer   *mserver.HTTPProxyServer
 
 	manageHandlers map[string]http.Handler
-	envHandlers    map[string]map[string]http.Handler
 
 	svcLock      sync.Mutex
 	clsLock      sync.Mutex
@@ -111,7 +109,6 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	agent.agentPortServer = make(map[int]motan.Server)
 	agent.serviceRegistries = motan.NewCopyOnWriteMap()
 	agent.manageHandlers = make(map[string]http.Handler)
-	agent.envHandlers = make(map[string]map[string]http.Handler)
 	agent.serviceMap = motan.NewCopyOnWriteMap()
 	return agent
 }
@@ -780,13 +777,9 @@ func fillDefaultReqInfo(r motan.Request, url *motan.URL) {
 		}
 	} else {
 		if r.GetAttachment(mpro.MSource) == "" {
-			if app := r.GetAttachment(motan.ApplicationKey); app != "" {
-				r.SetAttachment(mpro.MSource, app)
-			} else {
-				application := url.GetParam(motan.ApplicationKey, "")
-				if application != "" {
-					r.SetAttachment(mpro.MSource, application)
-				}
+			application := url.GetParam(motan.ApplicationKey, "")
+			if application != "" {
+				r.SetAttachment(mpro.MSource, application)
 			}
 		}
 		if r.GetAttachment(mpro.MGroup) == "" {
@@ -1097,12 +1090,6 @@ func (a *Agent) RegisterManageHandler(path string, handler http.Handler) {
 	}
 }
 
-func (a *Agent) RegisterEnvHandlers(envStr string, handlers map[string]http.Handler) {
-	if envStr != "" && handlers != nil {
-		a.envHandlers[envStr] = handlers // override
-	}
-}
-
 func (a *Agent) startMServer() {
 	handlers := make(map[string]http.Handler, 16)
 	for k, v := range GetDefaultManageHandlers() {
@@ -1110,16 +1097,6 @@ func (a *Agent) startMServer() {
 	}
 	for k, v := range a.manageHandlers {
 		handlers[k] = v
-	}
-	// register env handlers
-	extHandelrs := os.Getenv(motan.HandlerEnvironmentName)
-	for _, k := range strings.Split(extHandelrs, ",") {
-		if v, ok := a.envHandlers[strings.TrimSpace(k)]; ok {
-			for kk, vv := range v {
-				handlers[kk] = vv
-			}
-
-		}
 	}
 	for k, v := range handlers {
 		a.mhandle(k, v)
