@@ -409,7 +409,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		//final filters: defaultFilter + globalFilter + filters + envFilter
+		//final filters: defaultFilter + globalFilter + filters + envFilter + relevantFilters
 		finalFilters := c.MergeFilterSet(
 			c.GetDefaultFilterSet(newURL),
 			c.GetGlobalFilterSet(newURL),
