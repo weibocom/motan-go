@@ -69,7 +69,8 @@ var (
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
-	urlFields = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	extFilters = make(map[string]bool)
 )
 
 // all env flag in motan-go
@@ -86,6 +87,17 @@ var (
 	Application = flag.String("application", "", "assist for application pool config.")
 	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
+
+func AddRelevantFilter(filterStr string) {
+	k := strings.TrimSpace(filterStr)
+	if k != "" {
+		extFilters[k] = true
+	}
+}
+
+func GetRelevantFilters() map[string]bool {
+	return extFilters
+}
 
 func (c *Context) confToURLs(section string) map[string]*URL {
 	urls := map[string]*URL{}
@@ -402,6 +414,7 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			c.GetDefaultFilterSet(newURL),
 			c.GetGlobalFilterSet(newURL),
 			c.GetEnvGlobalFilterSet(),
+			GetRelevantFilters(),
 			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
 		)
 		if len(finalFilters) > 0 {
