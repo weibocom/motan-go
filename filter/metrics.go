@@ -85,7 +85,7 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
 	}
 	keys := []string{role, application, request.GetMethod()}
-	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetAttachment(protocol.MPath),
+	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
 		keys, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }
