@@ -66,6 +66,9 @@ const (
 	V1Application = "application"
 )
 
+// LogV1ResErrMsg is the switcher name of log v1 response error message
+const LogV1Exception = "mesh.decodeV1.exception.log"
+
 const MAX_BLOCK_SIZE = 1024
 
 // base binary arrays
@@ -145,7 +148,9 @@ func DecodeMotanV1Response(msg *MotanV1Message) (motan.Response, error) {
 		} else {
 			response.Exception = &motan.Exception{ErrCode: 500, ErrMsg: "v1: has exception, class:" + objStream.cName, ErrType: motan.ServiceException}
 		}
-		vlog.Warningf("v1 exception message: %s", objStream.errMsg)
+		if motan.GetSwitcherManager().IsOpen(LogV1Exception) {
+			vlog.Warningf("v1 exception message: %s", objStream.errMsg)
+		}
 	}
 	ctx := response.GetRPCContext(true)
 	ctx.OriginalMessage = msg
