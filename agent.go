@@ -294,8 +294,9 @@ func (a *Agent) initStatus() {
 		a.recoverStatus()
 		// here we add the metrics for recover
 		application := a.agentURL.GetParam(motan.ApplicationKey, metrics.DefaultStatApplication)
-		key := metrics.DefaultStatRole + metrics.KeyDelimiter + application + metrics.KeyDelimiter + "abnormal_exit.total_count"
-		metrics.AddCounter(metrics.DefaultStatGroup, metrics.DefaultStatService, key, 1)
+		keys := []string{metrics.DefaultStatRole, application, "abnormal_exit"}
+		metrics.AddCounterWithKeys(metrics.DefaultStatGroup, "", metrics.DefaultStatService,
+			keys, ".total_count", 1)
 	} else {
 		atomic.StoreInt64(&a.status, http.StatusServiceUnavailable)
 	}

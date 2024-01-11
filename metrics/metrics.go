@@ -200,6 +200,10 @@ func AddGauge(group string, service string, key string, value int64) {
 	sendEvent(eventGauge, group, service, key, value)
 }
 
+func AddGaugeWithKeys(group, groupSuffix string, service string, keys []string, keySuffix string, value int64) {
+	sendEventWithKeys(eventGauge, group, groupSuffix, service, keys, keySuffix, value)
+}
+
 // AddCounterWithKeys arguments: group & groupSuffix & service &  keys elements & keySuffix is text without escaped
 func AddCounterWithKeys(group, groupSuffix string, service string, keys []string, keySuffix string, value int64) {
 	sendEventWithKeys(eventCounter, group, groupSuffix, service, keys, keySuffix, value)
@@ -252,7 +256,8 @@ func RegisterStatusSampleFunc(key string, sf func() int64) {
 func sampleStatus(application string) {
 	defer motan.HandlePanic(nil)
 	sampler.RangeDo(func(key string, value sampler.StatusSampler) bool {
-		AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, value.Sample())
+		AddGaugeWithKeys(DefaultStatGroup, "", DefaultStatService,
+			[]string{DefaultStatRole, application, key}, "", value.Sample())
 		return true
 	})
 }
@@ -801,8 +806,9 @@ func StartReporter(ctx *motan.Context) {
 		if ctx.AgentURL != nil {
 			application := ctx.AgentURL.GetParam(motan.ApplicationKey, DefaultStatApplication)
 			motan.PanicStatFunc = func() {
-				key := DefaultStatRole + KeyDelimiter + application + KeyDelimiter + "panic.total_count"
-				AddCounter(DefaultStatGroup, DefaultStatService, key, 1)
+				keys := []string{DefaultStatRole, application, "panic"}
+				AddCounterWithKeys(DefaultStatGroup, "", DefaultStatService,
+					keys, ".total_count", 1)
 			}
 			startSampleStatus(application)
 		}
