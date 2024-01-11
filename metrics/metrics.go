@@ -256,7 +256,6 @@ func RegisterStatusSampleFunc(key string, sf func() int64) {
 func sampleStatus(application string) {
 	defer motan.HandlePanic(nil)
 	sampler.RangeDo(func(key string, value sampler.StatusSampler) bool {
-		//AddGauge(DefaultStatGroup, DefaultStatService, DefaultStatRole+KeyDelimiter+application+KeyDelimiter+key, value.Sample())
 		AddGaugeWithKeys(DefaultStatGroup, "", DefaultStatService,
 			[]string{DefaultStatRole, application, key}, "", value.Sample())
 		return true
@@ -807,7 +806,6 @@ func StartReporter(ctx *motan.Context) {
 		if ctx.AgentURL != nil {
 			application := ctx.AgentURL.GetParam(motan.ApplicationKey, DefaultStatApplication)
 			motan.PanicStatFunc = func() {
-				//key := DefaultStatRole + KeyDelimiter + application + KeyDelimiter + "panic.total_count"
 				keys := []string{DefaultStatRole, application, "panic"}
 				AddCounterWithKeys(DefaultStatGroup, "", DefaultStatService,
 					keys, ".total_count", 1)
