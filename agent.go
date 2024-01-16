@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,6 +76,7 @@ type Agent struct {
 	httpProxyServer   *mserver.HTTPProxyServer
 
 	manageHandlers map[string]http.Handler
+	envHandlers    map[string]map[string]http.Handler
 
 	svcLock      sync.Mutex
 	clsLock      sync.Mutex
@@ -109,6 +111,7 @@ func NewAgent(extfactory motan.ExtensionFactory) *Agent {
 	agent.agentPortServer = make(map[int]motan.Server)
 	agent.serviceRegistries = motan.NewCopyOnWriteMap()
 	agent.manageHandlers = make(map[string]http.Handler)
+	agent.envHandlers = make(map[string]map[string]http.Handler)
 	agent.serviceMap = motan.NewCopyOnWriteMap()
 	return agent
 }
@@ -291,8 +294,9 @@ func (a *Agent) initStatus() {
 		a.recoverStatus()
 		// here we add the metrics for recover
 		application := a.agentURL.GetParam(motan.ApplicationKey, metrics.DefaultStatApplication)
-		key := metrics.DefaultStatRole + metrics.KeyDelimiter + application + metrics.KeyDelimiter + "abnormal_exit.total_count"
-		metrics.AddCounter(metrics.DefaultStatGroup, metrics.DefaultStatService, key, 1)
+		keys := []string{metrics.DefaultStatRole, application, "abnormal_exit"}
+		metrics.AddCounterWithKeys(metrics.DefaultStatGroup, "", metrics.DefaultStatService,
+			keys, ".total_count", 1)
 	} else {
 		atomic.StoreInt64(&a.status, http.StatusServiceUnavailable)
 	}
@@ -367,7 +371,7 @@ func (a *Agent) initParam() {
 		port = defaultPort
 	}
 
-	mPort := *motan.Mport
+	mPort := motan.GetMport()
 	if mPort == 0 {
 		if envMPort, ok := os.LookupEnv("mport"); ok {
 			if envMPortInt, err := strconv.Atoi(envMPort); err == nil {
@@ -625,6 +629,7 @@ func (a *Agent) initAgentURL() {
 	} else {
 		agentURL.Parameters[motan.ApplicationKey] = agentURL.Group
 	}
+	motan.SetApplication(agentURL.Parameters[motan.ApplicationKey])
 	if agentURL.Group == "" {
 		agentURL.Group = defaultAgentGroup
 		agentURL.Parameters[motan.ApplicationKey] = defaultAgentGroup
@@ -777,9 +782,13 @@ func fillDefaultReqInfo(r motan.Request, url *motan.URL) {
 		}
 	} else {
 		if r.GetAttachment(mpro.MSource) == "" {
-			application := url.GetParam(motan.ApplicationKey, "")
-			if application != "" {
-				r.SetAttachment(mpro.MSource, application)
+			if app := r.GetAttachment(motan.ApplicationKey); app != "" {
+				r.SetAttachment(mpro.MSource, app)
+			} else {
+				application := url.GetParam(motan.ApplicationKey, "")
+				if application != "" {
+					r.SetAttachment(mpro.MSource, application)
+				}
 			}
 		}
 		if r.GetAttachment(mpro.MGroup) == "" {
@@ -952,9 +961,9 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
+	vlog.Errorf("%s%s", motan.EGoNotFoundProviderMsg, motan.GetReqInfo(request))
 	atomic.AddInt64(&notFoundProviderCount, 1)
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: motan.ENotFoundProvider, ErrMsg: motan.EGoNotFoundProviderMsg + serviceKey, ErrType: motan.ServiceException})
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
@@ -1090,6 +1099,12 @@ func (a *Agent) RegisterManageHandler(path string, handler http.Handler) {
 	}
 }
 
+func (a *Agent) RegisterEnvHandlers(envStr string, handlers map[string]http.Handler) {
+	if envStr != "" && handlers != nil {
+		a.envHandlers[envStr] = handlers // override
+	}
+}
+
 func (a *Agent) startMServer() {
 	handlers := make(map[string]http.Handler, 16)
 	for k, v := range GetDefaultManageHandlers() {
@@ -1098,10 +1113,20 @@ func (a *Agent) startMServer() {
 	for k, v := range a.manageHandlers {
 		handlers[k] = v
 	}
+	// register env handlers
+	extHandelrs := os.Getenv(motan.HandlerEnvironmentName)
+	for _, k := range strings.Split(extHandelrs, ",") {
+		if v, ok := a.envHandlers[strings.TrimSpace(k)]; ok {
+			for kk, vv := range v {
+				handlers[kk] = vv
+			}
+
+		}
+	}
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
-
+	var mPort int
 	var managementListener net.Listener
 	if managementUnixSockAddr := a.agentURL.GetParam(motan.ManagementUnixSockKey, ""); managementUnixSockAddr != "" {
 		listener, err := motan.ListenUnixSock(managementUnixSockAddr)
@@ -1135,19 +1160,21 @@ func (a *Agent) startMServer() {
 			managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 			break
 		}
+		mPort = a.mport
 		if managementListener == nil {
 			vlog.Warningf("start management server failed for port range %s", startAndPortStr)
 			return
 		}
 	} else {
 		listener, err := net.Listen("tcp", ":"+strconv.Itoa(a.mport))
+		mPort = a.mport
 		if err != nil {
 			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
 			return
 		}
 		managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 	}
-
+	motan.SetMport(mPort)
 	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())
 	err := http.Serve(managementListener, nil)
 	if err != nil {

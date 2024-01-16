@@ -61,8 +61,9 @@ const (
 )
 
 const (
-	V1Group   = "group"
-	V1Version = "version"
+	V1Group       = "group"
+	V1Version     = "version"
+	V1Application = "application"
 )
 
 const MAX_BLOCK_SIZE = 1024

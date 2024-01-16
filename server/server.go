@@ -176,8 +176,8 @@ func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
+	vlog.Errorf("%s%s", motan.EGoNotFoundProviderMsg, motan.GetReqInfo(request))
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: motan.ENotFoundProvider, ErrMsg: motan.EGoNotFoundProviderMsg + request.GetServiceName(), ErrType: motan.ServiceException})
 }
 
 type FilterProviderWrapper struct {

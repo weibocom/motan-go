@@ -7,6 +7,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 
 	cfg "github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/log"
@@ -69,7 +71,8 @@ var (
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
-	urlFields = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	extFilters = make(map[string]bool)
 )
 
 // all env flag in motan-go
@@ -86,6 +89,33 @@ var (
 	Application = flag.String("application", "", "assist for application pool config.")
 	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
+
+func GetMport() int {
+	return *(*int)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Mport))))
+}
+
+func SetMport(v int) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Mport)), unsafe.Pointer(&v))
+}
+
+func GetApplication() string {
+	return *(*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Application))))
+}
+
+func SetApplication(v string) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Application)), unsafe.Pointer(&v))
+}
+
+func AddRelevantFilter(filterStr string) {
+	k := strings.TrimSpace(filterStr)
+	if k != "" {
+		extFilters[k] = true
+	}
+}
+
+func GetRelevantFilters() map[string]bool {
+	return extFilters
+}
 
 func (c *Context) confToURLs(section string) map[string]*URL {
 	urls := map[string]*URL{}
@@ -181,7 +211,7 @@ func (c *Context) Initialize() {
 		c.pool = *Pool
 	}
 	if c.application == "" {
-		c.application = *Application
+		c.application = GetApplication()
 	}
 
 	c.RegistryURLs = make(map[string]*URL)
@@ -397,10 +427,12 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		//final filters: defaultFilter + globalFilter + filters
+		//final filters: defaultFilter + globalFilter + filters + envFilter + relevantFilters
 		finalFilters := c.MergeFilterSet(
 			c.GetDefaultFilterSet(newURL),
 			c.GetGlobalFilterSet(newURL),
+			c.GetEnvGlobalFilterSet(),
+			GetRelevantFilters(),
 			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
 		)
 		if len(finalFilters) > 0 {
@@ -472,6 +504,20 @@ func (c *Context) GetGlobalFilterSet(newURL *URL) map[string]bool {
 	}
 	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
 		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
+}
+
+func (c *Context) GetEnvGlobalFilterSet() map[string]bool {
+	res := make(map[string]bool)
+	if filters := os.Getenv(FilterEnvironmentName); filters != "" {
+		for _, k := range strings.Split(filters, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			res[k] = true
+		}
+	}
+	return res
 }
 
 // parseMultipleServiceGroup  add motan-service group support of multiple comma split group name

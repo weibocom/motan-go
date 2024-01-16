@@ -343,12 +343,24 @@ func processMsg(msg *protocol.Message, conn net.Conn) {
 		res = protocol.BuildHeartbeat(msg.Header.RequestID, protocol.Res)
 	} else {
 		time.Sleep(time.Millisecond * 1000)
-		serialization := &serialize.SimpleSerialization{}
-		resp := &motan.MotanResponse{
-			RequestID:   lastRequestID,
-			Value:       "hello",
-			ProcessTime: 1000,
+		var resp *motan.MotanResponse
+		e, _ := msg.Metadata.Load("exception")
+		switch e {
+		case "not_found_provider":
+			resp = motan.BuildExceptionResponse(lastRequestID,
+				&motan.Exception{
+					ErrCode: motan.ENotFoundProvider,
+					ErrMsg:  motan.EGoNotFoundProviderMsg,
+					ErrType: motan.ServiceException})
+		default:
+			resp = &motan.MotanResponse{
+				RequestID:   lastRequestID,
+				Value:       "hello",
+				ProcessTime: 1000,
+			}
 		}
+		serialization := &serialize.SimpleSerialization{}
+
 		res, err = protocol.ConvertToResMessage(resp, serialization)
 		if err != nil {
 			conn.Close()

@@ -58,6 +58,6 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 	}
 	keys := []string{role, request.GetAttachment(protocol.MSource), request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), ".cluster",
-		request.GetAttachment(protocol.MPath), keys, time.Since(start).Nanoseconds()/1e6, response)
+		request.GetServiceName(), keys, time.Since(start).Nanoseconds()/1e6, response)
 	return response
 }

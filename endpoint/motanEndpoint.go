@@ -219,7 +219,7 @@ func (m *MotanEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *Ch
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+					channels, err = NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)

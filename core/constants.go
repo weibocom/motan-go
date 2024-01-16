@@ -115,6 +115,8 @@ const (
 const (
 	GroupEnvironmentName     = "MESH_SERVICE_ADDITIONAL_GROUP"
 	DirectRPCEnvironmentName = "MESH_DIRECT_RPC"
+	FilterEnvironmentName    = "MESH_FILTERS"
+	HandlerEnvironmentName   = "MESH_ADMIN_EXT_HANDLERS"
 )
 
 // meta keys
@@ -124,10 +126,17 @@ const (
 
 // errorCodes
 const (
-	ENoEndpoints = 1001
-	ENoChannel   = 1002
-	EUnkonwnMsg  = 1003
-	EConvertMsg  = 1004
+	ENoEndpoints      = 1001
+	ENoChannel        = 1002
+	EUnkonwnMsg       = 1003
+	EConvertMsg       = 1004
+	ENotFoundProvider = 404
+)
+
+// errorMessage
+const (
+	EGoNotFoundProviderMsg   = "not found provider for "
+	EJavaNotFoundProviderMsg = "provider not exist"
 )
 
 const (

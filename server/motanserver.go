@@ -303,13 +303,7 @@ func (m *MotanServer) processV1(msg *mpro.MotanV1Message, start time.Time, ip st
 	var result []byte
 	var reqCtx *motan.RPCContext
 	req, err := mpro.DecodeMotanV1Request(msg)
-	// fill v2 attachment
-	if req.GetAttachment(mpro.MGroup) == "" {
-		req.SetAttachment(mpro.MGroup, req.GetAttachment(mpro.V1Group))
-	}
-	if req.GetAttachment(mpro.MVersion) == "" {
-		req.SetAttachment(mpro.MVersion, req.GetAttachment(mpro.V1Version))
-	}
+	setV1Attachments(req)
 	if err != nil {
 		vlog.Errorf("decode v1 request fail. conn: %s, err:%s", conn.RemoteAddr().String(), err.Error())
 		result = mpro.BuildV1ExceptionResponse(msg.Rid, err.Error())
@@ -376,4 +370,17 @@ func getRemoteIP(address string) string {
 		ip = address
 	}
 	return ip
+}
+
+func setV1Attachments(req motan.Request) {
+	// fill v2 attachment
+	if req.GetAttachment(mpro.MGroup) == "" {
+		req.SetAttachment(mpro.MGroup, req.GetAttachment(mpro.V1Group))
+	}
+	if req.GetAttachment(mpro.MVersion) == "" {
+		req.SetAttachment(mpro.MVersion, req.GetAttachment(mpro.V1Version))
+	}
+	if req.GetAttachment(mpro.MSource) == "" {
+		req.SetAttachment(mpro.MSource, req.GetAttachment(mpro.V1Application))
+	}
 }

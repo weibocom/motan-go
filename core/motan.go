@@ -128,6 +128,19 @@ type Response interface {
 	ProcessDeserializable(toType interface{}) error
 }
 
+// RuntimeInfo : output runtime information
+type RuntimeInfo interface {
+	GetRuntimeInfo() interface{}
+}
+
+// GetRuntimeInfo : call s.GetRuntimeInfo
+func GetRuntimeInfo(s interface{}) interface{} {
+	if sc, ok := s.(RuntimeInfo); ok {
+		return sc.GetRuntimeInfo()
+	}
+	return nil
+}
+
 // Status : for cluster or endpoint to check is available
 type Status interface {
 	IsAvailable() bool
