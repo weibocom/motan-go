@@ -126,10 +126,17 @@ const (
 
 // errorCodes
 const (
-	ENoEndpoints = 1001
-	ENoChannel   = 1002
-	EUnkonwnMsg  = 1003
-	EConvertMsg  = 1004
+	ENoEndpoints      = 1001
+	ENoChannel        = 1002
+	EUnkonwnMsg       = 1003
+	EConvertMsg       = 1004
+	ENotFoundProvider = 404
+)
+
+// errorMessage
+const (
+	EGoNotFoundProviderMsg   = "not found provider for "
+	EJavaNotFoundProviderMsg = "provider not exist"
 )
 
 const (

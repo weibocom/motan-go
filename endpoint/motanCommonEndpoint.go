@@ -2,10 +2,12 @@ package endpoint
 
 import (
 	"bufio"
+	"container/ring"
 	"errors"
 	"github.com/panjf2000/ants/v2"
 	motan "github.com/weibocom/motan-go/core"
 	vlog "github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/metrics"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"net"
 	"strconv"
@@ -15,8 +17,15 @@ import (
 	"time"
 )
 
+const (
+	KeepaliveHeartbeat           uint32 = 1
+	KeepaliveProfile             uint32 = 2
+	defaultLatestExceptionsCount        = 5
+)
+
 var (
-	streamPool = sync.Pool{New: func() interface{} {
+	profileDowngrade atomic.Value
+	streamPool       = sync.Pool{New: func() interface{} {
 		return &Stream{
 			recvNotifyCh: make(chan struct{}, 1),
 		}
@@ -46,9 +55,47 @@ type MotanCommonEndpoint struct {
 	gzipSize                     int
 
 	keepaliveRunning bool
+	keepaliveType    uint32
 	serialization    motan.Serialization
 
 	DefaultVersion int // default encode version
+
+	// latest exceptions
+	exceptions *ring.Ring
+}
+
+func (m *MotanCommonEndpoint) GetRuntimeInfo() interface{} {
+	return map[string]interface{}{
+		"address":               m.url.Host + ":" + strconv.Itoa(m.url.Port),
+		"available":             m.available,
+		"lazy_init":             m.lazyInit,
+		"latest_exceptions":     m.getLatestExceptions(),
+		"heartbeat_version":     m.heartbeatVersion,
+		"keepalive_running":     m.keepaliveRunning,
+		"keepalive_interval":    m.keepaliveInterval,
+		"keepalive_type":        m.keepaliveType,
+		"error_count":           m.errorCount,
+		"error_count_threshold": m.errorCountThreshold,
+		"max_content_length":    m.maxContentLength,
+		"gzip_size":             m.gzipSize,
+		"client_connection":     m.clientConnection,
+		"request_timeout":       m.requestTimeoutMillisecond,
+		"max_request_timeout":   m.maxRequestTimeoutMillisecond,
+		"min_request_timeout":   m.minRequestTimeoutMillisecond,
+	}
+}
+
+func (m *MotanCommonEndpoint) getLatestExceptions() []*motan.Exception {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	exceptions := make([]*motan.Exception, 0, defaultLatestExceptionsCount)
+	m.exceptions.Do(func(i interface{}) {
+		if i != nil {
+			e := i.(*motan.Exception)
+			exceptions = append(exceptions, e)
+		}
+	})
+	return exceptions
 }
 
 func (m *MotanCommonEndpoint) setAvailable(available bool) {
@@ -79,6 +126,7 @@ func (m *MotanCommonEndpoint) Initialize() {
 	m.heartbeatVersion = -1
 	m.DefaultVersion = mpro.Version2
 	m.gzipSize = int(m.url.GetIntValue(motan.GzipSizeKey, 0))
+	m.exceptions = ring.New(defaultLatestExceptionsCount)
 	factory := func() (net.Conn, error) {
 		address := m.url.GetAddressStr()
 		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
@@ -136,19 +184,21 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 
 	if m.channels == nil {
 		vlog.Errorf("motanEndpoint %s error: channels is null", m.url.GetAddressStr())
-		m.recordErrAndKeepalive()
-		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
+		resp := m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
+		m.recordErrAndKeepalive(resp.GetException())
+		return resp
 	}
 	// get a channel
 	channel, err := m.channels.Get()
 	if err != nil {
 		vlog.Errorf("motanEndpoint %s error: can not get a channel, msg: %s", m.url.GetAddressStr(), err.Error())
-		m.recordErrAndKeepalive()
-		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+		resp := motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
 			ErrCode: motan.ENoChannel,
 			ErrMsg:  "can not get a channel",
 			ErrType: motan.ServiceException,
 		})
+		m.recordErrAndKeepalive(resp.GetException())
+		return resp
 	}
 	deadline := m.GetRequestTimeout(request)
 	// do call
@@ -156,12 +206,13 @@ func (m *MotanCommonEndpoint) Call(request motan.Request) motan.Response {
 	response, err := channel.Call(request, deadline, rc)
 	if err != nil {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), err.Error())
-		m.recordErrAndKeepalive()
-		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
+		resp := m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
+		m.recordErrAndKeepalive(resp.GetException())
+		return resp
 	}
 	excep := response.GetException()
 	if excep != nil && excep.ErrType != motan.BizException {
-		m.recordErrAndKeepalive()
+		m.recordErrAndKeepalive(excep)
 	} else {
 		// reset errorCount
 		m.resetErr()
@@ -211,7 +262,7 @@ func (m *MotanCommonEndpoint) initChannelPoolWithRetry(factory ConnFactory, conf
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+					channels, err = NewChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
@@ -230,16 +281,35 @@ func (m *MotanCommonEndpoint) initChannelPoolWithRetry(factory ConnFactory, conf
 	}
 }
 
-func (m *MotanCommonEndpoint) recordErrAndKeepalive() {
+func (m *MotanCommonEndpoint) recordErrAndKeepalive(exception *motan.Exception) {
+	// save latest exception
+	if exception != nil {
+		m.lock.Lock()
+		m.exceptions.Value = exception
+		m.exceptions = m.exceptions.Next()
+		m.lock.Unlock()
+	}
 	// errorCountThreshold <= 0 means not trigger keepalive
 	if m.errorCountThreshold > 0 {
 		errCount := atomic.AddUint32(&m.errorCount, 1)
 		// ensure trigger keepalive
 		if errCount >= uint32(m.errorCountThreshold) {
 			m.setAvailable(false)
+			m.setKeepaliveType(exception)
 			vlog.Infoln("Referer disable:" + m.url.GetIdentity())
 			go m.keepalive()
 		}
+	}
+}
+
+func (m *MotanCommonEndpoint) setKeepaliveType(exception *motan.Exception) {
+	if !GetProfileDowngrade() && exception != nil &&
+		exception.ErrCode == motan.ENotFoundProvider &&
+		(strings.Contains(exception.ErrMsg, motan.EJavaNotFoundProviderMsg) ||
+			strings.Contains(exception.ErrMsg, motan.EGoNotFoundProviderMsg)) {
+		atomic.StoreUint32(&m.keepaliveType, KeepaliveProfile)
+	} else {
+		atomic.StoreUint32(&m.keepaliveType, KeepaliveHeartbeat)
 	}
 }
 
@@ -274,22 +344,37 @@ func (m *MotanCommonEndpoint) keepalive() {
 	for {
 		select {
 		case <-ticker.C:
-			if channel, err := m.channels.Get(); err != nil {
-				vlog.Infof("[keepalive] failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
+			if atomic.LoadUint32(&m.keepaliveType) == KeepaliveProfile && !GetProfileDowngrade() {
+				m.profile()
 			} else {
-				_, err = channel.HeartBeat(m.heartbeatVersion)
-				if err == nil {
-					m.setAvailable(true)
-					m.resetErr()
-					vlog.Infof("[keepalive] heartbeat success. url: %s", m.url.GetIdentity())
-					return
-				}
-				vlog.Infof("[keepalive] heartbeat failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
+				m.heartbeat()
 			}
 		case <-m.destroyCh:
 			return
 		}
 	}
+}
+
+func (m *MotanCommonEndpoint) heartbeat() {
+	if channel, err := m.channels.Get(); err != nil {
+		vlog.Infof("[keepalive] failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
+	} else {
+		_, err = channel.HeartBeat(m.heartbeatVersion)
+		if err == nil {
+			m.setAvailable(true)
+			m.resetErr()
+			vlog.Infof("[keepalive] heartbeat success. url: %s", m.url.GetIdentity())
+			return
+		}
+		vlog.Infof("[keepalive] heartbeat failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
+	}
+}
+
+func (m *MotanCommonEndpoint) profile() {
+	metrics.AddGaugeWithKeys(metrics.DefaultRuntimeCircuitBreakerGroup+"-"+motan.GetApplication(), "",
+		metrics.DefaultRuntimeCircuitBreakerService,
+		[]string{metrics.DefaultStatRole, metrics.DefaultRuntimeErrorApplication, strconv.Itoa(motan.GetMport()) + "-" + m.url.Path},
+		"", 1)
 }
 
 func (m *MotanCommonEndpoint) defaultErrMotanResponse(request motan.Request, errMsg string) motan.Response {
@@ -872,6 +957,18 @@ func buildChannel(conn net.Conn, config *ChannelConfig, serialization motan.Seri
 	go channel.send()
 
 	return channel
+}
+
+func SetProfileDowngrade(downgrade bool) {
+	profileDowngrade.Store(downgrade)
+}
+
+func GetProfileDowngrade() bool {
+	v := profileDowngrade.Load()
+	if v == nil {
+		return false
+	}
+	return v.(bool)
 }
 
 func acquireStream() *Stream {

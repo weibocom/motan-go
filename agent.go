@@ -371,7 +371,7 @@ func (a *Agent) initParam() {
 		port = defaultPort
 	}
 
-	mPort := *motan.Mport
+	mPort := motan.GetMport()
 	if mPort == 0 {
 		if envMPort, ok := os.LookupEnv("mport"); ok {
 			if envMPortInt, err := strconv.Atoi(envMPort); err == nil {
@@ -629,6 +629,7 @@ func (a *Agent) initAgentURL() {
 	} else {
 		agentURL.Parameters[motan.ApplicationKey] = agentURL.Group
 	}
+	motan.SetApplication(agentURL.Parameters[motan.ApplicationKey])
 	if agentURL.Group == "" {
 		agentURL.Group = defaultAgentGroup
 		agentURL.Parameters[motan.ApplicationKey] = defaultAgentGroup
@@ -960,9 +961,9 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
+	vlog.Errorf("%s%s", motan.EGoNotFoundProviderMsg, motan.GetReqInfo(request))
 	atomic.AddInt64(&notFoundProviderCount, 1)
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + serviceKey, ErrType: motan.ServiceException})
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: motan.ENotFoundProvider, ErrMsg: motan.EGoNotFoundProviderMsg + serviceKey, ErrType: motan.ServiceException})
 }
 
 func (sa *serverAgentMessageHandler) AddProvider(p motan.Provider) error {
@@ -1125,7 +1126,7 @@ func (a *Agent) startMServer() {
 	for k, v := range handlers {
 		a.mhandle(k, v)
 	}
-
+	var mPort int
 	var managementListener net.Listener
 	if managementUnixSockAddr := a.agentURL.GetParam(motan.ManagementUnixSockKey, ""); managementUnixSockAddr != "" {
 		listener, err := motan.ListenUnixSock(managementUnixSockAddr)
@@ -1159,19 +1160,21 @@ func (a *Agent) startMServer() {
 			managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 			break
 		}
+		mPort = a.mport
 		if managementListener == nil {
 			vlog.Warningf("start management server failed for port range %s", startAndPortStr)
 			return
 		}
 	} else {
 		listener, err := net.Listen("tcp", ":"+strconv.Itoa(a.mport))
+		mPort = a.mport
 		if err != nil {
 			vlog.Infof("listen manage port %d failed:%s", a.mport, err.Error())
 			return
 		}
 		managementListener = motan.TCPKeepAliveListener{TCPListener: listener.(*net.TCPListener)}
 	}
-
+	motan.SetMport(mPort)
 	vlog.Infof("start listen manage for address: %s", managementListener.Addr().String())
 	err := http.Serve(managementListener, nil)
 	if err != nil {

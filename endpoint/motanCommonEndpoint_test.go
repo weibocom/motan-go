@@ -8,6 +8,7 @@ import (
 	"github.com/weibocom/motan-go/serialize"
 	"net"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -49,7 +50,7 @@ func TestV1RecordErrEmptyThreshold(t *testing.T) {
 		assert.True(t, ep.IsAvailable())
 	}
 
-	assertChanelStreamEmpty(ep, t)
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
 	ep.Destroy()
 }
 
@@ -71,8 +72,11 @@ func TestV1RecordErrWithErrThreshold(t *testing.T) {
 		ep.Call(request)
 		if j < 4 {
 			assert.True(t, ep.IsAvailable())
+			assert.Equal(t, j+1, len(ep.getLatestExceptions()))
 		} else {
 			assert.False(t, ep.IsAvailable())
+			assert.Equal(t, 5, len(ep.getLatestExceptions()))
+			assert.Equal(t, KeepaliveHeartbeat, atomic.LoadUint32(&ep.keepaliveType))
 		}
 	}
 	<-ep.channels.channels
@@ -82,8 +86,44 @@ func TestV1RecordErrWithErrThreshold(t *testing.T) {
 	ep.channels.channels <- buildChannel(conn, ep.channels.config, ep.channels.serialization)
 	time.Sleep(time.Second * 2)
 
-	assertChanelStreamEmpty(ep, t)
-	//assert.True(t, ep.IsAvailable())
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
+	ep.Destroy()
+}
+
+func TestNotFoundProviderCircuitBreaker(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url.PutParam(motan.TimeOutKey, "2000")
+	url.PutParam(motan.ErrorCountThresholdKey, "5")
+	url.PutParam(motan.ClientConnectionKey, "10")
+	url.PutParam(motan.AsyncInitConnection, "false")
+	ep := &MotanCommonEndpoint{}
+	ep.SetURL(url)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	ep.Initialize()
+	assert.Equal(t, 10, ep.clientConnection)
+	for j := 0; j < 10; j++ {
+		request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
+		request.Attachment = motan.NewStringMap(0)
+		request.Attachment.Store("exception", "not_found_provider")
+		res := ep.Call(request)
+		assert.Equal(t, motan.EGoNotFoundProviderMsg, res.GetException().ErrMsg)
+		if j < 4 {
+			assert.True(t, ep.IsAvailable())
+			assert.Equal(t, j+1, len(ep.getLatestExceptions()))
+		} else {
+			assert.False(t, ep.IsAvailable())
+			assert.Equal(t, 5, len(ep.getLatestExceptions()))
+			assert.Equal(t, KeepaliveProfile, atomic.LoadUint32(&ep.keepaliveType))
+		}
+	}
+	//<-ep.channels.channels
+	//conn, err := ep.channels.factory()
+	//assert.Nil(t, err)
+	//_ = conn.(*net.TCPConn).SetNoDelay(true)
+	//ep.channels.channels <- buildChannel(conn, ep.channels.config, ep.channels.serialization)
+	//time.Sleep(time.Second * 2)
+
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
 	ep.Destroy()
 }
 
@@ -107,7 +147,7 @@ func TestMotanCommonEndpoint_SuccessCall(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, s, "hello")
 
-	assertChanelStreamEmpty(ep, t)
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
 }
 
 func TestMotanCommonEndpoint_ErrorCall(t *testing.T) {
@@ -127,13 +167,17 @@ func TestMotanCommonEndpoint_ErrorCall(t *testing.T) {
 	res := ep.Call(request)
 	fmt.Println(res.GetException().ErrMsg)
 	assert.False(t, ep.IsAvailable())
+	assert.Equal(t, KeepaliveHeartbeat, atomic.LoadUint32(&ep.keepaliveType))
+	latestExceptions := ep.getLatestExceptions()
+	assert.Equal(t, 1, len(latestExceptions))
+	assert.Equal(t, res.GetException().ErrMsg, latestExceptions[0].ErrMsg)
 	time.Sleep(1 * time.Millisecond)
 	beforeNGoroutine := runtime.NumGoroutine()
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
 
-	assertChanelStreamEmpty(ep, t)
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
 	ep.Destroy()
 }
 
@@ -155,13 +199,16 @@ func TestMotanCommonEndpoint_RequestTimeout(t *testing.T) {
 	res := ep.Call(request)
 	fmt.Println(res.GetException().ErrMsg)
 	assert.False(t, ep.IsAvailable())
+	latestExceptions := ep.getLatestExceptions()
+	assert.Equal(t, 1, len(latestExceptions))
+	assert.Equal(t, res.GetException().ErrMsg, latestExceptions[0].ErrMsg)
 	time.Sleep(1 * time.Millisecond)
 	beforeNGoroutine := runtime.NumGoroutine()
 	ep.Call(request)
 	time.Sleep(1 * time.Millisecond)
 	assert.Equal(t, beforeNGoroutine, runtime.NumGoroutine())
 
-	assertChanelStreamEmpty(ep, t)
+	assertChanelStreamEmpty(ep, t, ep.keepaliveRunning)
 	ep.Destroy()
 }
 
@@ -240,7 +287,7 @@ func TestStreamPool(t *testing.T) {
 	assert.NotEqual(t, nil, newStream3)
 }
 
-func assertChanelStreamEmpty(ep *MotanCommonEndpoint, t *testing.T) {
+func assertChanelStreamEmpty(ep *MotanCommonEndpoint, t *testing.T, keepaliveRunning bool) {
 	if ep == nil {
 		return
 	}
@@ -256,9 +303,11 @@ func assertChanelStreamEmpty(ep *MotanCommonEndpoint, t *testing.T) {
 				assert.Equal(t, 0, len(c.streams))
 				c.streamLock.Unlock()
 
-				c.heartbeatLock.Lock()
-				assert.Equal(t, 0, len(c.heartbeats))
-				c.heartbeatLock.Unlock()
+				if !keepaliveRunning {
+					c.heartbeatLock.Lock()
+					assert.Equal(t, 0, len(c.heartbeats))
+					c.heartbeatLock.Unlock()
+				}
 			}
 		default:
 			return

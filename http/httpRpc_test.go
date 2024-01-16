@@ -57,6 +57,7 @@ func (s *APITestSuite) SetupTest() {
 	serverConfig, _ := config.NewConfigFromReader(bytes.NewReader([]byte(serverConf)))
 	go serverAgent.StartMotanAgentFromConfig(serverConfig)
 	time.Sleep(time.Second * 3)
+	motancore.SetMport(0)
 }
 
 func TestAPITestSuite(t *testing.T) {

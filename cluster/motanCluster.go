@@ -347,6 +347,41 @@ func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
 	}
 }
 
+type MotanClusterRuntimeInfo struct {
+	Closed     bool              `json:"closed"`
+	Available  bool              `json:"available"`
+	Path       string            `json:"path"`
+	Group      string            `json:"group"`
+	Protocol   string            `json:"protocol"`
+	Parameters map[string]string `json:"parameters"`
+	Registries []string          `json:"registries"`
+	Endpoints  []interface{}     `json:"endpoints"`
+}
+
+func (m *MotanCluster) GetRuntimeInfo() MotanClusterRuntimeInfo {
+	m.notifyLock.Lock()
+	defer m.notifyLock.Unlock()
+	registries := make([]string, 0, len(m.Registries))
+	for _, registry := range m.Registries {
+		registries = append(registries, registry.GetURL().GetIdentity())
+	}
+	endpoints := make([]interface{}, 0, len(m.Refers))
+	for _, endpoint := range m.Refers {
+		ep := endpoint.(*motan.FilterEndPoint)
+		endpoints = append(endpoints, motan.GetRuntimeInfo(ep.Caller))
+	}
+	return MotanClusterRuntimeInfo{
+		Closed:     m.closed,
+		Available:  m.available,
+		Path:       m.url.Path,
+		Group:      m.url.Group,
+		Protocol:   m.url.Protocol,
+		Parameters: m.url.Parameters,
+		Registries: registries,
+		Endpoints:  endpoints,
+	}
+}
+
 const (
 	clusterIdcPlaceHolder = "${idc}"
 )

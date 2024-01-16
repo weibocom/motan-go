@@ -7,6 +7,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 
 	cfg "github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/log"
@@ -87,6 +89,22 @@ var (
 	Application = flag.String("application", "", "assist for application pool config.")
 	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
+
+func GetMport() int {
+	return *(*int)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Mport))))
+}
+
+func SetMport(v int) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Mport)), unsafe.Pointer(&v))
+}
+
+func GetApplication() string {
+	return *(*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Application))))
+}
+
+func SetApplication(v string) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Application)), unsafe.Pointer(&v))
+}
 
 func AddRelevantFilter(filterStr string) {
 	k := strings.TrimSpace(filterStr)
@@ -193,7 +211,7 @@ func (c *Context) Initialize() {
 		c.pool = *Pool
 	}
 	if c.application == "" {
-		c.application = *Application
+		c.application = GetApplication()
 	}
 
 	c.RegistryURLs = make(map[string]*URL)

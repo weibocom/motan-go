@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/weibocom/motan-go/endpoint"
 	"html/template"
 	"io"
 	"log"
@@ -765,6 +766,49 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Body: string(refersURLs),
 		})
 	}
+}
+
+type RuntimeInfo struct {
+	Clusters map[string]cluster.MotanClusterRuntimeInfo `json:"clusters"`
+}
+
+type RuntimeHandler struct {
+	agent *Agent
+}
+
+func (h *RuntimeHandler) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/runtime/info":
+		info := RuntimeInfo{
+			Clusters: h.getClusterInfo(),
+		}
+		res, _ := json.Marshal(info)
+		w.Write(res)
+	case "/runtime/endpoint_profile_downgrade":
+		value := r.FormValue("downgrade")
+		downgrade, err := strconv.ParseBool(value)
+		if err != nil {
+			fmt.Fprintf(w, "Invalid downgrade value(must be Bool): %s", value)
+			return
+		}
+		endpoint.SetProfileDowngrade(downgrade)
+		currentDowngrade := endpoint.GetProfileDowngrade()
+		fmt.Fprintf(w, "current downgrade is: %v", currentDowngrade)
+	}
+}
+
+func (h *RuntimeHandler) getClusterInfo() map[string]cluster.MotanClusterRuntimeInfo {
+	res := make(map[string]cluster.MotanClusterRuntimeInfo, h.agent.clusterMap.Len())
+	h.agent.clusterMap.Range(func(k, v interface{}) bool {
+		cls := v.(*cluster.MotanCluster)
+		res[k.(string)] = cls.GetRuntimeInfo()
+		return true
+	})
+	return res
 }
 
 //------------ below code is copied from net/http/pprof -------------

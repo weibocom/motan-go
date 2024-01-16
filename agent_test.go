@@ -79,9 +79,10 @@ motan-refer:
       registry: direct
       asyncInitConnection: false
       serialization: breeze`)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config)
-	time.Sleep(time.Second * 3)
+	targetAgent := NewAgent(ext)
+	go targetAgent.StartMotanAgentFromConfig(config)
+	time.Sleep(time.Second * 10)
+	core.SetMport(0)
 	c1 := NewMeshClient()
 	c1.SetAddress("unix://./agent.sock")
 	c1.Initialize()
@@ -118,13 +119,14 @@ motan-refer:
       registry: direct
       asyncInitConnection: false
       serialization: breeze`)))
-	agent := NewAgent(ext)
-	agent.RegisterEnvHandlers("testHandler", map[string]http.Handler{
+	a := NewAgent(ext)
+	a.RegisterEnvHandlers("testHandler", map[string]http.Handler{
 		"/test/test": testHandler(),
 	})
 	os.Setenv(core.HandlerEnvironmentName, "testHandler")
-	go agent.StartMotanAgentFromConfig(config)
+	go a.StartMotanAgentFromConfig(config)
 	time.Sleep(time.Second * 3)
+	core.SetMport(0)
 	client := http.Client{
 		Timeout: time.Second,
 	}
@@ -176,9 +178,10 @@ motan-refer:
       serialization: breeze
       asyncInitConnection: false
 `)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config1)
+	a := NewAgent(ext)
+	go a.StartMotanAgentFromConfig(config1)
 	time.Sleep(time.Second * 3)
+	core.SetMport(0)
 
 	ext1 := GetDefaultExtFactory()
 	cfg, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
@@ -207,6 +210,7 @@ motan-refer:
 	assert.Nil(t, err)
 	assert.Equal(t, "Hello jack from motan server", reply)
 }
+
 func TestMain(m *testing.M) {
 	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	cfgFile := filepath.Join("testdata", "agent.yaml")
@@ -224,6 +228,8 @@ func TestMain(m *testing.M) {
 		agent.ConfigFile = cfgFile
 		agent.StartMotanAgent()
 	}()
+	time.Sleep(time.Second * 3)
+	core.SetMport(0)
 	proxyURL, _ := url.Parse("http://localhost:9983")
 	proxyClient = &http.Client{Transport: &http.Transport{Proxy: http.ProxyURL(proxyURL)}}
 	time.Sleep(1 * time.Second)
@@ -403,7 +409,6 @@ func TestRpcToHTTPProxy(t *testing.T) {
 	}
 	close(requests)
 	wg.Wait()
-
 }
 
 func TestLocalEndpoint(t *testing.T) {
@@ -418,13 +423,13 @@ func TestAgent_RuntimeDir(t *testing.T) {
 
 func TestAgent_InitCall(t *testing.T) {
 	//init
-	agent := NewAgent(nil)
-	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
+	targetAgent := NewAgent(nil)
+	targetAgent.agentURL = &core.URL{Parameters: make(map[string]string)}
 	urlTest := &core.URL{Parameters: make(map[string]string)}
 	urlTest.Group = "test1"
 	urlTest.Parameters[core.AsyncInitConnection] = "false"
-	agent.initCluster(urlTest)
-	agentHandler := &agentMessageHandler{agent: agent}
+	targetAgent.initCluster(urlTest)
+	agentHandler := &agentMessageHandler{agent: targetAgent}
 
 	for _, v := range []*core.URL{
 		{Parameters: map[string]string{core.VersionKey: ""}, Path: "test3", Group: "", Protocol: ""},
@@ -438,11 +443,11 @@ func TestAgent_InitCall(t *testing.T) {
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test", Group: "g1", Protocol: "http"},
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test0", Group: "g0", Protocol: "http"},
 	} {
-		agent.initCluster(v)
+		targetAgent.initCluster(v)
 	}
 
 	//test init cluster with one path and one groups in clusterMap
-	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
+	temp := targetAgent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
 
 	//test agentHandler call with group
@@ -502,8 +507,8 @@ func TestAgent_InitCall(t *testing.T) {
 	// wait ha
 	time.Sleep(time.Second * 1)
 
-	agent.reloadClusters(ctx)
-	assert.Equal(t, agent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
+	targetAgent.reloadClusters(ctx)
+	assert.Equal(t, targetAgent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
 
 	request = newRequest("helloService2", "hello", "Ray")
 	motanResponse := agentHandler.Call(request)
@@ -521,14 +526,14 @@ func TestAgent_InitCall(t *testing.T) {
 	dynamicURLs := map[string]*core.URL{
 		"test6": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test6", Group: "g1", Protocol: ""},
 	}
-	agent.serviceMap.Store("test6", []serviceMapItem{
+	targetAgent.serviceMap.Store("test6", []serviceMapItem{
 		{url: dynamicURLs["test6"], cluster: nil},
 	})
-	agent.configurer = NewDynamicConfigurer(agent)
-	agent.configurer.subscribeNodes = dynamicURLs
+	targetAgent.configurer = NewDynamicConfigurer(targetAgent)
+	targetAgent.configurer.subscribeNodes = dynamicURLs
 	ctx.RefersURLs = reloadUrls
-	agent.reloadClusters(ctx)
-	assert.Equal(t, agent.serviceMap.Len(), 3, "hot-load serviceMap except length error")
+	targetAgent.reloadClusters(ctx)
+	assert.Equal(t, targetAgent.serviceMap.Len(), 3, "hot-load serviceMap except length error")
 
 	for _, v := range []struct {
 		service  string
@@ -554,10 +559,10 @@ func TestNotFoundProvider(t *testing.T) {
 	notFoundService := "notFoundService"
 	request := meshClient.BuildRequest(notFoundService, "test", []interface{}{})
 	epUrl := &core.URL{
-		Protocol: "motanV1Compatible",
+		Protocol: endpoint.MotanV1Compatible,
 		Host:     "127.0.0.1",
 		Port:     9982,
-		Path:     "notFoundService",
+		Path:     notFoundService,
 		Group:    "test",
 		Parameters: map[string]string{
 			core.TimeOutKey:              "3000",
@@ -682,9 +687,11 @@ motan-service:
       enableRewrite: false
       export: motan2:23282
 `)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config1)
+	a := NewAgent(ext)
+	go a.StartMotanAgentFromConfig(config1)
 	time.Sleep(time.Second * 3)
+	core.SetMport(0)
+
 	c1 := NewMeshClient()
 	c1.SetAddress("127.0.0.1:23282")
 	c1.Initialize()
@@ -695,6 +702,7 @@ motan-service:
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "okay", string(reply))
 }
+
 func Test_unixRPCClientCall(t *testing.T) {
 	t.Parallel()
 	os.Remove("server.sock")
@@ -703,7 +711,7 @@ func Test_unixRPCClientCall(t *testing.T) {
 	// start client mesh
 	// start unix server mesh
 	ext := GetDefaultExtFactory()
-	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+	serverMeshConfig, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
 motan-agent:
   port: 12821
   mport: 12503
@@ -729,9 +737,11 @@ motan-service:
       proxy.host: unix://./server.sock
       export: motan2:12281
 `)))
-	agent := NewAgent(ext)
-	go agent.StartMotanAgentFromConfig(config1)
+	serverAgent := NewAgent(ext)
+	go serverAgent.StartMotanAgentFromConfig(serverMeshConfig)
 	time.Sleep(time.Second * 3)
+	core.SetMport(0)
+
 	c1 := NewMeshClient()
 	c1.SetAddress("127.0.0.1:12281")
 	c1.Initialize()
@@ -740,6 +750,12 @@ motan-service:
 	resp := c1.BaseCall(req, &reply)
 	assert.Nil(t, resp.GetException())
 	assert.Equal(t, "Hello jack from motan server", string(reply))
+
+	// test not found provider endpoint circuit breaker and runtime info
+	reqNotFound := c1.BuildRequestWithGroup("helloServiceNotFound", "Hello", []interface{}{"jack"}, "helloNotFound")
+	respNotFound := c1.BaseCall(reqNotFound, &reply)
+	assert.NotNil(t, respNotFound.GetException())
+	assert.Equal(t, core.EGoNotFoundProviderMsg+"helloNotFound_helloServiceNotFound", respNotFound.GetException().ErrMsg)
 }
 
 func Test_changeDefaultMotanEpAsyncInit(t *testing.T) {
@@ -816,12 +832,13 @@ motan-service:
 	})
 	config1, err := config.NewConfigFromReader(bytes.NewReader([]byte(template)))
 	assert.Nil(t, err)
-	agent := NewAgent(extFactory)
-	go agent.StartMotanAgentFromConfig(config1)
-	time.Sleep(time.Second * 10)
+	a := NewAgent(extFactory)
+	go a.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+	core.SetMport(0)
 
 	setRegistryFailSwitcher(true)
-	m := agent.GetRegistryStatus()
+	m := a.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
 		if mm.Service.Path == "helloService" {
@@ -830,8 +847,8 @@ motan-service:
 	}
 	agentStatus := getCurAgentStatus(12604)
 	assert.Equal(t, agentStatus, core.NotRegister)
-	agent.SetAllServicesAvailable()
-	m = agent.GetRegistryStatus()
+	a.SetAllServicesAvailable()
+	m = a.GetRegistryStatus()
 	for _, mm := range m[0] {
 		if mm.Service.Path == "helloService" {
 			assert.Equal(t, mm.Status, core.RegisterFailed)
@@ -841,7 +858,7 @@ motan-service:
 	assert.Equal(t, agentStatus, core.RegisterFailed)
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
-	m = agent.GetRegistryStatus()
+	m = a.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
 		if mm.Service.Path == "helloService" {
@@ -851,8 +868,8 @@ motan-service:
 	agentStatus = getCurAgentStatus(12604)
 	assert.Equal(t, agentStatus, core.RegisterSuccess)
 	setRegistryFailSwitcher(true)
-	agent.SetAllServicesUnavailable()
-	m = agent.GetRegistryStatus()
+	a.SetAllServicesUnavailable()
+	m = a.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
 		if mm.Service.Path == "helloService" {
@@ -863,7 +880,7 @@ motan-service:
 	assert.Equal(t, agentStatus, core.UnregisterFailed)
 	setRegistryFailSwitcher(false)
 	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
-	m = agent.GetRegistryStatus()
+	m = a.GetRegistryStatus()
 	assert.Equal(t, len(m), 1)
 	for _, mm := range m[0] {
 		if mm.Service.Path == "helloService" {
@@ -915,7 +932,6 @@ func (t *testRegistry) Register(serverURL *core.URL) {
 		Registry: t,
 		IsCheck:  registry.IsCheck(serverURL),
 	})
-
 }
 
 func (t *testRegistry) UnRegister(serverURL *core.URL) {
@@ -991,7 +1007,6 @@ func setRegistryFailSwitcher(b bool) {
 	} else {
 		atomic.StoreInt64(&testRegistryFailSwitcher, 0)
 	}
-
 }
 
 func getRegistryFailSwitcher() bool {
