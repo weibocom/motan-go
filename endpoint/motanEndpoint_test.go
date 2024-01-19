@@ -364,6 +364,7 @@ func processMsg(msg *protocol.Message, conn net.Conn) {
 		res, err = protocol.ConvertToResMessage(resp, serialization)
 		if err != nil {
 			conn.Close()
+			return
 		}
 	}
 	res.Header.RequestID = lastRequestID
