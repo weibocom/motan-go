@@ -2,12 +2,13 @@ package core
 
 import (
 	"bytes"
+	"github.com/weibocom/motan-go/log"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
-
-	"github.com/weibocom/motan-go/log"
 )
 
 type URL struct {
@@ -19,40 +20,99 @@ type URL struct {
 	Parameters map[string]string `json:"parameters"`
 
 	// cached info
-	address  string
-	identity string
+	address              atomic.Value
+	portStr              atomic.Value
+	identity             atomic.Value
+	hasMethodParamsCache atomic.Value // Whether it has method parameters
+	intParamCache        sync.Map
+}
+
+type int64Cache struct {
+	value  int64
+	isMiss bool // miss cache if true
 }
 
 var (
-	defaultSerialize = "simple"
+	defaultSerialize          = "simple"
+	defaultMethodParamsSubStr = ")."
+	defaultMissCache          = &int64Cache{value: 0, isMiss: true} // Uniform miss cache
 )
 
-//TODO int param cache
-
 // GetIdentity return the identity of url. identity info includes protocol, host, port, path, group
-// the identity will cached, so must clear cached info after update above info by calling ClearCachedInfo()
+// the identity will be cached, so must clear cached info after update above info by calling ClearCachedInfo()
 func (u *URL) GetIdentity() string {
-	if u.identity != "" {
-		return u.identity
+	temp := u.identity.Load()
+	if temp != nil && temp != "" {
+		return temp.(string)
 	}
-	u.identity = u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
+	idt := u.Protocol + "://" + u.Host + ":" + u.GetPortStr() + "/" + u.Path + "?group=" + u.Group
 	if u.Protocol == "direct" {
-		u.identity += "&address=" + u.GetParam("address", "")
+		idt += "&address=" + u.GetParam("address", "")
 	}
-	return u.identity
+	u.identity.Store(idt)
+	return idt
+}
+
+// IsMatch is a tool function for comparing parameters: service, group, protocol and version
+// with URL. When 'protocol' or 'version' is empty, it will be ignored
+func (u *URL) IsMatch(service, group, protocol, version string) bool {
+	if u.Path != service {
+		return false
+	}
+	if group != "" && u.Group != group {
+		return false
+	}
+	// for motan v1 request, parameter protocol should be empty
+	if protocol != "" {
+		if u.Protocol == "motanV1Compatible" {
+			if protocol != "motan2" && protocol != "motan" {
+				return false
+			}
+		} else {
+			if u.Protocol != protocol {
+				return false
+			}
+		}
+	}
+	if version != "" && u.GetParam(VersionKey, "") != "" {
+		return version == u.GetParam(VersionKey, "")
+	}
+	return true
+}
+
+func (u *URL) GetIdentityWithRegistry() string {
+	id := u.GetIdentity()
+	registryId := u.GetParam(RegistryKey, "")
+	return id + "&registry=" + registryId
 }
 
 func (u *URL) ClearCachedInfo() {
-	u.address = ""
-	u.identity = ""
+	u.address.Store("")
+	u.identity.Store("")
+	u.portStr.Store("")
+	u.hasMethodParamsCache.Store("")
+	u.intParamCache.Range(func(key interface{}, value interface{}) bool {
+		u.intParamCache.Delete(key)
+		return true
+	})
 }
 
-func (u *URL) GetPositiveIntValue(key string, defaultvalue int64) int64 {
-	intvalue := u.GetIntValue(key, defaultvalue)
-	if intvalue < 1 {
-		return defaultvalue
+func (u *URL) GetPositiveIntValue(key string, defaultValue int64) int64 {
+	intValue := u.GetIntValue(key, defaultValue)
+	if intValue < 1 {
+		return defaultValue
 	}
-	return intvalue
+	return intValue
+}
+
+func (u *URL) GetBoolValue(key string, defaultValue bool) bool {
+	if v, ok := u.Parameters[key]; ok {
+		boolValue, err := strconv.ParseBool(v)
+		if err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
 }
 
 func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
@@ -64,37 +124,68 @@ func (u *URL) GetIntValue(key string, defaultValue int64) int64 {
 }
 
 func (u *URL) GetInt(key string) (int64, bool) {
+	if cache, ok := u.intParamCache.Load(key); ok {
+		if c, ok := cache.(*int64Cache); ok { // from cache
+			if c.isMiss {
+				return 0, false
+			}
+			return c.value, true
+		}
+	}
+
 	if v, ok := u.Parameters[key]; ok {
 		intValue, err := strconv.ParseInt(v, 10, 64)
 		if err == nil {
+			u.intParamCache.Store(key, &int64Cache{value: intValue, isMiss: false})
 			return intValue, true
 		}
 	}
+	u.intParamCache.Store(key, defaultMissCache) // set miss cache
 	return 0, false
 }
 
-func (u *URL) GetStringParamsWithDefault(key string, defaultvalue string) string {
+func (u *URL) GetStringParamsWithDefault(key string, defaultValue string) string {
 	var ret string
 	if u.Parameters != nil {
 		ret = u.Parameters[key]
 	}
 	if ret == "" {
-		ret = defaultvalue
+		ret = defaultValue
 	}
 	return ret
 }
 
 func (u *URL) GetMethodIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
-	mkey := method + "(" + methodDesc + ")." + key
-	result, b := u.GetInt(mkey)
-	if b {
-		return result
+	if u.hasMethodParams() {
+		mk := method + "(" + methodDesc + ")." + key
+		result, b := u.GetInt(mk)
+		if b {
+			return result
+		}
 	}
-	result, b = u.GetInt(key)
+	result, b := u.GetInt(key)
 	if b {
 		return result
 	}
 	return defaultValue
+}
+
+func (u *URL) hasMethodParams() bool {
+	v := u.hasMethodParamsCache.Load()
+	if v == nil || v == "" { // Check if method parameters exist
+		if u.Parameters != nil {
+			for k := range u.Parameters {
+				if strings.Contains(k, defaultMethodParamsSubStr) {
+					v = "t"
+					u.hasMethodParamsCache.Store("t")
+					return true
+				}
+			}
+		}
+		v = "f"
+		u.hasMethodParamsCache.Store("f")
+	}
+	return v == "t"
 }
 
 func (u *URL) GetMethodPositiveIntValue(method string, methodDesc string, key string, defaultValue int64) int64 {
@@ -127,6 +218,10 @@ func (u *URL) GetTimeDuration(key string, unit time.Duration, defaultDuration ti
 }
 
 func (u *URL) PutParam(key string, value string) {
+	u.intParamCache.Delete(key)                           // remove cache
+	if strings.Contains(key, defaultMethodParamsSubStr) { // Check if method parameter
+		u.hasMethodParamsCache.Store("t")
+	}
 	if u.Parameters == nil {
 		u.Parameters = make(map[string]string)
 	}
@@ -162,20 +257,20 @@ func (u *URL) ToExtInfo() string {
 
 }
 
-func FromExtInfo(extinfo string) *URL {
-	defer func() { // if extinfo format not correct, just return nil URL
+func FromExtInfo(extInfo string) *URL {
+	defer func() { // if extInfo format not correct, just return nil URL
 		if err := recover(); err != nil {
-			vlog.Warningf("from ext to url fail. extinfo:%s, err:%v", extinfo, err)
+			vlog.Warningf("from ext to url fail. extInfo:%s, err:%v", extInfo, err)
 		}
 	}()
-	arr := strings.Split(extinfo, "?")
-	nodeinfos := strings.Split(arr[0], "://")
-	protocol := nodeinfos[0]
-	nodeinfos = strings.Split(nodeinfos[1], "/")
-	path := nodeinfos[1]
-	nodeinfos = strings.Split(nodeinfos[0], ":")
-	host := nodeinfos[0]
-	port, _ := strconv.ParseInt(nodeinfos[1], 10, 64)
+	arr := strings.Split(extInfo, "?")
+	nodeInfos := strings.Split(arr[0], "://")
+	protocol := nodeInfos[0]
+	nodeInfos = strings.Split(nodeInfos[1], "/")
+	path := nodeInfos[1]
+	nodeInfos = strings.Split(nodeInfos[0], ":")
+	host := nodeInfos[0]
+	port, _ := strconv.ParseInt(nodeInfos[1], 10, 64)
 
 	paramsMap := make(map[string]string)
 	params := strings.Split(arr[1], "&")
@@ -193,15 +288,27 @@ func FromExtInfo(extinfo string) *URL {
 }
 
 func (u *URL) GetPortStr() string {
-	return strconv.FormatInt(int64(u.Port), 10)
+	temp := u.portStr.Load()
+	if temp != nil && temp != "" {
+		return temp.(string)
+	}
+	p := strconv.FormatInt(int64(u.Port), 10)
+	u.portStr.Store(p)
+	return p
 }
 
 func (u *URL) GetAddressStr() string {
-	if u.address != "" {
-		return u.address
+	temp := u.address.Load()
+	if temp != nil && temp != "" {
+		return temp.(string)
 	}
-	u.address = u.Host + ":" + u.GetPortStr()
-	return u.address
+	if strings.HasPrefix(u.Host, UnixSockProtocolFlag) {
+		temp = u.Host
+	} else {
+		temp = u.Host + ":" + u.GetPortStr()
+	}
+	u.address.Store(temp)
+	return temp.(string)
 }
 
 func (u *URL) Copy() *URL {
@@ -233,7 +340,8 @@ func (u *URL) CanServe(other *URL) bool {
 		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
 		return false
 	}
-	if !IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") {
+	// compatible with old version: 0.1
+	if !(IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") || IsSame(u.Parameters, other.Parameters, VersionKey, DefaultReferVersion)) {
 		vlog.Errorf("can not serve version, err : v1:%s, v2:%s", u.Parameters[VersionKey], other.Parameters[VersionKey])
 		return false
 	}
@@ -303,9 +411,11 @@ type filterSlice []Filter
 func (f filterSlice) Len() int {
 	return len(f)
 }
+
 func (f filterSlice) Swap(i, j int) {
 	f[i], f[j] = f[j], f[i]
 }
+
 func (f filterSlice) Less(i, j int) bool {
 	// desc
 	return f[i].GetIndex() > f[j].GetIndex()

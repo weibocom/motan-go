@@ -17,6 +17,9 @@ tmtags
 pretty/zj
 zj*
 
+# Windows
+*.exe
+
 .idea/*
 # gdb
 *.gdb_history
@@ -37,3 +40,4 @@ main/magent*
 log/log.test*
 go.sum
 agent_runtime
+test/

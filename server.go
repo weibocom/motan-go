@@ -5,13 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"github.com/weibocom/motan-go/config"
-	"reflect"
-	"strconv"
-	"sync"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/provider"
+	"github.com/weibocom/motan-go/registry"
 	mserver "github.com/weibocom/motan-go/server"
+	"hash/fnv"
+	"net/http"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
 // MSContext is Motan Server Context
@@ -20,12 +25,13 @@ type MSContext struct {
 	context      *motan.Context
 	extFactory   motan.ExtensionFactory
 	portService  map[int]motan.Exporter
-	portServer   map[int]motan.Server
+	portServer   map[string]motan.Server
 	serviceImpls map[string]interface{}
 	registries   map[string]motan.Registry // all registries used for services
-
-	csync  sync.Mutex
-	inited bool
+	registryLock sync.Mutex
+	status       int
+	csync        sync.Mutex
+	inited       bool
 }
 
 const (
@@ -54,23 +60,7 @@ func NewMotanServerContextFromConfig(conf *config.Config) (ms *MSContext) {
 	if logDir == "" {
 		logDir = "."
 	}
-	logAsync := ""
-	if section != nil && section["log_async"] != nil {
-		logAsync = strconv.FormatBool(section["log_async"].(bool))
-	}
-	logStructured := ""
-	if section != nil && section["log_structured"] != nil {
-		logStructured = strconv.FormatBool(section["log_structured"].(bool))
-	}
-	rotatePerHour := ""
-	if section != nil && section["rotate_per_hour"] != nil {
-		rotatePerHour = strconv.FormatBool(section["rotate_per_hour"].(bool))
-	}
-	logLevel := ""
-	if section != nil && section["log_level"] != nil {
-		logLevel = section["log_level"].(string)
-	}
-	initLog(logDir, logAsync, logStructured, rotatePerHour, logLevel)
+	initLog(logDir, section)
 	registerSwitchers(ms.context)
 
 	return ms
@@ -115,6 +105,13 @@ func (m *MSContext) Start(extfactory motan.ExtensionFactory) {
 	for _, url := range m.context.ServiceURLs {
 		m.export(url)
 	}
+	go m.startRegistryFailback()
+}
+
+func (m *MSContext) hashInt(s string) int {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return int(h.Sum32())
 }
 
 func (m *MSContext) export(url *motan.URL) {
@@ -137,10 +134,22 @@ func (m *MSContext) export(url *motan.URL) {
 			}
 		}
 		url.Protocol = protocol
-		porti, err := strconv.Atoi(port)
-		if err != nil {
-			vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
-			return
+		var porti int
+		var serverKey string
+		var err error
+		if v := url.GetParam(provider.ProxyHostKey, ""); strings.HasPrefix(v, motan.UnixSockProtocolFlag) {
+			porti = 0
+			serverKey = v
+		} else if v := url.GetParam(motan.UnixSockKey, ""); v != "" {
+			porti = 0
+			serverKey = v
+		} else {
+			porti, err = strconv.Atoi(port)
+			if err != nil {
+				vlog.Errorf("export port not int. port:%s, url:%+v", port, url)
+				return
+			}
+			serverKey = port
 		}
 		url.Port = porti
 		if url.Host == "" {
@@ -155,7 +164,7 @@ func (m *MSContext) export(url *motan.URL) {
 		exporter := &mserver.DefaultExporter{}
 		exporter.SetProvider(provider)
 
-		server := m.portServer[url.Port]
+		server := m.portServer[serverKey]
 
 		if server == nil {
 			server = m.extFactory.GetServer(url)
@@ -163,7 +172,7 @@ func (m *MSContext) export(url *motan.URL) {
 			motan.Initialize(handler)
 			handler.AddProvider(provider)
 			server.Open(false, false, handler, m.extFactory)
-			m.portServer[url.Port] = server
+			m.portServer[serverKey] = server
 		} else if canShareChannel(*url, *server.GetURL()) {
 			server.GetMessageHandler().AddProvider(provider)
 		} else {
@@ -191,7 +200,7 @@ func (m *MSContext) Initialize() {
 	if !m.inited {
 		m.context = motan.NewContextFromConfig(m.config, "", "")
 		m.portService = make(map[int]motan.Exporter, 32)
-		m.portServer = make(map[int]motan.Server, 32)
+		m.portServer = make(map[string]motan.Server, 32)
 		m.serviceImpls = make(map[string]interface{}, 32)
 		m.registries = make(map[string]motan.Registry)
 		m.inited = true
@@ -234,12 +243,56 @@ func (m *MSContext) RegisterService(s interface{}, sid string) error {
 // ServicesAvailable will enable all service registed in registries
 func (m *MSContext) ServicesAvailable() {
 	// TODO: same as agent
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	m.status = http.StatusOK
 	availableService(m.registries)
 }
 
-// ServicesUnavailable will enable all service registed in registries
+// ServicesUnavailable will enable all service registered in registries
 func (m *MSContext) ServicesUnavailable() {
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	m.status = http.StatusServiceUnavailable
 	unavailableService(m.registries)
+}
+
+func (m *MSContext) GetRegistryStatus() []map[string]*motan.RegistryStatus {
+	m.registryLock.Lock()
+	defer m.registryLock.Unlock()
+	var res []map[string]*motan.RegistryStatus
+	for _, v := range m.registries {
+		if vv, ok := v.(motan.RegistryStatusManager); ok {
+			res = append(res, vv.GetRegistryStatus())
+		}
+	}
+	return res
+}
+
+func (m *MSContext) startRegistryFailback() {
+	vlog.Infoln("start MSContext registry failback")
+	ticker := time.NewTicker(registry.DefaultFailbackInterval * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		m.registryLock.Lock()
+		for _, v := range m.registries {
+			if vv, ok := v.(motan.RegistryStatusManager); ok {
+				statusMap := vv.GetRegistryStatus()
+				for _, j := range statusMap {
+					if m.status == http.StatusOK && j.Status == motan.RegisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect register fail, do register again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Available(j.Service)
+					} else if m.status == http.StatusServiceUnavailable && j.Status == motan.UnregisterFailed {
+						vlog.Infoln(fmt.Sprintf("detect unregister fail, do unregister again, service: %s", j.Service.GetIdentity()))
+						v.(motan.Registry).Unavailable(j.Service)
+					}
+				}
+			}
+
+		}
+		m.registryLock.Unlock()
+	}
+
 }
 
 func canShareChannel(u1 motan.URL, u2 motan.URL) bool {

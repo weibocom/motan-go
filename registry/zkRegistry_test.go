@@ -35,7 +35,7 @@ var (
 	z                = &ZkRegistry{}
 )
 
-//Test path generation methods.
+// Test path generation methods.
 func TestZkRegistryToPath(t *testing.T) {
 	//Test path create methods.
 	if p := toNodePath(testURL, zkNodeTypeServer); p != serverPath {

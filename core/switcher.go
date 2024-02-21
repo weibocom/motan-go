@@ -30,8 +30,7 @@ func (s *SwitcherManager) Register(name string, value bool, listeners ...Switche
 	}
 	s.switcherLock.Lock()
 	defer s.switcherLock.Unlock()
-	if _, ok := s.switcherMap[name]; ok {
-		vlog.Warningf("[switcher] register failed: %s has been registered", name)
+	if _, ok := s.switcherMap[name]; ok { // just ignore if already registered
 		return
 	}
 	newSwitcher := &Switcher{name: name, value: value, listeners: []SwitcherListener{}}

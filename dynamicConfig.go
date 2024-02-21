@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	URL "net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ type DynamicConfigurer struct {
 	agent            *Agent
 }
 
-type registrySnapInfoStorage struct {
+type RegistrySnapInfoStorage struct {
 	RegisterNodes  []*core.URL `json:"register_nodes"`
 	SubscribeNodes []*core.URL `json:"subscribe_nodes"`
 }
@@ -59,7 +60,7 @@ func (c *DynamicConfigurer) doRecover() error {
 		vlog.Warningln("Read configuration snapshot file error: " + err.Error())
 		return err
 	}
-	registerSnapInfo := new(registrySnapInfoStorage)
+	registerSnapInfo := new(RegistrySnapInfoStorage)
 	err = json.Unmarshal(bytes, registerSnapInfo)
 	if err != nil {
 		vlog.Errorln("Parse snapshot string error: " + err.Error())
@@ -90,11 +91,15 @@ func (c *DynamicConfigurer) Register(url *core.URL) error {
 func (c *DynamicConfigurer) doRegister(url *core.URL) error {
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
-	if _, ok := c.registerNodes[url.GetIdentity()]; ok {
+	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
 		return nil
 	}
-	c.agent.ExportService(url)
-	c.registerNodes[url.GetIdentity()] = url
+	err := c.agent.ExportService(url)
+	if err != nil {
+		vlog.Warningf("dynamic register failed, error: %s", err.Error())
+	} else {
+		c.registerNodes[url.GetIdentityWithRegistry()] = url
+	}
 	return nil
 }
 
@@ -111,9 +116,9 @@ func (c *DynamicConfigurer) doUnregister(url *core.URL) error {
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
 
-	if _, ok := c.registerNodes[url.GetIdentity()]; ok {
+	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
 		c.agent.UnexportService(url)
-		delete(c.registerNodes, url.GetIdentity())
+		delete(c.registerNodes, url.GetIdentityWithRegistry())
 	}
 	return nil
 }
@@ -134,7 +139,10 @@ func (c *DynamicConfigurer) doSubscribe(url *core.URL) error {
 		return nil
 	}
 	c.subscribeNodes[url.GetIdentity()] = url
-	c.agent.SubscribeService(url)
+	err := c.agent.SubscribeService(url)
+	if err != nil {
+		vlog.Warningf("dynamic subscribe failed, error: %s", err.Error())
+	}
 	return nil
 }
 
@@ -154,8 +162,8 @@ func (c *DynamicConfigurer) saveSnapshot() {
 	}
 }
 
-func (c *DynamicConfigurer) getRegistryInfo() *registrySnapInfoStorage {
-	registrySnapInfo := registrySnapInfoStorage{}
+func (c *DynamicConfigurer) getRegistryInfo() *RegistrySnapInfoStorage {
+	registrySnapInfo := RegistrySnapInfoStorage{}
 
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
@@ -178,9 +186,12 @@ func (c *DynamicConfigurer) getRegistryInfo() *registrySnapInfoStorage {
 
 type DynamicConfigurerHandler struct {
 	agent *Agent
+	lock  sync.Mutex
 }
 
 func (h *DynamicConfigurerHandler) SetAgent(agent *Agent) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	h.agent = agent
 }
 
@@ -201,18 +212,57 @@ func (h *DynamicConfigurerHandler) ServeHTTP(res http.ResponseWriter, req *http.
 		res.WriteHeader(http.StatusNotFound)
 	}
 }
-
-func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) {
+func (h *DynamicConfigurerHandler) readURLsFromRequest(req *http.Request) ([]*core.URL, error) {
 	bytes, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		return nil, err
 	}
-
 	url := new(core.URL)
 	err = json.Unmarshal(bytes, url)
 	if err != nil {
 		return nil, err
 	}
+	//add additional service group from environment
+	if v := os.Getenv(core.GroupEnvironmentName); v != "" {
+		if url.Group == "" {
+			url.Group = v
+		} else {
+			url.Group += "," + v
+		}
+	}
+	groups := core.SlicesUnique(core.TrimSplit(url.Group, core.GroupNameSeparator))
+	urls := []*core.URL{}
+	for _, group := range groups {
+		u := url.Copy()
+		u.Group = group
+		urls = append(urls, u)
+	}
+	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) readURLs(req *http.Request) ([]*core.URL, error) {
+	urls, err := h.readURLsFromRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	err = h.parseURLs(urls)
+	if err != nil {
+		return nil, err
+	}
+	return urls, nil
+}
+
+func (h *DynamicConfigurerHandler) parseURLs(urls []*core.URL) error {
+	for _, u := range urls {
+		_, e := h.parseURL(u)
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+func (h *DynamicConfigurerHandler) parseURL(url *core.URL) (*core.URL, error) {
 	if url.Group == "" {
 		url.Group = url.GetParam(core.GroupKey, "")
 		delete(url.Parameters, core.GroupKey)
@@ -268,61 +318,76 @@ func (h *DynamicConfigurerHandler) getURL(req *http.Request) (*core.URL, error) 
 	if len(agentFilter) > 0 {
 		filters = strings.Join(agentFilter, ",")
 	}
-	if filters == "" {
-		filters = h.agent.Context.AgentURL.GetParam(core.FilterKey, "")
-	}
+
 	if filters != "" {
 		url.PutParam(core.FilterKey, filters)
+	}
+
+	//final filters: defaultFilter + globalFilter + filters
+	finalFilters := h.agent.Context.MergeFilterSet(
+		h.agent.Context.GetDefaultFilterSet(url),
+		h.agent.Context.GetGlobalFilterSet(url),
+		h.agent.Context.GetEnvGlobalFilterSet(),
+		h.agent.Context.GetFilterSet(url.GetStringParamsWithDefault(core.FilterKey, ""), ""),
+	)
+	if len(finalFilters) > 0 {
+		url.PutParam(core.FilterKey, h.agent.Context.FilterSetToStr(finalFilters))
 	}
 	return url, nil
 }
 
 func (h *DynamicConfigurerHandler) register(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
-	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyServiceURL(url)
-	err = h.agent.configurer.Register(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
+		url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
+		h.agent.initProxyServiceURL(url)
+		err = h.agent.configurer.Register(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
 func (h *DynamicConfigurerHandler) unregister(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
-	url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
-	h.agent.initProxyServiceURL(url)
-	err = h.agent.configurer.Unregister(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.PutParam(core.ProxyKey, url.Protocol+":"+url.GetPortStr())
+		url.PutParam(core.ExportKey, url.Protocol+":"+strconv.Itoa(h.agent.eport))
+		h.agent.initProxyServiceURL(url)
+		err = h.agent.configurer.Unregister(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }
 
 func (h *DynamicConfigurerHandler) subscribe(res http.ResponseWriter, req *http.Request) {
-	url, err := h.getURL(req)
+	urls, err := h.readURLs(req)
 	if err != nil {
 		writeHandlerResponse(res, http.StatusBadRequest, err.Error(), nil)
 		return
 	}
-	url.Host = ""
-	url.Port = 0
-	err = h.agent.configurer.Subscribe(url)
-	if err != nil {
-		writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
-		return
+	for _, url := range urls {
+		url.Host = ""
+		url.Port = 0
+		err = h.agent.configurer.Subscribe(url)
+		if err != nil {
+			writeHandlerResponse(res, http.StatusInternalServerError, err.Error(), nil)
+			return
+		}
 	}
 	writeHandlerResponse(res, http.StatusOK, "ok", nil)
 }

@@ -41,10 +41,12 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/503"] = status
 		defaultManageHandlers["/version"] = status
 		defaultManageHandlers["/status"] = status
+		defaultManageHandlers["/registry/status"] = status
 
 		info := &InfoHandler{}
 		defaultManageHandlers["/getConfig"] = info
 		defaultManageHandlers["/getReferService"] = info
+		defaultManageHandlers["/getAllService"] = info
 
 		debug := &DebugHandler{}
 		defaultManageHandlers["/debug/pprof/"] = debug
@@ -58,6 +60,11 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/debug/stat/process"] = debug
 		defaultManageHandlers["/debug/stat/openFiles"] = debug
 		defaultManageHandlers["/debug/stat/connections"] = debug
+		defaultManageHandlers["/debug/pprof/allocs"] = debug
+		defaultManageHandlers["/debug/pprof/block"] = debug
+		defaultManageHandlers["/debug/pprof/goroutine"] = debug
+		defaultManageHandlers["/debug/pprof/mutex"] = debug
+		defaultManageHandlers["/debug/pprof/heap"] = debug
 
 		switcher := &SwitcherHandler{}
 		defaultManageHandlers["/switcher/set"] = switcher

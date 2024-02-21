@@ -29,6 +29,9 @@ func (m *MotanProvider) Initialize() {
 		vlog.Errorln("reverse proxy service port config error!")
 		return
 	}
+	if protocol == "motan2" || protocol == "motan" { // TODO temp compatible with motan1. remove if MotanCommonEndpoint as default Motan endpoint
+		protocol = "motanV1Compatible"
+	}
 	host := m.url.GetParam(ProxyHostKey, DefaultHost)
 	endpointURL := m.url.Copy()
 	endpointURL.Protocol = protocol
@@ -56,11 +59,13 @@ func (m *MotanProvider) Initialize() {
 func (m *MotanProvider) Call(request motan.Request) motan.Response {
 	if m.IsAvailable() {
 		// x-forwared-for
-		request.SetAttachment("x-forwarded-for", request.GetAttachment(motan.HostKey))
+		if request.GetAttachment(motan.XForwardedForLower) == "" && request.GetAttachment(motan.XForwardedFor) == "" {
+			request.SetAttachment(motan.XForwardedForLower, request.GetAttachment(motan.HostKey))
+		}
 		return m.ep.Call(request)
 	}
 	t := time.Now().UnixNano()
-	res := &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize)}
+	res := motan.AcquireMotanResponse()
 	fillException(res, t, errors.New("reverse proxy call err: motanProvider is unavailable"))
 	return res
 }

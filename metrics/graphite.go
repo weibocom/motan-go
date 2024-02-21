@@ -32,7 +32,7 @@ type graphite struct {
 	Port    int
 	Name    string
 	localIP string
-	lock    sync.Mutex
+	lock    *sync.Mutex //using pointer avoid shadow copy, cause lock issue
 	conn    net.Conn
 }
 
@@ -50,7 +50,7 @@ func newGraphite(ip, pool string, port int) *graphite {
 		Host: ip,
 		Port: port,
 		Name: pool,
-		lock: sync.Mutex{},
+		lock: &sync.Mutex{},
 		conn: getUDPConn(ip, port),
 	}
 }
@@ -59,11 +59,15 @@ func (g *graphite) Write(snapshots []Snapshot) error {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if g.conn == nil {
-		if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
-			return errors.New("open graphite conn failed")
-		}
+	if g.conn = getUDPConn(g.Host, g.Port); g.conn == nil {
+		return errors.New("open graphite conn failed")
 	}
+
+	defer func() {
+		if g.conn != nil {
+			g.conn.Close()
+		}
+	}()
 
 	if g.localIP == "" {
 		g.localIP = strings.Replace(strings.Split(g.conn.LocalAddr().String(), ":")[0], ".", "_", -1)
@@ -98,19 +102,21 @@ func GenGraphiteMessages(localIP string, snapshots []Snapshot) []string {
 				if len(pni) < minKeyLength {
 					return
 				}
+				escapedService := snap.GetEscapedService()
+				escapedGroup := snap.GetEscapedGroup() + snap.GetGroupSuffix()
 				if snap.IsHistogram(k) { //histogram
 					for slaK, slaV := range sla {
 						segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|kv\n",
-							pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], slaK, snap.Percentile(k, slaV))
+							pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], slaK, snap.Percentile(k, slaV))
 					}
 					segment += fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s.%s:%.2f|ms\n",
-						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], "avg_time", snap.Mean(k))
+						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], "avg_time", snap.Mean(k))
 				} else if snap.IsCounter(k) { //counter
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|c\n",
-						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Count(k))
+						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], snap.Count(k))
 				} else { // gauge
 					segment = fmt.Sprintf("%s.%s.%s.byhost.%s.%s.%s:%d|kv\n",
-						pni[0], pni[1], snap.GetGroup(), localIP, snap.GetService(), pni[2], snap.Value(k))
+						pni[0], pni[1], escapedGroup, localIP, escapedService, pni[2], snap.Value(k))
 				}
 				if buf.Len() > 0 && buf.Len()+len(segment) > messageMaxLen {
 					messages = append(messages, buf.String())

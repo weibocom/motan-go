@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/weibocom/motan-go/log"
@@ -21,7 +22,9 @@ const (
 var (
 	PanicStatFunc func()
 
-	localIPs = make([]string, 0)
+	localIPs      = make([]string, 0)
+	initDirectEnv sync.Once
+	directRpc     map[string]*URL
 )
 
 func ParseExportInfo(export string) (string, int, error) {
@@ -36,12 +39,12 @@ func ParseExportInfo(export string) (string, int, error) {
 		}
 		port = s[1]
 	}
-	porti, err := strconv.Atoi(port)
+	pi, err := strconv.Atoi(port)
 	if err != nil {
 		vlog.Errorf("export port not int. port:%s", port)
-		return protocol, porti, err
+		return protocol, pi, err
 	}
-	return protocol, porti, err
+	return protocol, pi, err
 }
 
 func InterfaceToString(in interface{}) string {
@@ -59,17 +62,17 @@ func InterfaceToString(in interface{}) string {
 	return rs
 }
 
-// GetLocalIPs ip from ipnet
+// GetLocalIPs ip from ip net
 func GetLocalIPs() []string {
 	if len(localIPs) == 0 {
-		addrs, err := net.InterfaceAddrs()
+		addr, err := net.InterfaceAddrs()
 		if err != nil {
 			vlog.Warningf("get local ip fail. %s", err.Error())
 		} else {
-			for _, address := range addrs {
-				if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-					if ipnet.IP.To4() != nil {
-						localIPs = append(localIPs, ipnet.IP.String())
+			for _, address := range addr {
+				if ipNet, ok := address.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+					if ipNet.IP.To4() != nil {
+						localIPs = append(localIPs, ipNet.IP.String())
 					}
 				}
 			}
@@ -78,7 +81,7 @@ func GetLocalIPs() []string {
 	return localIPs
 }
 
-// GetLocalIP falg of localIP > ipnet
+// GetLocalIP flag of localIP > ip net
 func GetLocalIP() string {
 	if *LocalIP != "" {
 		return *LocalIP
@@ -122,6 +125,38 @@ func GetReqInfo(request Request) string {
 	return ""
 }
 
+func GetResInfo(response Response) string {
+	if response != nil {
+		var buffer bytes.Buffer
+		buffer.WriteString("res{")
+		buffer.WriteString(strconv.FormatUint(response.GetRequestID(), 10))
+		buffer.WriteString(",")
+		if response.GetException() != nil {
+			buffer.WriteString(response.GetException().ErrMsg)
+		}
+		buffer.WriteString("}")
+		return buffer.String()
+	}
+	return ""
+}
+
+func GetEPFilterInfo(filter EndPointFilter) string {
+	if filter != nil {
+		var buffer bytes.Buffer
+		writeEPFilter(filter, &buffer)
+		return buffer.String()
+	}
+	return ""
+}
+
+func writeEPFilter(filter EndPointFilter, buffer *bytes.Buffer) {
+	buffer.WriteString(filter.GetName())
+	if filter.GetNext() != nil {
+		buffer.WriteString("->")
+		writeEPFilter(filter.GetNext(), buffer)
+	}
+}
+
 func HandlePanic(f func()) {
 	if err := recover(); err != nil {
 		vlog.Errorf("recover panic. error:%v, stack: %s", err, debug.Stack())
@@ -138,12 +173,12 @@ func HandlePanic(f func()) {
 // returns a slice of the substrings between those separators,
 // specially trim all substrings.
 func TrimSplit(s string, sep string) []string {
-	n := strings.Count(s, sep) + 1
-	a := make([]string, n)
-	i := 0
 	if sep == "" {
 		return strings.Split(s, sep)
 	}
+	n := strings.Count(s, sep) + 1
+	a := make([]string, n)
+	i := 0
 	for {
 		m := strings.Index(s, sep)
 		if m < 0 {
@@ -156,6 +191,18 @@ func TrimSplit(s string, sep string) []string {
 	}
 	a[i] = s
 	return a[:i+1]
+}
+
+// TrimSplitSet slices string and convert to map set
+func TrimSplitSet(s string, sep string) map[string]bool {
+	slice := TrimSplit(s, sep)
+	set := make(map[string]bool, len(slice))
+
+	for _, item := range slice {
+		set[item] = true
+	}
+
+	return set
 }
 
 // ListenUnixSock try to listen a unix socket address
@@ -172,4 +219,70 @@ func ListenUnixSock(unixSockAddr string) (net.Listener, error) {
 		return nil, err
 	}
 	return listener, nil
+}
+
+// SlicesUnique deduplicate the values of the slice
+func SlicesUnique(src []string) []string {
+	var dst []string
+	set := map[string]bool{}
+	for _, v := range src {
+		if !set[v] {
+			set[v] = true
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+
+// GetDirectEnvRegistry get the direct registry from the environment variable.
+// return registry urls if url match, or return nil
+func GetDirectEnvRegistry(url *URL) *URL {
+	initDirectEnv.Do(func() {
+		str := os.Getenv(DirectRPCEnvironmentName)
+		if str != "" {
+			vlog.Infof("find env " + DirectRPCEnvironmentName + ":" + str)
+			ss := strings.Split(str, ";") // multi services
+			for _, s := range ss {
+				sInfo := strings.Split(s, ">")
+				if len(sInfo) == 2 {
+					group := ""
+					addr := sInfo[1]
+					gIndex := strings.Index(sInfo[1], "@")
+					if gIndex > -1 { // has group info
+						group = sInfo[1][:gIndex]
+						addr = sInfo[1][gIndex+1:]
+					}
+					reg := &URL{Protocol: "direct", Group: strings.TrimSpace(group)}
+					reg.PutParam(AddressKey, strings.TrimSpace(addr))
+					key := strings.TrimSpace(sInfo[0])
+					vlog.Infof("add direct registry info, key:"+key+", url: %+v", reg)
+					if directRpc == nil {
+						directRpc = make(map[string]*URL, 16)
+					}
+					directRpc[key] = reg
+				}
+			}
+		}
+	})
+	if directRpc != nil { // have direct rpc
+		p := url.Path
+		for k, u := range directRpc {
+			if strings.HasSuffix(k, "*") { // prefix match
+				if strings.HasPrefix(p, k[:len(k)-1]) {
+					return u
+				}
+			} else { // suffix match
+				if strings.HasSuffix(p, k) {
+					return u
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ClearDirectEnvRegistry is only for unit test
+func ClearDirectEnvRegistry() {
+	directRpc = nil
+	initDirectEnv = sync.Once{}
 }

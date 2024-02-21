@@ -4,15 +4,15 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 var (
@@ -22,22 +22,30 @@ var (
 	defaultKeepaliveInterval    = 1000 * time.Millisecond
 	defaultConnectRetryInterval = 60 * time.Second
 	defaultErrorCountThreshold  = 10
-	ErrChannelShutdown          = fmt.Errorf("The channel has been shutdown")
-	ErrSendRequestTimeout       = fmt.Errorf("Timeout err: send request timeout")
-	ErrRecvRequestTimeout       = fmt.Errorf("Timeout err: receive request timeout")
+	defaultLazyInit             = false
+	defaultAsyncInitConnection  atomic.Value
+	ErrChannelShutdown          = fmt.Errorf("the channel has been shutdown")
+	ErrSendRequestTimeout       = fmt.Errorf("timeout err: send request timeout")
+	ErrRecvRequestTimeout       = fmt.Errorf("timeout err: receive request timeout")
+	ErrUnsupportedMessage       = fmt.Errorf("stream notify : Unsupported message")
 
 	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
 
-	errPanic = errors.New("panic error")
+	errPanic     = errors.New("panic error")
+	v2StreamPool = sync.Pool{New: func() interface{} {
+		return &V2Stream{
+			recvNotifyCh: make(chan struct{}, 1),
+		}
+	}}
 )
 
 type MotanEndpoint struct {
 	url                          *motan.URL
 	lock                         sync.Mutex
-	channels                     *ChannelPool
+	channels                     *V2ChannelPool
 	destroyed                    bool
 	destroyCh                    chan struct{}
-	available                    bool
+	available                    atomic.Value
 	errorCount                   uint32
 	proxy                        bool
 	errorCountThreshold          int64
@@ -46,6 +54,8 @@ type MotanEndpoint struct {
 	minRequestTimeoutMillisecond int64
 	maxRequestTimeoutMillisecond int64
 	clientConnection             int
+	lazyInit                     bool
+	maxContentLength             int
 
 	// for heartbeat requestID
 	keepaliveID      uint64
@@ -54,7 +64,7 @@ type MotanEndpoint struct {
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
-	m.available = available
+	m.available.Store(available)
 }
 
 func (m *MotanEndpoint) SetSerialization(s motan.Serialization) {
@@ -67,6 +77,7 @@ func (m *MotanEndpoint) SetProxy(proxy bool) {
 
 func (m *MotanEndpoint) Initialize() {
 	m.destroyCh = make(chan struct{}, 1)
+	m.available.Store(false) // init value
 	connectTimeout := m.url.GetTimeDuration(motan.ConnectTimeoutKey, time.Millisecond, defaultConnectTimeout)
 	connectRetryInterval := m.url.GetTimeDuration(motan.ConnectRetryIntervalKey, time.Millisecond, defaultConnectRetryInterval)
 	m.errorCountThreshold = m.url.GetIntValue(motan.ErrorCountThresholdKey, int64(defaultErrorCountThreshold))
@@ -75,37 +86,21 @@ func (m *MotanEndpoint) Initialize() {
 	m.minRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MinTimeOutKey)
 	m.maxRequestTimeoutMillisecond, _ = m.url.GetInt(motan.MaxTimeOutKey)
 	m.clientConnection = int(m.url.GetPositiveIntValue(motan.ClientConnectionKey, int64(defaultChannelPoolSize)))
+	m.maxContentLength = int(m.url.GetPositiveIntValue(motan.MaxContentLength, int64(mpro.DefaultMaxContentLength)))
+	m.lazyInit = m.url.GetBoolValue(motan.LazyInit, defaultLazyInit)
+	asyncInitConnection := m.url.GetBoolValue(motan.AsyncInitConnection, GetDefaultMotanEPAsynInit())
 	factory := func() (net.Conn, error) {
-		return net.DialTimeout("tcp", m.url.GetAddressStr(), connectTimeout)
+		address := m.url.GetAddressStr()
+		if strings.HasPrefix(address, motan.UnixSockProtocolFlag) {
+			return net.DialTimeout("unix", address[len(motan.UnixSockProtocolFlag):], connectTimeout)
+		}
+		return net.DialTimeout("tcp", address, connectTimeout)
 	}
-	channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
-	if err != nil {
-		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
-		// retry connect
-		go func() {
-			defer motan.HandlePanic(nil)
-			// TODO: retry after 2^n * timeUnit
-			ticker := time.NewTicker(connectRetryInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ticker.C:
-					channels, err := NewChannelPool(m.clientConnection, factory, nil, m.serialization)
-					if err == nil {
-						m.channels = channels
-						m.setAvailable(true)
-						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
-						return
-					}
-				case <-m.destroyCh:
-					return
-				}
-			}
-		}()
+	config := &ChannelConfig{MaxContentLength: m.maxContentLength}
+	if asyncInitConnection {
+		go m.initChannelPoolWithRetry(factory, config, connectRetryInterval)
 	} else {
-		m.channels = channels
-		m.setAvailable(true)
-		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+		m.initChannelPoolWithRetry(factory, config, connectRetryInterval)
 	}
 }
 
@@ -151,9 +146,8 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
-	startTime := time.Now().UnixNano()
 	if rc.AsyncCall {
-		rc.Result.StartTime = startTime
+		rc.Result.StartTime = time.Now().UnixNano()
 	}
 	// get a channel
 	channel, err := m.channels.Get()
@@ -203,7 +197,7 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "convert response fail!" + err.Error(), ErrType: motan.ServiceException})
 	}
 	excep := response.GetException()
-	if excep != nil && excep.ErrCode == 503 {
+	if excep != nil && excep.ErrType != motan.BizException {
 		m.recordErrAndKeepalive()
 	} else {
 		// reset errorCount
@@ -214,16 +208,53 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 			return m.defaultErrMotanResponse(request, err.Error())
 		}
 	}
+	response.GetRPCContext(true).RemoteAddr = channel.address
 	return response
 }
 
+func (m *MotanEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *ChannelConfig, retryInterval time.Duration) {
+	defer motan.HandlePanic(nil)
+	channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+	if err != nil {
+		vlog.Errorf("Channel pool init failed. url: %v, err:%s", m.url, err.Error())
+		// retry connect
+		go func() {
+			defer motan.HandlePanic(nil)
+			// TODO: retry after 2^n * timeUnit
+			ticker := time.NewTicker(retryInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+					if err == nil {
+						m.channels = channels
+						m.setAvailable(true)
+						vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+						return
+					}
+				case <-m.destroyCh:
+					return
+				}
+			}
+		}()
+	} else {
+		m.channels = channels
+		m.setAvailable(true)
+		vlog.Infof("Channel pool init success. url:%s", m.url.GetAddressStr())
+	}
+}
+
 func (m *MotanEndpoint) recordErrAndKeepalive() {
-	errCount := atomic.AddUint32(&m.errorCount, 1)
-	// ensure trigger keepalive
-	if errCount >= uint32(m.errorCountThreshold) {
-		m.setAvailable(false)
-		vlog.Infoln("Referer disable:" + m.url.GetIdentity())
-		go m.keepalive()
+	// errorCountThreshold <= 0 means not trigger keepalive
+	if m.errorCountThreshold > 0 {
+		errCount := atomic.AddUint32(&m.errorCount, 1)
+		// ensure trigger keepalive
+		if errCount >= uint32(m.errorCountThreshold) {
+			m.setAvailable(false)
+			vlog.Infoln("Referer disable:" + m.url.GetIdentity())
+			go m.keepalive()
+		}
 	}
 }
 
@@ -278,16 +309,11 @@ func (m *MotanEndpoint) keepalive() {
 }
 
 func (m *MotanEndpoint) defaultErrMotanResponse(request motan.Request, errMsg string) motan.Response {
-	response := &motan.MotanResponse{
-		RequestID:  request.GetRequestID(),
-		Attachment: motan.NewStringMap(motan.DefaultAttachmentSize),
-		Exception: &motan.Exception{
-			ErrCode: 400,
-			ErrMsg:  errMsg,
-			ErrType: motan.ServiceException,
-		},
-	}
-	return response
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{
+		ErrCode: 400,
+		ErrMsg:  errMsg,
+		ErrType: motan.ServiceException,
+	})
 }
 
 func (m *MotanEndpoint) GetName() string {
@@ -303,30 +329,30 @@ func (m *MotanEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MotanEndpoint) IsAvailable() bool {
-	return m.available
+	return m.available.Load().(bool)
 }
 
-// Config : Config
-type Config struct {
-	RequestTimeout time.Duration
+// ChannelConfig : ChannelConfig
+type ChannelConfig struct {
+	MaxContentLength int
 }
 
-func DefaultConfig() *Config {
-	return &Config{
-		RequestTimeout: defaultRequestTimeout,
+func DefaultConfig() *ChannelConfig {
+	return &ChannelConfig{
+		MaxContentLength: motan.DefaultMaxContentLength,
 	}
 }
 
-func VerifyConfig(config *Config) error {
-	if config.RequestTimeout <= 0 {
-		return fmt.Errorf("RequestTimeout interval must be positive")
+func VerifyConfig(config *ChannelConfig) error {
+	if config.MaxContentLength <= 0 {
+		return fmt.Errorf("MaxContentLength of ChannelConfig must be positive")
 	}
 	return nil
 }
 
-type Channel struct {
+type V2Channel struct {
 	// config
-	config        *Config
+	config        *ChannelConfig
 	serialization motan.Serialization
 	address       string
 
@@ -338,10 +364,10 @@ type Channel struct {
 	sendCh chan sendReady
 
 	// stream
-	streams    map[uint64]*Stream
+	streams    map[uint64]*V2Stream
 	streamLock sync.Mutex
 	// heartbeat
-	heartbeats    map[uint64]*Stream
+	heartbeats    map[uint64]*V2Stream
 	heartbeatLock sync.Mutex
 
 	// shutdown
@@ -351,9 +377,10 @@ type Channel struct {
 	shutdownLock sync.Mutex
 }
 
-type Stream struct {
-	channel *Channel
-	sendMsg *mpro.Message
+type V2Stream struct {
+	channel  *V2Channel
+	sendMsg  *mpro.Message
+	streamId uint64
 	// recv msg
 	recvMsg      *mpro.Message
 	recvNotifyCh chan struct{}
@@ -361,30 +388,52 @@ type Stream struct {
 	deadline time.Time
 
 	rc          *motan.RPCContext
-	isClose     atomic.Value // bool
 	isHeartBeat bool
+	timer       *time.Timer
+	canRelease  atomic.Value // state indicates whether the stream needs to be recycled by the V2Channel
 }
 
-func (s *Stream) Send() error {
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+func (s *V2Stream) Reset() {
+	// try consume
+	select {
+	case <-s.recvNotifyCh:
+	default:
+	}
+	s.channel = nil
+	s.sendMsg = nil
+	s.recvMsg = nil
+	s.rc = nil
+}
 
-	buf := s.sendMsg.Encode()
+func (s *V2Stream) Send() error {
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.timer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.timer.Stop()
+
+	s.sendMsg.Encode0()
 	if s.rc != nil && s.rc.Tc != nil {
 		s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Encode, Addr: s.channel.address, Time: time.Now()})
 	}
-	ready := sendReady{data: buf.Bytes()}
+	ready := sendReady{message: s.sendMsg}
 	select {
 	case s.channel.sendCh <- ready:
+		// read/write data race
 		if s.rc != nil {
 			sendTime := time.Now()
 			s.rc.RequestSendTime = sendTime
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
 			}
+			if s.rc.AsyncCall {
+				// only return send success, it can release in V2Stream.notify
+				s.canRelease.Store(true)
+			}
 		}
 		return nil
-	case <-timer.C:
+	case <-s.timer.C:
 		return ErrSendRequestTimeout
 	case <-s.channel.shutdownCh:
 		return ErrChannelShutdown
@@ -392,12 +441,20 @@ func (s *Stream) Send() error {
 }
 
 // Recv sync recv
-func (s *Stream) Recv() (*mpro.Message, error) {
+func (s *V2Stream) Recv() (*mpro.Message, error) {
 	defer func() {
-		s.Close()
+		// only timeout or shutdown before channel.handleMsg, call RemoveFromChannel will be true,
+		// which means stream can release
+		if s.RemoveFromChannel() {
+			s.canRelease.Store(true)
+		}
 	}()
-	timer := time.NewTimer(s.deadline.Sub(time.Now()))
-	defer timer.Stop()
+	if s.timer == nil {
+		s.timer = time.NewTimer(s.deadline.Sub(time.Now()))
+	} else {
+		s.timer.Reset(s.deadline.Sub(time.Now()))
+	}
+	defer s.timer.Stop()
 	select {
 	case <-s.recvNotifyCh:
 		msg := s.recvMsg
@@ -405,17 +462,18 @@ func (s *Stream) Recv() (*mpro.Message, error) {
 			return nil, errors.New("recv err: recvMsg is nil")
 		}
 		return msg, nil
-	case <-timer.C:
+	case <-s.timer.C:
+		// stream may be referenced by V2Stream.notify, can`t release
+		s.canRelease.Store(false)
 		return nil, ErrRecvRequestTimeout
 	case <-s.channel.shutdownCh:
+		// stream may be referenced by V2Stream.notify, can`t release
+		s.canRelease.Store(false)
 		return nil, ErrChannelShutdown
 	}
 }
 
-func (s *Stream) notify(msg *mpro.Message, t time.Time) {
-	defer func() {
-		s.Close()
-	}()
+func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 	if s.rc != nil {
 		s.rc.ResponseReceiveTime = t
 		if s.rc.Tc != nil {
@@ -423,6 +481,10 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
 		if s.rc.AsyncCall {
+			defer func() {
+				s.RemoveFromChannel()
+				releaseV2Stream(s)
+			}()
 			msg.Header.SetProxy(s.rc.Proxy)
 			result := s.rc.Result
 			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
@@ -435,7 +497,7 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 			if err = response.ProcessDeserializable(result.Reply); err != nil {
 				result.Error = err
 			}
-			response.SetProcessTime(int64((time.Now().UnixNano() - result.StartTime) / 1000000))
+			response.SetProcessTime((time.Now().UnixNano() - result.StartTime) / 1000000)
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
 			}
@@ -448,27 +510,29 @@ func (s *Stream) notify(msg *mpro.Message, t time.Time) {
 	s.recvNotifyCh <- struct{}{}
 }
 
-func (s *Stream) SetDeadline(deadline time.Duration) {
+func (s *V2Stream) SetDeadline(deadline time.Duration) {
 	s.deadline = time.Now().Add(deadline)
 }
 
-func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, error) {
+func (c *V2Channel) newStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Stream, error) {
 	if msg == nil || msg.Header == nil {
 		return nil, errors.New("msg is invalid")
 	}
 	if c.IsClosed() {
 		return nil, ErrChannelShutdown
 	}
-	s := &Stream{
-		channel:      c,
-		sendMsg:      msg,
-		recvNotifyCh: make(chan struct{}, 1),
-		deadline:     time.Now().Add(1 * time.Second),
-		rc:           rc,
+
+	s := acquireV2Stream()
+	s.channel = c
+	s.sendMsg = msg
+	if s.recvNotifyCh == nil {
+		s.recvNotifyCh = make(chan struct{}, 1)
 	}
-	s.isClose.Store(false)
+	s.deadline = time.Now().Add(1 * time.Second)
+	s.rc = rc
 	// RequestID is communication identifier, it is own by channel
 	msg.Header.RequestID = GenerateRequestID()
+	s.streamId = msg.Header.RequestID
 	if msg.Header.IsHeartbeat() {
 		c.heartbeatLock.Lock()
 		c.heartbeats[msg.Header.RequestID] = s
@@ -478,36 +542,52 @@ func (c *Channel) NewStream(msg *mpro.Message, rc *motan.RPCContext) (*Stream, e
 		c.streamLock.Lock()
 		c.streams[msg.Header.RequestID] = s
 		c.streamLock.Unlock()
+		s.isHeartBeat = false
+	}
+	if rc != nil && rc.AsyncCall { // release by Stream.Notify
+		s.canRelease.Store(false)
+	} else { // release by Channel self
+		s.canRelease.Store(true)
 	}
 	return s, nil
 }
 
-func (s *Stream) Close() {
-	if !s.isClose.Load().(bool) {
-		if s.isHeartBeat {
-			s.channel.heartbeatLock.Lock()
-			delete(s.channel.heartbeats, s.sendMsg.Header.RequestID)
-			s.channel.heartbeatLock.Unlock()
-		} else {
-			s.channel.streamLock.Lock()
-			delete(s.channel.streams, s.sendMsg.Header.RequestID)
-			s.channel.streamLock.Unlock()
+func (s *V2Stream) RemoveFromChannel() bool {
+	var exist bool
+	if s.isHeartBeat {
+		s.channel.heartbeatLock.Lock()
+		if _, exist = s.channel.heartbeats[s.streamId]; exist {
+			delete(s.channel.heartbeats, s.streamId)
 		}
-		s.isClose.Store(true)
+		s.channel.heartbeatLock.Unlock()
+	} else {
+		s.channel.streamLock.Lock()
+		if _, exist = s.channel.streams[s.streamId]; exist {
+			delete(s.channel.streams, s.streamId)
+		}
+		s.channel.streamLock.Unlock()
 	}
+	return exist
 }
 
 type sendReady struct {
-	data []byte
+	message   *mpro.Message // motan2 protocol message
+	v1Message []byte        //motan1 protocol, synchronize subsequent if motan1 protocol message optimization
 }
 
-func (c *Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
-	stream, err := c.NewStream(msg, rc)
+func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCContext) (*mpro.Message, error) {
+	stream, err := c.newStream(msg, rc)
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if rc == nil || !rc.AsyncCall {
+			releaseV2Stream(stream)
+		}
+	}()
+
 	stream.SetDeadline(deadline)
-	if err := stream.Send(); err != nil {
+	if err = stream.Send(); err != nil {
 		return nil, err
 	}
 	if rc != nil && rc.AsyncCall {
@@ -516,11 +596,11 @@ func (c *Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RPCC
 	return stream.Recv()
 }
 
-func (c *Channel) IsClosed() bool {
+func (c *V2Channel) IsClosed() bool {
 	return c.shutdown
 }
 
-func (c *Channel) recv() {
+func (c *V2Channel) recv() {
 	defer motan.HandlePanic(func() {
 		c.closeOnErr(errPanic)
 	})
@@ -529,9 +609,10 @@ func (c *Channel) recv() {
 	}
 }
 
-func (c *Channel) recvLoop() error {
+func (c *V2Channel) recvLoop() error {
+	decodeBuf := make([]byte, mpro.DefaultBufferSize)
 	for {
-		res, t, err := mpro.DecodeWithTime(c.bufRead)
+		res, t, err := mpro.DecodeWithTime(c.bufRead, &decodeBuf, c.config.MaxContentLength)
 		if err != nil {
 			return err
 		}
@@ -548,25 +629,25 @@ func (c *Channel) recvLoop() error {
 	}
 }
 
-func (c *Channel) send() {
+func (c *V2Channel) send() {
 	defer motan.HandlePanic(func() {
 		c.closeOnErr(errPanic)
 	})
 	for {
 		select {
 		case ready := <-c.sendCh:
-			if ready.data != nil {
+			if ready.message != nil {
+				// can`t reuse net.Buffers
+				// len and cap will be 0 after writev consume, 'out of range panic' will happen when reuse
+				var sendBuf net.Buffers = ready.message.GetEncodedBytes()
 				// TODO need async?
 				c.conn.SetWriteDeadline(time.Now().Add(motan.DefaultWriteTimeout))
-				sent := 0
-				for sent < len(ready.data) {
-					n, err := c.conn.Write(ready.data[sent:])
-					if err != nil {
-						vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
-						c.closeOnErr(err)
-						return
-					}
-					sent += n
+				_, err := sendBuf.WriteTo(c.conn)
+				ready.message.SetCanRelease()
+				if err != nil {
+					vlog.Errorf("Failed to write channel. ep: %s, err: %s", c.address, err.Error())
+					c.closeOnErr(err)
+					return
 				}
 			}
 		case <-c.shutdownCh:
@@ -575,9 +656,10 @@ func (c *Channel) send() {
 	}
 }
 
-func (c *Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
+func (c *V2Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	c.heartbeatLock.Lock()
 	stream := c.heartbeats[msg.Header.RequestID]
+	delete(c.heartbeats, msg.Header.RequestID)
 	c.heartbeatLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle heartbeat message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -587,9 +669,10 @@ func (c *Channel) handleHeartbeat(msg *mpro.Message, t time.Time) error {
 	return nil
 }
 
-func (c *Channel) handleMessage(msg *mpro.Message, t time.Time) error {
+func (c *V2Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	c.streamLock.Lock()
 	stream := c.streams[msg.Header.RequestID]
+	delete(c.streams, msg.Header.RequestID)
 	c.streamLock.Unlock()
 	if stream == nil {
 		vlog.Warningf("handle recv message, missing stream: %d, ep:%s", msg.Header.RequestID, c.address)
@@ -599,7 +682,7 @@ func (c *Channel) handleMessage(msg *mpro.Message, t time.Time) error {
 	return nil
 }
 
-func (c *Channel) closeOnErr(err error) {
+func (c *V2Channel) closeOnErr(err error) {
 	c.shutdownLock.Lock()
 	if c.shutdownErr == nil {
 		c.shutdownErr = err
@@ -612,7 +695,7 @@ func (c *Channel) closeOnErr(err error) {
 	}
 }
 
-func (c *Channel) Close() error {
+func (c *V2Channel) Close() error {
 	c.shutdownLock.Lock()
 	defer c.shutdownLock.Unlock()
 	if c.shutdown {
@@ -626,20 +709,20 @@ func (c *Channel) Close() error {
 
 type ConnFactory func() (net.Conn, error)
 
-type ChannelPool struct {
-	channels      chan *Channel
+type V2ChannelPool struct {
+	channels      chan *V2Channel
 	channelsLock  sync.Mutex
 	factory       ConnFactory
-	config        *Config
+	config        *ChannelConfig
 	serialization motan.Serialization
 }
 
-func (c *ChannelPool) getChannels() chan *Channel {
+func (c *V2ChannelPool) getChannels() chan *V2Channel {
 	channels := c.channels
 	return channels
 }
 
-func (c *ChannelPool) Get() (*Channel, error) {
+func (c *V2ChannelPool) Get() (*V2Channel, error) {
 	channels := c.getChannels()
 	if channels == nil {
 		return nil, errors.New("channels is nil")
@@ -649,10 +732,14 @@ func (c *ChannelPool) Get() (*Channel, error) {
 		conn, err := c.factory()
 		if err != nil {
 			vlog.Errorf("create channel failed. err:%s", err.Error())
+		} else {
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
 		}
-		channel = buildChannel(conn, c.config, c.serialization)
+		channel = buildV2Channel(conn, c.config, c.serialization)
 	}
-	if err := retChannelPool(channels, channel); err != nil && channel != nil {
+	if err := retV2ChannelPool(channels, channel); err != nil && channel != nil {
 		channel.closeOnErr(err)
 	}
 	if channel == nil {
@@ -661,7 +748,7 @@ func (c *ChannelPool) Get() (*Channel, error) {
 	return channel, nil
 }
 
-func retChannelPool(channels chan *Channel, channel *Channel) (error error) {
+func retV2ChannelPool(channels chan *V2Channel, channel *V2Channel) (error error) {
 	defer func() {
 		if err := recover(); err != nil {
 			error = errors.New("ChannelPool has been closed")
@@ -674,7 +761,7 @@ func retChannelPool(channels chan *Channel, channel *Channel) (error error) {
 	return nil
 }
 
-func (c *ChannelPool) Close() error {
+func (c *V2ChannelPool) Close() error {
 	c.channelsLock.Lock() // to prevent channels closed many times
 	channels := c.channels
 	c.channels = nil
@@ -693,29 +780,40 @@ func (c *ChannelPool) Close() error {
 	return nil
 }
 
-func NewChannelPool(poolCap int, factory ConnFactory, config *Config, serialization motan.Serialization) (*ChannelPool, error) {
+func NewV2ChannelPool(poolCap int, factory ConnFactory, config *ChannelConfig, serialization motan.Serialization, lazyInit bool) (*V2ChannelPool, error) {
 	if poolCap <= 0 {
 		return nil, errors.New("invalid capacity settings")
 	}
-	channelPool := &ChannelPool{
-		channels:      make(chan *Channel, poolCap),
+	channelPool := &V2ChannelPool{
+		channels:      make(chan *V2Channel, poolCap),
 		factory:       factory,
 		config:        config,
 		serialization: serialization,
 	}
-	for i := 0; i < poolCap; i++ {
-		conn, err := factory()
-		if err != nil {
-			channelPool.Close()
-			return nil, err
+	if lazyInit {
+		for i := 0; i < poolCap; i++ {
+			//delay logic just push nil into channelPool. when the first request comes in,
+			//endpoint will build a connection from factory
+			channelPool.channels <- nil
 		}
-		_ = conn.(*net.TCPConn).SetNoDelay(true)
-		channelPool.channels <- buildChannel(conn, config, serialization)
+	} else {
+		for i := 0; i < poolCap; i++ {
+			conn, err := factory()
+			if err != nil {
+				channelPool.Close()
+				return nil, err
+			}
+			if c, ok := conn.(*net.TCPConn); ok {
+				c.SetNoDelay(true)
+			}
+
+			channelPool.channels <- buildV2Channel(conn, config, serialization)
+		}
 	}
 	return channelPool, nil
 }
 
-func buildChannel(conn net.Conn, config *Config, serialization motan.Serialization) *Channel {
+func buildV2Channel(conn net.Conn, config *ChannelConfig, serialization motan.Serialization) *V2Channel {
 	if conn == nil {
 		return nil
 	}
@@ -723,15 +821,16 @@ func buildChannel(conn net.Conn, config *Config, serialization motan.Serializati
 		config = DefaultConfig()
 	}
 	if err := VerifyConfig(config); err != nil {
+		vlog.Errorf("can not build Channel, ChannelConfig check fail. err:%v", err)
 		return nil
 	}
-	channel := &Channel{
+	channel := &V2Channel{
 		conn:          conn,
 		config:        config,
 		bufRead:       bufio.NewReader(conn),
 		sendCh:        make(chan sendReady, 256),
-		streams:       make(map[uint64]*Stream, 64),
-		heartbeats:    make(map[uint64]*Stream),
+		streams:       make(map[uint64]*V2Stream, 64),
+		heartbeats:    make(map[uint64]*V2Stream),
 		shutdownCh:    make(chan struct{}),
 		serialization: serialization,
 		address:       conn.RemoteAddr().String(),
@@ -742,4 +841,29 @@ func buildChannel(conn net.Conn, config *Config, serialization motan.Serializati
 	go channel.send()
 
 	return channel
+}
+
+func SetMotanEPDefaultAsynInit(ai bool) {
+	defaultAsyncInitConnection.Store(ai)
+}
+
+func GetDefaultMotanEPAsynInit() bool {
+	res := defaultAsyncInitConnection.Load()
+	if res == nil {
+		return true
+	}
+	return res.(bool)
+}
+
+func acquireV2Stream() *V2Stream {
+	return v2StreamPool.Get().(*V2Stream)
+}
+
+func releaseV2Stream(stream *V2Stream) {
+	if stream != nil {
+		if v, ok := stream.canRelease.Load().(bool); ok && v {
+			stream.Reset()
+			v2StreamPool.Put(stream)
+		}
+	}
 }

@@ -2,7 +2,11 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/stretchr/testify/assert"
+	"github.com/weibocom/motan-go/registry"
+	"os"
 	"testing"
+	"time"
 
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/ha"
@@ -69,7 +73,27 @@ func TestNotify(t *testing.T) {
 	if len(cluster.Refers) == 0 {
 		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
 	}
-
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
+	var destroyEndpoint motan.EndPoint
+	for _, j := range cluster.Refers {
+		if j.GetURL().Port == 8002 {
+			destroyEndpoint = j
+		}
+	}
+	if destroyEndpoint == nil {
+		t.Fatalf("cluster endpoint is nil")
+	}
+	if !destroyEndpoint.IsAvailable() {
+		t.Fatalf("cluster endpoint should be not available")
+	}
+	cluster.Notify(RegistryURL, urls)
+	time.Sleep(time.Second * 3)
+	if len(cluster.Refers) != 1 {
+		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
+	}
+	if destroyEndpoint.IsAvailable() {
+		t.Fatalf("cluster endpoint should not be available")
+	}
 }
 
 func TestCall(t *testing.T) {
@@ -82,7 +106,13 @@ func TestCall(t *testing.T) {
 }
 
 func initCluster() *MotanCluster {
+	return initClusterWithPathGroup("", "")
+}
+
+func initClusterWithPathGroup(path string, group string) *MotanCluster {
 	url := &motan.URL{Parameters: make(map[string]string)}
+	url.Path = path
+	url.Group = group
 	url.Protocol = "test"
 	url.Parameters[motan.Hakey] = "failover"
 	url.Parameters[motan.RegistryKey] = "vintage,consul,direct"
@@ -102,7 +132,19 @@ func TestDestroy(t *testing.T) {
 	}
 }
 
-//-------------test struct--------------------
+func TestParseRegistryFromEnv(t *testing.T) {
+	motan.ClearDirectEnvRegistry()
+	os.Setenv(motan.DirectRPCEnvironmentName, "helloService>change_group@127.0.0.1:8005,127.0.0.1:8006;unknownService>127.0.0.1:8888,127.0.0.1:9999")
+	cluster := initClusterWithPathGroup("com.weibo.helloService", "group1")
+	assert.Equal(t, 2, len(cluster.Refers))
+	for _, r := range cluster.GetRefers() {
+		assert.Equal(t, "change_group", r.GetURL().Group)
+		assert.Equal(t, "127.0.0.1", r.GetURL().Host)
+		assert.True(t, r.GetURL().Port == 8005 || r.GetURL().Port == 8006)
+	}
+}
+
+// -------------test struct--------------------
 func getCustomExt() motan.ExtensionFactory {
 	ext := &motan.DefaultExtensionFactory{}
 	ext.Initialize()
@@ -133,9 +175,10 @@ func getCustomExt() motan.ExtensionFactory {
 	ext.RegistExtRegistry("test", func(url *motan.URL) motan.Registry {
 		return &motan.TestRegistry{URL: url}
 	})
-
 	ext.RegistExtEndpoint("test", func(url *motan.URL) motan.EndPoint {
 		return &motan.TestEndPoint{URL: url}
 	})
+
+	registry.RegistDefaultRegistry(ext)
 	return ext
 }

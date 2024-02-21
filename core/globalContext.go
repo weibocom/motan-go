@@ -232,11 +232,11 @@ func (c *Context) Initialize() {
 	}
 
 	c.parseRegistrys()
+	c.parseHostURL()
 	c.parseBasicRefers()
 	c.parseRefers()
 	c.parserBasicServices()
 	c.parseServices()
-	c.parseHostURL()
 	c.parseHTTPClients()
 }
 
@@ -396,9 +396,126 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		} else {
 			newURL = url
 		}
+
+		//final filters: defaultFilter + globalFilter + filters + envFilter
+		finalFilters := c.MergeFilterSet(
+			c.GetDefaultFilterSet(newURL),
+			c.GetGlobalFilterSet(newURL),
+			c.GetEnvGlobalFilterSet(),
+			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
+		)
+		if len(finalFilters) > 0 {
+			newURL.PutParam(FilterKey, c.FilterSetToStr(finalFilters))
+		}
+
 		newURLs[key] = newURL
 	}
 	return newURLs
+}
+
+func (c *Context) FilterSetToStr(f map[string]bool) string {
+	var dst []string
+	for k := range f {
+		dst = append(dst, k)
+	}
+	return strings.Join(dst, ",")
+}
+
+func (c *Context) GetFilterSet(filterStr, disableFilterStr string) (dst map[string]bool) {
+	if filterStr == "" {
+		return
+	}
+	dst = map[string]bool{}
+
+	for _, k := range strings.Split(filterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		dst[k] = true
+	}
+
+	for _, k := range strings.Split(disableFilterStr, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		delete(dst, k)
+	}
+	return
+}
+
+func (c *Context) MergeFilterSet(sets ...map[string]bool) (dst map[string]bool) {
+	dst = map[string]bool{}
+	for _, set := range sets {
+		for k := range set {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			dst[k] = true
+		}
+	}
+	return
+}
+
+func (c *Context) GetDefaultFilterSet(newURL *URL) map[string]bool {
+	if c.AgentURL == nil {
+		return nil
+	}
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(DefaultFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableDefaultFilter, ""))
+}
+
+func (c *Context) GetGlobalFilterSet(newURL *URL) map[string]bool {
+	if c.AgentURL == nil {
+		return nil
+	}
+	return c.GetFilterSet(c.AgentURL.GetStringParamsWithDefault(GlobalFilter, ""),
+		newURL.GetStringParamsWithDefault(DisableGlobalFilter, ""))
+}
+
+func (c *Context) GetEnvGlobalFilterSet() map[string]bool {
+	res := make(map[string]bool)
+	if filters := os.Getenv(FilterEnvironmentName); filters != "" {
+		for _, k := range strings.Split(filters, ",") {
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			res[k] = true
+		}
+	}
+	return res
+}
+
+// parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
+func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	addMotanServiceMap := map[string]*URL{}
+	for k, serviceURL := range motanServiceMap {
+		//add additional service group from environment
+		if v := os.Getenv(GroupEnvironmentName); v != "" {
+			if serviceURL.Group == "" {
+				serviceURL.Group = v
+			} else {
+				serviceURL.Group += "," + v
+			}
+		}
+		if !strings.Contains(serviceURL.Group, GroupNameSeparator) {
+			continue
+		}
+		groups := SlicesUnique(TrimSplit(serviceURL.Group, GroupNameSeparator))
+		serviceURL.Group = groups[0]
+		for idx, g := range groups[1:] {
+			key := fmt.Sprintf("%v-%v", k, idx)
+			newService := serviceURL.Copy()
+			newService.Group = g
+			addMotanServiceMap[key] = newService
+		}
+	}
+	for k, v := range addMotanServiceMap {
+		motanServiceMap[k] = v
+	}
 }
 
 func (c *Context) parseRefers() {
@@ -410,7 +527,9 @@ func (c *Context) parseBasicRefers() {
 }
 
 func (c *Context) parseServices() {
-	c.ServiceURLs = c.basicConfToURLs(servicesSection)
+	urlsMap := c.basicConfToURLs(servicesSection)
+	c.parseMultipleServiceGroup(urlsMap)
+	c.ServiceURLs = urlsMap
 }
 
 func (c *Context) parserBasicServices() {

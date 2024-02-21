@@ -2,6 +2,7 @@ package vlog
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"strconv"
 	"testing"
@@ -30,7 +31,7 @@ func init() {
 		Exception:     "Exception"}
 }
 
-//BenchmarkLogSprintf: 736 ns/op
+// BenchmarkLogSprintf: 736 ns/op
 func BenchmarkLogSprintf(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -51,7 +52,7 @@ func BenchmarkLogSprintf(b *testing.B) {
 	}
 }
 
-//BenchmarkLogBufferWritePlus: 438 ns/op
+// BenchmarkLogBufferWritePlus: 438 ns/op
 func BenchmarkLogBufferWritePlus(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -73,7 +74,7 @@ func BenchmarkLogBufferWritePlus(b *testing.B) {
 	}
 }
 
-//BenchmarkLogBufferWrite: 406 ns/op
+// BenchmarkLogBufferWrite: 406 ns/op
 func BenchmarkLogBufferWrite(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -134,4 +135,14 @@ func TestAccessLog(t *testing.T) {
 	buffer.WriteString("|")
 	buffer.WriteString(logObject.Exception)
 	assert.Equal(t, buffer.String(), expectString)
+}
+
+func TestChangeLogBufferSize(t *testing.T) {
+	testLogger := newDefaultLog()
+	testLogger.SetAsync(true)
+	assert.Equal(t, cap(testLogger.(*defaultLogger).outputChan), 5000)
+	_ = flag.Set("log_buffer_size", "1")
+	testLogger = newDefaultLog()
+	testLogger.SetAsync(true)
+	assert.Equal(t, cap(testLogger.(*defaultLogger).outputChan), 1)
 }

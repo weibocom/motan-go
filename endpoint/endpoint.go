@@ -10,10 +10,11 @@ import (
 
 // ext name
 const (
-	Grpc   = "grpc"
-	Motan2 = "motan2"
-	Local  = "local"
-	Mock   = "mockEndpoint"
+	Grpc              = "grpc"
+	Motan2            = "motan2"
+	Local             = "local"
+	Mock              = "mockEndpoint"
+	MotanV1Compatible = "motanV1Compatible"
 )
 
 const (
@@ -38,6 +39,10 @@ func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 
 	extFactory.RegistExtEndpoint(Mock, func(url *motan.URL) motan.EndPoint {
 		return &MockEndpoint{URL: url}
+	})
+
+	extFactory.RegistExtEndpoint(MotanV1Compatible, func(url *motan.URL) motan.EndPoint {
+		return &MotanCommonEndpoint{url: url}
 	})
 }
 

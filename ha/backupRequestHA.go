@@ -54,11 +54,7 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	if retries <= 0 {
 		return br.doCall(request, ep)
 	}
-	// TODO: we should use metrics of the cluster, with traffic control the group may changed
-	item := metrics.GetStatItem(metrics.Escape(request.GetAttachment(protocol.MGroup)), metrics.Escape(request.GetAttachment(protocol.MPath)))
-	if item == nil || item.LastSnapshot() == nil {
-		return br.doCall(request, ep)
-	}
+
 	var resp motan.Response
 	backupRequestDelayRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestDelayRatio", defaultBackupRequestDelayRatio)
 	backupRequestMaxRetryRatio := br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestMaxRetryRatio", defaultBackupRequestMaxRetryRatio)
@@ -69,9 +65,21 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 	defer deadline.Stop()
 
 	successCh := make(chan motan.Response, retries+1)
-	if delay <= 0 {
-		// if no delay time configuration, use pXX time as delay time
-		delay = (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
+	if delay <= 0 { //no delay time configuration
+		// TODO: we should use metrics of the cluster, with traffic control the group may changed
+		item := metrics.GetStatItem(request.GetAttachment(protocol.MGroup), "", request.GetAttachment(protocol.MPath))
+		if item == nil || item.LastSnapshot() == nil {
+			initDelay := int(br.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), "backupRequestInitDelayTime", 0))
+			if initDelay == 0 {
+				// request LastSnapshot is nil and no init delay time configuration, we just do common call.
+				return br.doCall(request, ep)
+			}
+			// request LastSnapshot is nil and has init delay time configuration, we use init delay as delay time
+			delay = initDelay
+		} else {
+			// use pXX as delay time
+			delay = (int)(item.LastSnapshot().Percentile(getKey(request), float64(backupRequestDelayRatio)/100.0))
+		}
 		if delay < 10 {
 			delay = 10 // min 10ms
 		}

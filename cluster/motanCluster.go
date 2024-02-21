@@ -11,9 +11,7 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/endpoint"
 	"github.com/weibocom/motan-go/log"
-	"github.com/weibocom/motan-go/protocol"
 )
 
 type MotanCluster struct {
@@ -62,24 +60,19 @@ func (m *MotanCluster) GetURL() *motan.URL {
 func (m *MotanCluster) SetURL(url *motan.URL) {
 	m.url = url
 }
+
 func (m *MotanCluster) Call(request motan.Request) (res motan.Response) {
 	defer motan.HandlePanic(func() {
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("cluster call panic. req:%s", motan.GetReqInfo(request))
 	})
 	if m.available {
-		if m.proxy {
-			// TODO: for case client has no group or protocol convert
-			// we should have the same entry to set all necessary attachments
-			if endpoint.GetRequestGroup(request) == "" {
-				request.SetAttachment(protocol.MGroup, m.url.Group)
-			}
-		}
 		return m.clusterFilter.Filter(m.HaStrategy, m.LoadBalance, request)
 	}
 	vlog.Infoln("cluster:" + m.GetIdentity() + "is not available!")
 	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "cluster not available, maybe caused by degrade", ErrType: motan.ServiceException})
 }
+
 func (m *MotanCluster) initCluster() bool {
 	m.registryRefers = make(map[string][]motan.EndPoint)
 	//ha
@@ -100,21 +93,27 @@ func (m *MotanCluster) initCluster() bool {
 	m.closed = false
 
 	// parse registry and subscribe
-	m.parseRegistry()
-
+	err := m.parseRegistry()
+	if err != nil {
+		vlog.Errorf("init MotanCluster fail. cluster:%s, err:%s", m.GetIdentity(), err.Error())
+		return false
+	}
 	vlog.Infof("init MotanCluster %s", m.GetIdentity())
-
 	return true
 }
+
 func (m *MotanCluster) SetLoadBalance(loadBalance motan.LoadBalance) {
 	m.LoadBalance = loadBalance
 }
+
 func (m *MotanCluster) SetHaStrategy(haStrategy motan.HaStrategy) {
 	m.HaStrategy = haStrategy
 }
+
 func (m *MotanCluster) GetRefers() []motan.EndPoint {
 	return m.Refers
 }
+
 func (m *MotanCluster) refresh() {
 	newRefers := make([]motan.EndPoint, 0, 32)
 	for _, v := range m.registryRefers {
@@ -127,19 +126,22 @@ func (m *MotanCluster) refresh() {
 	m.Refers = newRefers
 	m.LoadBalance.OnRefresh(newRefers)
 }
+
 func (m *MotanCluster) ShuffleEndpoints(endpoints []motan.EndPoint) []motan.EndPoint {
 	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(endpoints), func(i, j int) { endpoints[i], endpoints[j] = endpoints[j], endpoints[i] })
 	return endpoints
 }
+
 func (m *MotanCluster) AddRegistry(registry motan.Registry) {
 	m.Registries = append(m.Registries, registry)
 }
+
 func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 	vlog.Infof("cluster %s receive notify size %d. ", m.GetIdentity(), len(urls))
 	m.notifyLock.Lock()
 	defer m.notifyLock.Unlock()
-	// process weight if has
+	// process weight if any
 	urls = processWeight(m, urls)
 	endpoints := make([]motan.EndPoint, 0, len(urls))
 	endpointMap := make(map[string]motan.EndPoint)
@@ -190,7 +192,7 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 		if len(m.registryRefers) > 1 {
 			delete(m.registryRefers, registryURL.GetIdentity())
 		} else {
-			// notify will ignored if endpoints size is 0 in single regisry mode
+			// ignored if endpoints size is 0 in single registry mode
 			vlog.Infof("cluster %s notify endpoint is 0. notify ignored.", m.GetIdentity())
 			return
 		}
@@ -198,9 +200,13 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 		m.registryRefers[registryURL.GetIdentity()] = endpoints
 	}
 	m.refresh()
-	for _, ep := range endpointMap {
-		ep.Destroy()
-	}
+	go func() {
+		defer motan.HandlePanic(nil)
+		time.Sleep(time.Second * 2)
+		for _, ep := range endpointMap {
+			ep.Destroy()
+		}
+	}()
 }
 
 // remove rule protocol && set weight
@@ -218,14 +224,14 @@ func processWeight(m *MotanCluster, urls []*motan.URL) []*motan.URL {
 func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) motan.EndPoint {
 	fep := &motan.FilterEndPoint{URL: ep.GetURL(), Caller: ep}
 	statusFilters := make([]motan.Status, 0, len(filters))
-	var lastf motan.EndPointFilter
-	lastf = motan.GetLastEndPointFilter()
+	var lf motan.EndPointFilter
+	lf = motan.GetLastEndPointFilter()
 	for _, f := range filters {
 		if filter := f.NewFilter(ep.GetURL()); filter != nil {
 			if ef, ok := filter.(motan.EndPointFilter); ok {
 				motan.CanSetContext(ef, m.Context)
-				ef.SetNext(lastf)
-				lastf = ef
+				ef.SetNext(lf)
+				lf = ef
 				if sf, ok := ef.(motan.Status); ok {
 					statusFilters = append(statusFilters, sf)
 				}
@@ -233,7 +239,8 @@ func (m *MotanCluster) addFilter(ep motan.EndPoint, filters []motan.Filter) mota
 		}
 	}
 	fep.StatusFilters = statusFilters
-	fep.Filter = lastf
+	fep.Filter = lf
+	vlog.Infof("MotanCluster add ep filters. url:%s, filters:%s", ep.GetURL().GetIdentity(), motan.GetEPFilterInfo(fep.Filter))
 	return fep
 }
 
@@ -270,6 +277,10 @@ func (m *MotanCluster) SetExtFactory(factory motan.ExtensionFactory) {
 }
 
 func (m *MotanCluster) parseRegistry() (err error) {
+	envReg := motan.GetDirectEnvRegistry(m.url)
+	if envReg != nil { // If the direct url is specified by the env variable, other registries are ignored
+		return m.parseFromEnvRegistry(envReg)
+	}
 	regs, ok := m.url.Parameters[motan.RegistryKey]
 	if !ok {
 		errInfo := fmt.Sprintf("registry not found! url %+v", m.url)
@@ -304,6 +315,19 @@ func (m *MotanCluster) parseRegistry() (err error) {
 	return err
 }
 
+func (m *MotanCluster) parseFromEnvRegistry(reg *motan.URL) error {
+	vlog.Infof("direct registry is found from env, will replace registry with %+v, cluster:%s", reg, m.url.GetIdentity())
+	registry := m.extFactory.GetRegistry(reg)
+	if registry == nil {
+		return errors.New("env direct registry is nil. reg url: " + reg.GetIdentity())
+	}
+	registries := make([]motan.Registry, 0, 1)
+	m.Registries = append(registries, registry)
+	urls := registry.Discover(m.url)
+	m.Notify(reg, urls)
+	return nil
+}
+
 func (m *MotanCluster) initFilters() {
 	clusterFilter, endpointFilters := motan.GetURLFilters(m.url, m.extFactory)
 	if clusterFilter != nil {
@@ -312,6 +336,7 @@ func (m *MotanCluster) initFilters() {
 	if len(endpointFilters) > 0 {
 		m.Filters = endpointFilters
 	}
+	vlog.Infof("MotanCluster init filter. url:%+v, cluster filter:%#v, ep filter size:%d, ep filters:%#v", m.GetURL(), m.clusterFilter, len(m.Filters), m.Filters)
 }
 
 func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
@@ -445,7 +470,7 @@ func getBestGroup(groupNodes map[string][]*motan.URL) string {
 	var bestGroup string
 	for group, rtt := range groupRtt {
 		if minRtt == 0 || minRtt > rtt {
-			// First rtt group or the rtt is less then former
+			// First rtt group or the rtt is less than former
 			minRtt = rtt
 			bestGroup = group
 		}

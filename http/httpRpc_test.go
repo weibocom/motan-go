@@ -113,6 +113,7 @@ func callTimeOut(address string, port string, path string, group string, timeout
 	clientExt := motan.GetDefaultExtFactory()
 	info := fmt.Sprintf("motan2://%s:%s/%s?serialization=simple&maxRequestTimeout=30000&group=%s", address, port, path, group)
 	u := motancore.FromExtInfo(info)
+	u.PutParam(motancore.AsyncInitConnection, "false")
 	ep = clientExt.GetEndPoint(u)
 	if ep == nil {
 		return nil, fmt.Errorf("get end point error")
@@ -150,6 +151,7 @@ func callTimeOutWithAttachment(address string, port string, path string, group s
 	clientExt := motan.GetDefaultExtFactory()
 	info := fmt.Sprintf("motan2://%s:%s/%s?serialization=simple&maxRequestTimeout=30000&group=%s", address, port, path, group)
 	u := motancore.FromExtInfo(info)
+	u.PutParam(motancore.AsyncInitConnection, "false")
 	ep = clientExt.GetEndPoint(u)
 	if ep == nil {
 		return nil, fmt.Errorf("get end point error")
@@ -190,6 +192,7 @@ func callTimeOutWrongArgumentCount(address string, port string, path string, gro
 	clientExt := motan.GetDefaultExtFactory()
 	info := fmt.Sprintf("motan2://%s:%s/%s?serialization=simple&maxRequestTimeout=30000&group=%s", address, port, path, group)
 	u := motancore.FromExtInfo(info)
+	u.PutParam(motancore.AsyncInitConnection, "false")
 	ep = clientExt.GetEndPoint(u)
 	if ep == nil {
 		return nil, fmt.Errorf("get end point error")

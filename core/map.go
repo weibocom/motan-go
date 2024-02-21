@@ -26,6 +26,14 @@ func (m *StringMap) Store(key, value string) {
 	m.mu.Unlock()
 }
 
+func (m *StringMap) Reset() {
+	m.mu.Lock()
+	for k := range m.innerMap {
+		delete(m.innerMap, k)
+	}
+	m.mu.Unlock()
+}
+
 func (m *StringMap) Delete(key string) {
 	m.mu.Lock()
 	delete(m.innerMap, key)
@@ -45,20 +53,13 @@ func (m *StringMap) LoadOrEmpty(key string) string {
 }
 
 // Range calls f sequentially for each key and value present in the map
-// If f returns false, range stops the iteration
+// If f returns false, range stops the iteration.
+//
+//	Notice: do not delete elements in range function,because of Range loop the inner map directly.
 func (m *StringMap) Range(f func(k, v string) bool) {
 	m.mu.RLock()
-	keys := make([]string, 0, len(m.innerMap))
-	for k := range m.innerMap {
-		keys = append(keys, k)
-	}
-	m.mu.RUnlock()
-
-	for _, k := range keys {
-		v, ok := m.Load(k)
-		if !ok {
-			continue
-		}
+	defer m.mu.RUnlock()
+	for k, v := range m.innerMap {
 		if !f(k, v) {
 			break
 		}
@@ -122,6 +123,10 @@ func (m *CopyOnWriteMap) Range(f func(k, v interface{}) bool) {
 func (m *CopyOnWriteMap) Store(key, value interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.UnsafeStore(key, value)
+}
+
+func (m *CopyOnWriteMap) UnsafeStore(key, value interface{}) {
 	lastMap := m.data()
 	copiedMap := make(map[interface{}]interface{}, len(lastMap)+1)
 	for k, v := range lastMap {
@@ -160,4 +165,10 @@ func (m *CopyOnWriteMap) Swap(newMap map[interface{}]interface{}) map[interface{
 	lastMap := m.data()
 	m.innerMap.Store(newMap)
 	return lastMap
+}
+
+func (m *CopyOnWriteMap) SafeDoFunc(f func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f()
 }

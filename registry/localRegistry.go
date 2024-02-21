@@ -15,6 +15,7 @@ func (d *LocalRegistry) GetURL() *motan.URL {
 func (d *LocalRegistry) SetURL(url *motan.URL) {
 	d.url = url
 }
+
 func (d *LocalRegistry) GetName() string {
 	return "local"
 }
@@ -40,12 +41,15 @@ func (d *LocalRegistry) Register(serverURL *motan.URL) {
 func (d *LocalRegistry) UnRegister(serverURL *motan.URL) {
 
 }
+
 func (d *LocalRegistry) Available(serverURL *motan.URL) {
 
 }
+
 func (d *LocalRegistry) Unavailable(serverURL *motan.URL) {
 
 }
+
 func (d *LocalRegistry) GetRegisteredServices() []*motan.URL {
 	return nil
 }

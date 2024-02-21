@@ -8,16 +8,16 @@ import (
 	"github.com/weibocom/motan-go/endpoint"
 )
 
-func TestWeightedLbWraper(t *testing.T) {
+func TestWeightedLbWrapper(t *testing.T) {
 	url := &motan.URL{Parameters: make(map[string]string)}
 	url.Parameters[motan.Lbkey] = Roundrobin
 	defaultExtFactory := &motan.DefaultExtensionFactory{}
 	defaultExtFactory.Initialize()
 	RegistDefaultLb(defaultExtFactory)
 	lb := defaultExtFactory.GetLB(url)
-	wlbw, ok := lb.(*WeightedLbWraper)
+	wlbw, ok := lb.(*WeightedLbWrapper)
 	if !ok {
-		t.Errorf("lb type not WeightedLbWraper, lb: %v\n", lb)
+		t.Errorf("lb type not WeightedLbWrapper, lb: %v\n", lb)
 	}
 
 	//test weight ratio
@@ -64,7 +64,7 @@ func TestWeightedLbWraper(t *testing.T) {
 
 	request := &motan.MotanRequest{}
 	// test lb
-	for i := 1; i < 21; i++ { // the first index of weightring used for select is 1
+	for i := 1; i < 21; i++ { // the first index of weigh string used for select is 1
 		ep := wlbw.Select(request)
 		rg := refers.weightRing[i%len(refers.weightRing)]
 		if ep.GetURL().Group != rg {
@@ -82,6 +82,25 @@ func TestWeightedLbWraper(t *testing.T) {
 	//repeat
 	wlbw.OnRefresh(endpoints)
 
+	// test mixGroup
+	wlbw.SetWeight("group0,group1,group2")
+	wlbw.OnRefresh(endpoints)
+	if refers, ok := wlbw.refers.(*singleGroupRefers); ok {
+		epSize := len((refers.lb.(*RoundrobinLB)).endpoints)
+		if len(endpoints) != epSize {
+			t.Errorf("endpoint size type not correct. expect size:%d, actual size:%d", len(endpoints), epSize)
+		}
+	} else {
+		t.Errorf("inner refers type not correct. refer:%+v", wlbw.refers)
+	}
+
+	// test weight normalization
+	wlbw.SetWeight("group0:10,group1:0,group2:120")
+	wlbw.OnRefresh(endpoints)
+	refers, ok = wlbw.refers.(*weightedRefers)
+	if refers.groupWeight["group0"] != 10 || refers.groupWeight["group1"] != defaultWeight || refers.groupWeight["group2"] != maxWeight {
+		t.Errorf("weight not correct. %+v\n", refers.groupWeight)
+	}
 }
 
 func TestLBSelect(t *testing.T) {

@@ -1,14 +1,14 @@
 package vlog
 
 import (
-	"bytes"
 	"flag"
+	"github.com/weibocom/motan-go/metrics/sampler"
 	"log"
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -16,18 +16,22 @@ import (
 )
 
 var (
-	loggerInstance Logger
-	once           sync.Once
-	logDir         = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
-	logAsync       = flag.Bool("log_async", true, "If false, write log sync, default is true")
-	logLevel       = flag.String("log_level", "info", "Init log level, default is info.")
-	logStructured  = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
-	rotatePerHour  = flag.Bool("rotate_per_hour", true, "")
+	accessLogEntityPool = sync.Pool{New: func() interface{} {
+		return new(AccessLogEntity)
+	}}
+	loggerInstance     Logger
+	once               sync.Once
+	logDir             = flag.String("log_dir", ".", "If non-empty, write log files in this directory")
+	logAsync           = flag.Bool("log_async", true, "If false, write log sync, default is true")
+	logBufferSize      = flag.Int("log_buffer_size", defaultAsyncLogLen, "If in async logging mode, this variable change the logger's buffer size. default value is 5000")
+	logLevel           = flag.String("log_level", "info", "Init log level, default is info.")
+	logStructured      = flag.Bool("log_structured", false, "If true, write accessLog structured, default is false")
+	rotatePerHour      = flag.Bool("rotate_per_hour", true, "")
+	filterCallerSwitch = flag.Bool("log_filter_caller", false, "If true, set caller for filter item, default is false")
 )
 
 const (
-	defaultAsyncLogLen = 5000
-
+	defaultAsyncLogLen    = 5000
 	defaultLogSuffix      = ".log"
 	defaultAccessLogName  = "access"
 	defaultMetricsLogName = "metrics"
@@ -51,6 +55,7 @@ type AccessLogEntity struct {
 	Success       bool   `json:"success"`
 	ResponseCode  string `json:"responseCode"`
 	Exception     string `json:"exception"`
+	UpstreamCode  string `json:"upstream_code"`
 }
 
 type Logger interface {
@@ -89,6 +94,7 @@ func LogInit(logger Logger) {
 }
 
 func Infoln(args ...interface{}) {
+	doAsyncFilters(InfoLevel, EntrypointInfoln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Infoln(args...)
 	} else {
@@ -97,6 +103,7 @@ func Infoln(args ...interface{}) {
 }
 
 func Infof(format string, args ...interface{}) {
+	doAsyncFilters(InfoLevel, EntrypointInfof, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Infof(format, args...)
 	} else {
@@ -105,6 +112,7 @@ func Infof(format string, args ...interface{}) {
 }
 
 func Warningln(args ...interface{}) {
+	doAsyncFilters(WarnLevel, EntrypointWarningln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningln(args...)
 	} else {
@@ -113,6 +121,7 @@ func Warningln(args ...interface{}) {
 }
 
 func Warningf(format string, args ...interface{}) {
+	doAsyncFilters(WarnLevel, EntrypointWarningf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Warningf(format, args...)
 	} else {
@@ -121,6 +130,7 @@ func Warningf(format string, args ...interface{}) {
 }
 
 func Errorln(args ...interface{}) {
+	doAsyncFilters(ErrorLevel, EntrypointErrorln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorln(args...)
 	} else {
@@ -129,6 +139,7 @@ func Errorln(args ...interface{}) {
 }
 
 func Errorf(format string, args ...interface{}) {
+	doAsyncFilters(ErrorLevel, EntrypointErrorf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Errorf(format, args...)
 	} else {
@@ -137,6 +148,7 @@ func Errorf(format string, args ...interface{}) {
 }
 
 func Fatalln(args ...interface{}) {
+	doAsyncFilters(FatalLevel, EntrypointFatalln, "", args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalln(args...)
 	} else {
@@ -145,6 +157,7 @@ func Fatalln(args ...interface{}) {
 }
 
 func Fatalf(format string, args ...interface{}) {
+	doAsyncFilters(FatalLevel, EntrypointFatalf, format, args...)
 	if loggerInstance != nil {
 		loggerInstance.Fatalf(format, args...)
 	} else {
@@ -153,12 +166,14 @@ func Fatalf(format string, args ...interface{}) {
 }
 
 func AccessLog(logType *AccessLogEntity) {
+	doAsyncFilters(InfoLevel, EntrypointAccessLog, "", logType)
 	if loggerInstance != nil {
 		loggerInstance.AccessLog(logType)
 	}
 }
 
 func MetricsLog(msg string) {
+	doAsyncFilters(InfoLevel, EntrypointMetricsLog, "", msg)
 	if loggerInstance != nil {
 		loggerInstance.MetricsLog(msg)
 	}
@@ -233,6 +248,10 @@ func SetMetricsLogAvailable(status bool) {
 	}
 }
 
+func GetLogDir() string {
+	return *logDir
+}
+
 func newDefaultLog() Logger {
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:      "time",
@@ -296,15 +315,16 @@ func newZapLogger(logName string) (*zap.Logger, zap.AtomicLevel) {
 }
 
 type defaultLogger struct {
-	async            bool
-	accessStructured bool
-	outputChan       chan *AccessLogEntity
-	logger           *zap.SugaredLogger
-	accessLogger     *zap.Logger
-	metricsLogger    *zap.Logger
-	loggerLevel      zap.AtomicLevel
-	accessLevel      zap.AtomicLevel
-	metricsLevel     zap.AtomicLevel
+	async              bool
+	accessStructured   bool
+	accessDiscardCount int64
+	outputChan         chan *AccessLogEntity
+	logger             *zap.SugaredLogger
+	accessLogger       *zap.Logger
+	metricsLogger      *zap.Logger
+	loggerLevel        zap.AtomicLevel
+	accessLevel        zap.AtomicLevel
+	metricsLevel       zap.AtomicLevel
 }
 
 func (d *defaultLogger) Infoln(fields ...interface{}) {
@@ -341,7 +361,12 @@ func (d *defaultLogger) Fatalf(format string, fields ...interface{}) {
 
 func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
 	if d.async {
-		d.outputChan <- logObject
+		select {
+		case d.outputChan <- logObject:
+		default:
+			atomic.AddInt64(&d.accessDiscardCount, 1)
+		}
+
 	} else {
 		d.doAccessLog(logObject)
 	}
@@ -363,14 +388,16 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 			zap.Int64("totalTime", logObject.TotalTime),
 			zap.Bool("success", logObject.Success),
 			zap.String("responseCode", logObject.ResponseCode),
-			zap.String("exception", logObject.Exception))
+			zap.String("exception", logObject.Exception),
+			zap.String("upstreamCode", logObject.UpstreamCode))
 	} else {
-		var buffer bytes.Buffer
+		buffer := acquireBytesBuffer()
+
 		buffer.WriteString(logObject.FilterName)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Role)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatUint(logObject.RequestID, 10))
+		buffer.WriteUint64String(logObject.RequestID)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Service)
 		buffer.WriteString("|")
@@ -380,21 +407,26 @@ func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.RemoteAddress)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.Itoa(logObject.ReqSize))
+		buffer.WriteInt64String(int64(logObject.ReqSize))
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.Itoa(logObject.ResSize))
+		buffer.WriteInt64String(int64(logObject.ResSize))
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatInt(logObject.BizTime, 10))
+		buffer.WriteInt64String(logObject.BizTime)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatInt(logObject.TotalTime, 10))
+		buffer.WriteInt64String(logObject.TotalTime)
 		buffer.WriteString("|")
-		buffer.WriteString(strconv.FormatBool(logObject.Success))
+		buffer.WriteBoolString(logObject.Success)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.ResponseCode)
 		buffer.WriteString("|")
 		buffer.WriteString(logObject.Exception)
+		buffer.WriteString("|")
+		buffer.WriteString(logObject.UpstreamCode)
 		d.accessLogger.Info(buffer.String())
+
+		releaseBytesBuffer(buffer)
 	}
+	ReleaseAccessLogEntity(logObject)
 }
 
 func (d *defaultLogger) MetricsLog(msg string) {
@@ -410,7 +442,7 @@ func (d *defaultLogger) Flush() {
 func (d *defaultLogger) SetAsync(value bool) {
 	d.async = value
 	if value {
-		d.outputChan = make(chan *AccessLogEntity, defaultAsyncLogLen)
+		d.outputChan = make(chan *AccessLogEntity, *logBufferSize)
 		go func() {
 			defer func() {
 				if err := recover(); err != nil {
@@ -419,12 +451,12 @@ func (d *defaultLogger) SetAsync(value bool) {
 				}
 			}()
 			for {
-				select {
-				case l := <-d.outputChan:
-					d.doAccessLog(l)
-				}
+				d.doAccessLog(<-d.outputChan)
 			}
 		}()
+		sampler.RegisterStatusSampleFunc("accesslog_discard_count", func() int64 {
+			return atomic.SwapInt64(&d.accessDiscardCount, 0)
+		})
 	}
 }
 
@@ -461,5 +493,15 @@ func (d *defaultLogger) SetMetricsLogAvailable(status bool) {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel))
 	} else {
 		d.metricsLevel.SetLevel(zapcore.Level(defaultLogLevel + 1))
+	}
+}
+
+func AcquireAccessLogEntity() *AccessLogEntity {
+	return accessLogEntityPool.Get().(*AccessLogEntity)
+}
+
+func ReleaseAccessLogEntity(entity *AccessLogEntity) {
+	if entity != nil {
+		accessLogEntityPool.Put(entity)
 	}
 }

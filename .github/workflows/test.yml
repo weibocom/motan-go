@@ -10,48 +10,58 @@ on:
       - dev
 
 name: build
+
+env:
+  GOPATH: /home/runner/go
+  GO111MODULE: on
+
 jobs:
   testing:
     strategy:
       matrix:
-        go-version: [1.12.x,1.13.x,1.14.x,1.15.x,1.16.x,1.17.x]
+        go-version: [1.12.x,1.13.x,1.14.x,1.15.x,1.16.x,1.17.x,1.18.x,1.19.x,1.20.x,1.21.x]
         platform: [ubuntu-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Install Go
         if: success()
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go-version }}
 
-      - name: Install Go Dependencies
-        run: |
-          go get -d -v -t $(go list ./... | grep -v main)
-
       - name: Run tests
-        run: go test -v -race $(go list ./... | grep -v main)
+        run: |
+          echo "GOPATH >>> $GOPATH"
+          echo "pwd >>> $PWD"
+          mkdir -p $GOPATH/src/github.com/weibocom/
+          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
+          cd $GOPATH/src/github.com/weibocom/motan-go
+          go mod tidy
+          go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
     runs-on: ubuntu-latest
     steps:
       - name: Set up Go 1.15
-        uses: actions/setup-go@v1
+        uses: actions/setup-go@v3
         with:
           go-version: 1.15.x
         id: go
 
       - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Get dependencies
-        run: |
-          go get -d -v -t $(go list ./... | grep -v main)
+        uses: actions/checkout@v3
 
       - name: Generate coverage report
         run: |
+          echo "GOPATH >>> $GOPATH"
+          echo "pwd >>> $PWD"
+          mkdir -p $GOPATH/src/github.com/weibocom/
+          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
+          cd $GOPATH/src/github.com/weibocom/motan-go
+          go mod tidy
           go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
 
       - name: Upload coverage report

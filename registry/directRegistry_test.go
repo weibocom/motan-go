@@ -46,7 +46,7 @@ func TestDirectDiscover(t *testing.T) {
 
 func TestMultiAddress(t *testing.T) {
 	params := make(map[string]string)
-	params["address"] = "127.0.0.1:8002;10.210.235.1:8003;127.0.0.1:8005"
+	params["address"] = "127.0.0.1:8002,10.210.235.1:8003,127.0.0.1:8005"
 	regURL := &motan.URL{Parameters: params}
 	registry := &DirectRegistry{url: regURL}
 	urlParams := make(map[string]string)
@@ -54,8 +54,10 @@ func TestMultiAddress(t *testing.T) {
 	urlParams["group"] = "test"
 	u1 := &motan.URL{Protocol: "motan", Host: "10.210.230.10", Port: 8999, Parameters: urlParams}
 	urls := registry.Discover(u1)
+	if len(urls) != 3 {
+		t.Fatalf("discover multi address size not correct. size:%d", len(urls))
+	}
 	for i, u := range urls {
-		fmt.Printf("u: %v \n", u)
 		if u.Host != registry.urls[i].Host || u.Port != registry.urls[i].Port {
 			t.Fatalf("discover not correct. url: %+v", u)
 		}
@@ -63,6 +65,24 @@ func TestMultiAddress(t *testing.T) {
 			if v != u1.Parameters[k] {
 				t.Fatalf("discover not correct. parameters not same . k: %s, v: %s, realv: %s", k, u1.Parameters[k], v)
 			}
+		}
+	}
+}
+
+func TestSpecifyGroup(t *testing.T) {
+	params := make(map[string]string)
+	params["address"] = "127.0.0.1:8002,127.0.0.1:8003"
+	gName := "test-group"
+	registry := &DirectRegistry{}
+	registry.SetURL(&motan.URL{Group: gName, Parameters: params})
+	su := &motan.URL{Protocol: "motan", Group: "another-group", Host: "10.210.230.10", Port: 8999}
+	urls := registry.Discover(su)
+	if len(urls) != 2 {
+		t.Fatalf("SpecifyGroup discover size not correct. size:%d", len(urls))
+	}
+	for _, u := range urls {
+		if u.Group != gName {
+			t.Fatalf("SpecifyGroup check group fail. url:%+v", u)
 		}
 	}
 }

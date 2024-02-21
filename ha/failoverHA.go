@@ -18,15 +18,19 @@ type FailOverHA struct {
 func (f *FailOverHA) GetName() string {
 	return FailOver
 }
+
 func (f *FailOverHA) GetURL() *motan.URL {
 	return f.url
 }
+
 func (f *FailOverHA) SetURL(url *motan.URL) {
 	f.url = url
 }
+
 func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
 	retries := f.url.GetMethodPositiveIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, defaultRetries)
 	var lastErr *motan.Exception
+	var response motan.Response
 	for i := 0; i <= int(retries); i++ {
 		ep := loadBalance.Select(request)
 		if ep == nil {
@@ -34,15 +38,23 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 				fmt.Sprintf("No refers for request, RequestID: %d, Request info: %+v",
 					request.GetRequestID(), request.GetAttachments().RawMap()))
 		}
-		response := ep.Call(request)
-		if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
-			return response
+		response = ep.Call(request)
+		if response != nil {
+			if response.GetException() == nil || response.GetException().ErrType == motan.BizException {
+				return response
+			}
+			lastErr = response.GetException()
 		}
-		lastErr = response.GetException()
 		vlog.Warningf("FailOverHA call fail! url:%s, err:%+v", ep.GetURL().GetIdentity(), lastErr)
 	}
-	errorResponse := getErrorResponse(request.GetRequestID(), fmt.Sprintf("FailOverHA call fail %d times. Exception: %s", retries+1, lastErr.ErrMsg))
-	errorResponse.Exception.ErrCode = lastErr.ErrCode
+	if response != nil { // last response
+		return response
+	}
+	var errMsg string
+	if lastErr != nil {
+		errMsg = lastErr.ErrMsg
+	}
+	errorResponse := getErrorResponseWithCode(request.GetRequestID(), 500, fmt.Sprintf("FailOverHA call fail %d times. Exception: %s", retries+1, errMsg))
 	return errorResponse
 }
 

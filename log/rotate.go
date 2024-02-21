@@ -1,10 +1,10 @@
-//********** this file is modified based on "gopkg.in/natefinch/lumberjack.v2" **********
+// Package vlog ********** this file is modified based on "gopkg.in/natefinch/lumberjack.v2" **********
 // Package lumberjack provides a rolling logger.
 //
 // Note that this is v2.0 of lumberjack, and should be imported using gopkg.in
 // thusly:
 //
-//   import "gopkg.in/natefinch/lumberjack.v2"
+//	import "gopkg.in/natefinch/lumberjack.v2"
 //
 // The package name remains simply lumberjack, and the code resides at
 // https://github.com/natefinch/lumberjack under the v2.0 branch.
@@ -34,7 +34,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -70,7 +69,7 @@ var _ io.WriteCloser = (*RotateWriter)(nil)
 // `/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would
 // use the filename `/var/log/foo/server-2016-11-04T18-30-00.000.log`
 //
-// Cleaning Up Old Log Files
+// # Cleaning Up Old Log Files
 //
 // Whenever a new logfile gets created, old log files may be deleted.  The most
 // recent files according to the encoded timestamp will be retained, up to a
@@ -214,7 +213,7 @@ func (l *RotateWriter) rotate() error {
 // openNew opens a new log file for writing, moving any old log file out of the
 // way.  This methods assumes the file has already been closed.
 func (l *RotateWriter) openNew() error {
-	err := os.MkdirAll(l.dir(), 0744)
+	err := os.MkdirAll(l.dir(), 0755)
 	if err != nil {
 		return fmt.Errorf("can't make directories for new logfile: %s", err)
 	}
@@ -588,13 +587,3 @@ func (b byFormatTime) Len() int {
 
 // osChown is a var so we can mock it out during tests.
 var osChown = os.Chown
-
-func chown(name string, info os.FileInfo) error {
-	f, err := os.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
-	if err != nil {
-		return err
-	}
-	_ = f.Close()
-	stat := info.Sys().(*syscall.Stat_t)
-	return osChown(name, int(stat.Uid), int(stat.Gid))
-}

@@ -65,48 +65,48 @@ func tracingFunc() func(span ot.Span, data *CallData) {
 // As described by OpenTracing, for a single call from client to server, both sides will start a span,
 // with the server side span to be child of the client side. Described as following
 //
-//                       call
-//          caller ---------------> callee
-//              [span1]      [span2]
+//	             call
+//	caller ---------------> callee
+//	    [span1]      [span2]
 //
 // here [span1] is parent of [span2].
 //
 // When this filter is applied, it will filter both the incoming and
 // outgoing requests to record trace information. The following diagram is a demonstration.
 //
-//                            filter
-//                         +---------+
-//                         |         |              [span1]
-//          [span2]  *-----+-- in <--+--------------------- | user |
-//                   |     |         |
-//                   V     |         |
-//             | -------   |         |
-//   pass-thru | service   |         |
-//    [span2]  V -------   |         |
-//                   |     |         |
-//                   |     |         |  [span3]
-//          [span2]  *-----+-> out --+--------------------> | dep  |
-//                         |         |
-//                         +---------+
+//	                         filter
+//	                      +---------+
+//	                      |         |              [span1]
+//	       [span2]  *-----+-- in <--+--------------------- | user |
+//	                |     |         |
+//	                V     |         |
+//	          | -------   |         |
+//	pass-thru | service   |         |
+//	 [span2]  V -------   |         |
+//	                |     |         |
+//	                |     |         |  [span3]
+//	       [span2]  *-----+-> out --+--------------------> | dep  |
+//	                      |         |
+//	                      +---------+
 //
 // When the filter receives an incoming request, it will:
 //
-//     1. extract span context from request (will get [span1])
-//     2. start a child span of the extracted span ([span2], child of [span1])
-//     3. forward the request with [span2] to the service
+//  1. extract span context from request (will get [span1])
+//  2. start a child span of the extracted span ([span2], child of [span1])
+//  3. forward the request with [span2] to the service
 //
 // Then the service may make an outgoing request to some dependent services,
 // it should pass-through the span information ([span2]).
 // The filter will receive the outgoing request with [span2], then it will.
 //
-//     1. extract span context from the outgoing request (it should the [span2])
-//     2. start a child span of the extracted span ([span3], child of [span2])
-//     3. forward the request with [span3] to the dependent service
+//  1. extract span context from the outgoing request (it should the [span2])
+//  2. start a child span of the extracted span ([span3], child of [span2])
+//  3. forward the request with [span3] to the dependent service
 //
 // So here
 //
-//              (parent)        (parent)
-//      [span1] <------ [span2] <------ [span3]
+//	        (parent)        (parent)
+//	[span1] <------ [span2] <------ [span3]
 //
 // NOTE:
 //

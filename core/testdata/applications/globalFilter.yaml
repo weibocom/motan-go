@@ -1,0 +1,56 @@
+motan-agent:
+  port: 9981
+  mport: 8002
+  log_dir: logs
+  registry: consul
+  application: testGlobal
+  globalFilter: "testGlobalFilter1,testGlobalFilter2,testGlobalFilter3"
+
+motan-basicService:
+  test-basic-service:
+    group: motan-demo-rpc
+    protocol: motan2
+    registry: consul
+
+motan-service:
+  test-global-filter-0-service:
+    path: motan.GlobalFilter1.TestService
+    proxy: "motan2:8100"
+    export: "motan2:9982"
+    provider: motan2
+    requestTimeout: 2000
+    filter: "accessLog,metrics"
+    basicService: test-basic-service
+  test-global-filter-1-service:
+    path: motan.GlobalFilter1.TestService
+    proxy: "motan2:8100"
+    export: "motan2:9982"
+    provider: motan2
+    requestTimeout: 2000
+    filter: "accessLog,metrics,testGlobalFilter3"
+    basicService: test-basic-service
+  test-global-filter-2-service:
+    path: motan.GlobalFilter1.TestService
+    proxy: "motan2:8100"
+    export: "motan2:9982"
+    provider: motan2
+    requestTimeout: 2000
+    filter: "accessLog,metrics,testGlobalFilter3"
+    disableGlobalFilter: "testGlobalFilter3"
+    basicService: test-basic-service
+  test-global-filter-3-service:
+    path: motan.GlobalFilter1.TestService
+    proxy: "motan2:8100"
+    export: "motan2:9982"
+    provider: motan2
+    requestTimeout: 2000
+    filter: "accessLog,metrics"
+    disableGlobalFilter: "testGlobalFilter2,testGlobalFilter3"
+    basicService: test-basic-service
+
+import-refer:
+  - motan.TestService
+  - motan.TestGlobalFilterService1
+  - motan.TestGlobalFilterService2
+  - motan.TestGlobalFilterService3
+

@@ -4,6 +4,16 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"sync"
+)
+
+var (
+	bytesBufferPool = sync.Pool{New: func() interface{} {
+		return &BytesBuffer{
+			temp:  make([]byte, 8),
+			order: binary.BigEndian,
+		}
+	}}
 )
 
 // BytesBuffer is a variable-sized buffer of bytes with Read and Write methods.
@@ -19,14 +29,15 @@ type BytesBuffer struct {
 var ErrNotEnough = errors.New("BytesBuffer: not enough bytes")
 var ErrOverflow = errors.New("BytesBuffer: integer overflow")
 
-// NewBytesBuffer create a empty BytesBuffer with initial size
+// NewBytesBuffer create an empty BytesBuffer with initial size
 func NewBytesBuffer(initsize int) *BytesBuffer {
 	return NewBytesBufferWithOrder(initsize, binary.BigEndian)
 }
 
-// NewBytesBufferWithOrder create a empty BytesBuffer with initial size and byte order
+// NewBytesBufferWithOrder create an empty BytesBuffer with initial size and byte order
 func NewBytesBufferWithOrder(initsize int, order binary.ByteOrder) *BytesBuffer {
-	return &BytesBuffer{buf: make([]byte, initsize),
+	return &BytesBuffer{
+		buf:   make([]byte, initsize),
 		order: order,
 		temp:  make([]byte, 8),
 	}
@@ -78,6 +89,16 @@ func (b *BytesBuffer) WriteByte(c byte) {
 	b.wpos++
 }
 
+// WriteString write a str string append the BytesBuffer, and the wpos will increase len(str)
+func (b *BytesBuffer) WriteString(str string) {
+	l := len(str)
+	if len(b.buf) < b.wpos+l {
+		b.grow(l)
+	}
+	copy(b.buf[b.wpos:], str)
+	b.wpos += l
+}
+
 // Write write a byte array append the BytesBuffer, and the wpos will increase len(bytes)
 func (b *BytesBuffer) Write(bytes []byte) {
 	l := len(bytes)
@@ -117,11 +138,11 @@ func (b *BytesBuffer) WriteUint64(u uint64) {
 }
 
 func (b *BytesBuffer) WriteZigzag32(u uint32) int {
-	return b.WriteVarint(uint64((u << 1) ^ uint32((int32(u) >> 31))))
+	return b.WriteVarint(uint64((u << 1) ^ uint32(int32(u)>>31)))
 }
 
 func (b *BytesBuffer) WriteZigzag64(u uint64) int {
-	return b.WriteVarint(uint64((u << 1) ^ uint64((int64(u) >> 63))))
+	return b.WriteVarint((u << 1) ^ uint64(int64(u)>>63))
 }
 
 func (b *BytesBuffer) WriteVarint(u uint64) int {
@@ -225,10 +246,10 @@ func (b *BytesBuffer) ReadVarint() (x uint64, err error) {
 			return 0, err
 		}
 		if (temp & 0x80) != 0x80 {
-			x |= (uint64(temp) << offset)
+			x |= uint64(temp) << offset
 			return x, nil
 		}
-		x |= (uint64(temp&0x7f) << offset)
+		x |= uint64(temp&0x7f) << offset
 	}
 	return 0, ErrOverflow
 }
@@ -262,3 +283,20 @@ func (b *BytesBuffer) Remain() int { return b.wpos - b.rpos }
 func (b *BytesBuffer) Len() int { return b.wpos - 0 }
 
 func (b *BytesBuffer) Cap() int { return cap(b.buf) }
+
+// AcquireBytesBuffer create an empty BytesBuffer with initial size and byte order from bytesBufferPool
+func AcquireBytesBuffer(initSize int) *BytesBuffer {
+	bb := bytesBufferPool.Get().(*BytesBuffer)
+	if bb.buf == nil {
+		bb.buf = make([]byte, initSize)
+	}
+	return bb
+}
+
+// ReleaseBytesBuffer put the BytesBuffer to bytesBufferPool
+func ReleaseBytesBuffer(b *BytesBuffer) {
+	if b != nil {
+		b.Reset()
+		bytesBufferPool.Put(b)
+	}
+}

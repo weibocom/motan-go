@@ -57,8 +57,73 @@ metrics:
 	}
 }
 
+func TestBackupRequestHA_Call2(t *testing.T) {
+	params := make(map[string]string)
+	params[motan.RetriesKey] = "1"
+	params["backupRequestInitDelayTime"] = "1"
+	url := &motan.URL{Protocol: "motan2", Path: TestService, Parameters: params}
+	ha := &BackupRequestHA{url: url}
+	ha.Initialize()
+	haName := ha.GetName()
+	if haName != BackupRequest {
+		t.Error("Test Case failed.")
+	}
+	request := &motan.MotanRequest{ServiceName: TestService, Method: TestMethod}
+	request.SetAttachment(protocol.MGroup, TestGroup)
+	request.SetAttachment(protocol.MPath, TestService)
+	nlb := &lb.RoundrobinLB{}
+
+	ctx := &motan.Context{}
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(``)))
+	ctx.Config = config
+	//init histogram
+	nlb.OnRefresh([]motan.EndPoint{getEP(1)})
+	res := ha.Call(request, nlb)
+	time.Sleep(10*time.Millisecond + 1*time.Second)
+	ep1 := getEP(1) // third round
+	testEndpoints := []motan.EndPoint{ep1}
+	nlb.OnRefresh(testEndpoints)
+	res = ha.Call(request, nlb)
+	if res.GetProcessTime() != 1 {
+		t.Errorf("backupRequest call fail. res:%+v", res)
+	}
+}
+func TestBackupRequestHA_Call3(t *testing.T) {
+	params := make(map[string]string)
+	params[motan.RetriesKey] = "1"
+	//params["backupRequestInitDelayTime"] = "1"
+	url := &motan.URL{Protocol: "motan2", Path: TestService, Parameters: params}
+	ha := &BackupRequestHA{url: url}
+	ha.Initialize()
+	haName := ha.GetName()
+	if haName != BackupRequest {
+		t.Error("Test Case failed.")
+	}
+	request := &motan.MotanRequest{ServiceName: TestService, Method: TestMethod}
+	request.SetAttachment(protocol.MGroup, TestGroup)
+	request.SetAttachment(protocol.MPath, TestService)
+	nlb := &lb.RoundrobinLB{}
+
+	ctx := &motan.Context{}
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(``)))
+	ctx.Config = config
+	//init histogram
+	nlb.OnRefresh([]motan.EndPoint{getEP(1)})
+	res := ha.Call(request, nlb)
+	time.Sleep(10*time.Millisecond + 1*time.Second)
+	ep1 := getEP(1) // third round
+	testEndpoints := []motan.EndPoint{ep1}
+	nlb.OnRefresh(testEndpoints)
+	res = ha.Call(request, nlb)
+	if res.GetProcessTime() != 1 {
+		t.Errorf("backupRequest call fail. res:%+v", res)
+	}
+}
+
 func getEP(processTime int64) motan.EndPoint {
-	fep := &motan.FilterEndPoint{Caller: &motan.TestEndPoint{ProcessTime: processTime}}
+	caller := &motan.TestEndPoint{ProcessTime: processTime}
+	motan.Initialize(caller)
+	fep := &motan.FilterEndPoint{Caller: caller}
 	mf := &filter.MetricsFilter{}
 	mf.SetContext(&motan.Context{Config: config.NewConfig()})
 	mf.SetNext(motan.GetLastEndPointFilter())

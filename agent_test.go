@@ -2,8 +2,21 @@ package motan
 
 import (
 	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	_ "fmt"
+	"github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/endpoint"
+	vlog "github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/registry"
+	"github.com/weibocom/motan-go/serialize"
+	"github.com/weibocom/motan-go/server"
+	_ "github.com/weibocom/motan-go/server"
+	_ "golang.org/x/net/context"
 	"io/ioutil"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,13 +36,125 @@ import (
 
 const (
 	goNum      = 5
-	requestNum = 10000
+	requestNum = 100
 )
 
 var proxyClient *http.Client
 var meshClient *MeshClient
 var agent *Agent
 
+var (
+	testRegistryFailSwitcher int64 = 0
+)
+
+func Test_unixClientCall1(t *testing.T) {
+	t.Parallel()
+	startServer(t, "helloService", 22991)
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	ext := GetDefaultExtFactory()
+	os.Remove("agent.sock")
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 12500
+  port: 13821
+  eport: 13281
+  htport: 24282
+  unixSock: agent.sock
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+  processPoolSize: 100
+
+motan-registry:
+  direct:
+    protocol: direct
+    address: 127.0.0.1:22991
+
+motan-refer:
+    recom-engine-refer:
+      group: hello
+      path: helloService
+      protocol: motan2
+      registry: direct
+      asyncInitConnection: false
+      serialization: breeze`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("unix://./agent.sock")
+	c1.Initialize()
+	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
+	resp := c1.BaseCall(req, nil)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
+	assert.Equal(t, 100, server.GetProcessPoolSize())
+}
+func Test_unixClientCall2(t *testing.T) {
+	t.Parallel()
+	startServer(t, "helloService", 22992)
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	ext := GetDefaultExtFactory()
+	os.Remove("agent2.sock")
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 12501
+  port: 12921
+  mport: 12903
+  eport: 12981
+  htport: 23982
+  unixSock: ./agent2.sock
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+    address: 127.0.0.1:22992
+
+motan-refer:
+    test-refer:
+      group: hello
+      path: helloService
+      protocol: motanV1Compatible
+      registry: direct
+      serialization: breeze
+      asyncInitConnection: false
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+
+	ext1 := GetDefaultExtFactory()
+	cfg, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-client:
+  log_dir: stdout
+  application: client-test
+motan-registry:
+  local:
+    protocol: direct
+    address: unix://./agent2.sock
+motan-refer:
+  test-refer:
+    registry: local
+    serialization: breeze
+    protocol: motanV1Compatible
+    group: hello
+    path: helloService
+    requestTimeout: 3000
+    asyncInitConnection: false
+`)))
+	mccontext := NewClientContextFromConfig(cfg)
+	mccontext.Start(ext1)
+	mclient := mccontext.GetClient("test-refer")
+	var reply string
+	err := mclient.Call("Hello", []interface{}{"jack"}, &reply)
+	assert.Nil(t, err)
+	assert.Equal(t, "Hello jack from motan server", reply)
+}
 func TestMain(m *testing.M) {
 	core.RegistLocalProvider("LocalTestService", &LocalTestServiceProvider{})
 	cfgFile := filepath.Join("testdata", "agent.yaml")
@@ -64,6 +190,88 @@ func TestMain(m *testing.M) {
 		break
 	}
 	os.Exit(m.Run())
+}
+
+func Test_initParam(t *testing.T) {
+	assert := assert.New(t)
+	conf, err := config.NewConfigFromFile(filepath.Join("testdata", "agent.yaml"))
+	assert.Nil(err)
+	a := NewAgent(nil)
+	a.Context = &core.Context{Config: conf}
+	logFilterCallerFalseConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_filter_caller: false
+`)))
+	conf.Merge(logFilterCallerFalseConfig)
+	section, err := conf.GetSection("motan-agent")
+	assert.Nil(err)
+	assert.Equal(false, section["log_filter_caller"].(bool))
+	a.initParam()
+
+	logFilterCallerTrueConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_filter_caller: true
+`)))
+	assert.Nil(err)
+	conf.Merge(logFilterCallerTrueConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	assert.Equal(true, section["log_filter_caller"].(bool))
+	a.initParam()
+
+	logDirConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  log_dir: "./test/abcd"
+`)))
+	assert.Nil(err)
+	conf.Merge(logDirConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	a.initParam()
+	assert.Equal(a.logdir, "./test/abcd")
+	os.Args = append(os.Args, "-log_dir", "./test/cdef")
+	_ = flag.Set("log_dir", "./test/cdef")
+	a.initParam()
+	assert.Equal(a.logdir, "./test/cdef")
+	// test export log dir
+	assert.Equal(vlog.GetLogDir(), "./test/cdef")
+
+	mportConfig, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfig)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	a.initParam()
+	assert.Equal(a.mport, 8003)
+
+	mportConfigENV, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfigENV)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	err = os.Setenv("mport", "8006")
+	a.initParam()
+	assert.Equal(a.mport, 8006)
+
+	mportConfigENVParam, err := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 8003
+`)))
+	assert.Nil(err)
+	conf.Merge(mportConfigENVParam)
+	section, err = conf.GetSection("motan-agent")
+	assert.Nil(err)
+	//err = os.Setenv("mport", "8006")
+	//_ = flag.Set("mport", "8007")
+	//a.initParam()
+	//assert.Equal(a.mport, 8007)
+	os.Unsetenv("mport")
 }
 
 func TestHTTPProxyBodySize(t *testing.T) {
@@ -162,6 +370,7 @@ func TestAgent_InitCall(t *testing.T) {
 	agent.agentURL = &core.URL{Parameters: make(map[string]string)}
 	urlTest := &core.URL{Parameters: make(map[string]string)}
 	urlTest.Group = "test1"
+	urlTest.Parameters[core.AsyncInitConnection] = "false"
 	agent.initCluster(urlTest)
 	agentHandler := &agentMessageHandler{agent: agent}
 
@@ -181,7 +390,7 @@ func TestAgent_InitCall(t *testing.T) {
 	}
 
 	//test init cluster with one path and one groups in clusterMap
-	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "0.1", "", ""))
+	temp := agent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
 	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
 
 	//test agentHandler call with group
@@ -207,15 +416,18 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
+		// only input service，and there is only one cluster，findCluster would return successfully
 		{"test0", "", "", "", "No refers for request"},
-		{"test-1", "111", "222", "333", "cluster not found. cluster:test-1"},
-		{"test3", "", "", "", "empty group is not supported"},
+		{"test0", "g0", "", "", "No refers for request"},
+		{"test0", "g0", "http", "", "No refers for request"},
+		{"test0", "g0", "", "1.3", "No refers for request"},
+		{"test-1", "111", "222", "333", "cluster not found"},
 		{"test", "g2", "", "", "No refers for request"},
-		{"test", "g1", "", "", "empty protocol is not supported"},
 		{"test", "g1", "motan2", "", "No refers for request"},
-		{"test", "g1", "motan", "", "empty version is not supported"},
 		{"test", "g1", "http", "1.3", "No refers for request"},
-		{"test", "g1", "http", "1.2", "less condition to select cluster"},
+		{"test", "b", "c", "d", "no cluster matches the request"},
+		// one service matches multiple clusters, without passing group
+		{"test", "", "c", "d", "multiple clusters are matched with service"},
 	} {
 		request.ServiceName = v.service
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -254,9 +466,17 @@ func TestAgent_InitCall(t *testing.T) {
 		"test4-1": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test4", Group: "g2", Protocol: ""},
 		"test5":   {Parameters: map[string]string{core.VersionKey: "1.0"}, Path: "test5", Group: "g1", Protocol: "motan"},
 	}
+	dynamicURLs := map[string]*core.URL{
+		"test6": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test6", Group: "g1", Protocol: ""},
+	}
+	agent.serviceMap.Store("test6", []serviceMapItem{
+		{url: dynamicURLs["test6"], cluster: nil},
+	})
+	agent.configurer = NewDynamicConfigurer(agent)
+	agent.configurer.subscribeNodes = dynamicURLs
 	ctx.RefersURLs = reloadUrls
 	agent.reloadClusters(ctx)
-	assert.Equal(t, agent.serviceMap.Len(), 2, "hot-load serviceMap except length error")
+	assert.Equal(t, agent.serviceMap.Len(), 3, "hot-load serviceMap except length error")
 
 	for _, v := range []struct {
 		service  string
@@ -265,10 +485,9 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		{"test3", "111", "222", "333", "cluster not found. cluster:test3"},
-		{"test4", "", "", "", "empty group is not supported"},
+		{"test3", "111", "222", "333", "cluster not found. service: test3"},
 		{"test5", "", "", "", "No refers for request"},
-		{"helloService2", "", "", "", "cluster not found. cluster:helloService2"},
+		{"helloService2", "", "", "", "cluster not found. service: helloService2"},
 	} {
 		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -277,6 +496,36 @@ func TestAgent_InitCall(t *testing.T) {
 		ret = agentHandler.Call(request)
 		assert.True(t, strings.Contains(ret.GetException().ErrMsg, v.except))
 	}
+}
+
+func TestNotFoundProvider(t *testing.T) {
+	notFoundService := "notFoundService"
+	request := meshClient.BuildRequest(notFoundService, "test", []interface{}{})
+	epUrl := &core.URL{
+		Protocol: "motanV1Compatible",
+		Host:     "127.0.0.1",
+		Port:     9982,
+		Path:     "notFoundService",
+		Group:    "test",
+		Parameters: map[string]string{
+			core.TimeOutKey:              "3000",
+			core.ApplicationKey:          "testep",
+			core.ConnectRetryIntervalKey: "5000",
+			core.ErrorCountThresholdKey:  "0",
+			core.AsyncInitConnection:     "false",
+		},
+	}
+	ext := GetDefaultExtFactory()
+	ep := ext.GetEndPoint(epUrl)
+	assert.NotNil(t, ep)
+	ep.SetSerialization(ext.GetSerialization(serialize.Simple, serialize.SimpleNumber))
+	core.Initialize(ep)
+	ep.SetProxy(true)
+	resp := ep.Call(request)
+	assert.NotNil(t, resp.GetException())
+	assert.Contains(t, "not found provider for test_notFoundService", resp.GetException().ErrMsg)
+	assert.Equal(t, int64(1), atomic.LoadInt64(&notFoundProviderCount))
+	ep.Destroy()
 }
 
 func newRequest(serviceName string, method string, argments ...interface{}) *core.MotanRequest {
@@ -334,4 +583,392 @@ func (l *LocalTestServiceProvider) Destroy() {
 
 func (l *LocalTestServiceProvider) GetPath() string {
 	return l.url.Path
+}
+
+func Test_unixHTTPClientCall(t *testing.T) {
+	t.Parallel()
+	go func() {
+		http.HandleFunc("/unixclient", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("okay"))
+		})
+		os.Remove("http2.sock")
+		addr, _ := net.ResolveUnixAddr("unix", "http2.sock")
+		l, err := net.ListenUnix("unix", addr)
+		if err != nil {
+			panic(err)
+		}
+		err = http.Serve(l, nil)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	// start unix server mesh
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  port: 12822
+  mport: 12504
+  eport: 23282
+  htport: 23283
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: http
+      proxyAddress: unix://./http2.sock
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      enableRewrite: false
+      export: motan2:23282
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("127.0.0.1:23282")
+	c1.Initialize()
+	var reply []byte
+	req := c1.BuildRequestWithGroup("helloService", "/unixclient", []interface{}{}, "hello")
+	req.SetAttachment("http_Host", "test.com")
+	resp := c1.BaseCall(req, &reply)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "okay", string(reply))
+}
+func Test_unixRPCClientCall(t *testing.T) {
+	t.Parallel()
+	os.Remove("server.sock")
+	startServer(t, "helloService", 0, "server.sock")
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	// start unix server mesh
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  port: 12821
+  mport: 12503
+  eport: 12281
+  htport: 23282
+  log_dir: "stdout"
+  snapshot_dir: "./snapshot"
+  application: "testing"
+  motanEpAsyncInit: false
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: motan2
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      proxy.host: unix://./server.sock
+      export: motan2:12281
+`)))
+	agent := NewAgent(ext)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 3)
+	c1 := NewMeshClient()
+	c1.SetAddress("127.0.0.1:12281")
+	c1.Initialize()
+	var reply []byte
+	req := c1.BuildRequestWithGroup("helloService", "Hello", []interface{}{"jack"}, "hello")
+	resp := c1.BaseCall(req, &reply)
+	assert.Nil(t, resp.GetException())
+	assert.Equal(t, "Hello jack from motan server", string(reply))
+}
+
+func Test_changeDefaultMotanEpAsyncInit(t *testing.T) {
+	template := `
+motan-agent:
+  port: 12821
+  mport: 12503
+  eport: 12281
+  htport: 23282
+  log_dir: "stdout"
+  motanEpAsyncInit: %s
+  snapshot_dir: "./snapshot"
+  application: "testing"
+
+motan-registry:
+  direct:
+    protocol: direct
+
+motan-service:
+    test01:
+      protocol: motan2
+      provider: motan2
+      group: hello
+      path: helloService
+      registry: direct
+      serialization: simple
+      proxy.host: unix://./server.sock
+      export: motan2:12281
+`
+	ext := GetDefaultExtFactory()
+	config1, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "false"))))
+	a := NewAgent(ext)
+	a.Context = &core.Context{Config: config1}
+	a.Context.Initialize()
+	a.initParam()
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), false)
+
+	config2, _ := config.NewConfigFromReader(bytes.NewReader([]byte(fmt.Sprintf(template, "true"))))
+	a = NewAgent(ext)
+	a.Context = &core.Context{Config: config2}
+	a.Context.Initialize()
+	a.initParam()
+	assert.Equal(t, endpoint.GetDefaultMotanEPAsynInit(), true)
+}
+
+func Test_agentRegistryFailback(t *testing.T) {
+	template := `
+motan-agent:
+  port: 12829
+  mport: 12604
+  eport: 12282
+  hport: 23283
+
+motan-registry:
+  direct:
+    protocol: direct
+  test:
+    protocol: test-registry
+
+motan-service:
+  test01:
+    protocol: motan2
+    provider: motan2
+    group: hello
+    path: helloService
+    registry: test
+    serialization: simple
+    export: motan2:12282
+    check: true
+`
+	extFactory := GetDefaultExtFactory()
+	extFactory.RegistExtRegistry("test-registry", func(url *core.URL) core.Registry {
+		return &testRegistry{url: url}
+	})
+	config1, err := config.NewConfigFromReader(bytes.NewReader([]byte(template)))
+	assert.Nil(t, err)
+	agent := NewAgent(extFactory)
+	go agent.StartMotanAgentFromConfig(config1)
+	time.Sleep(time.Second * 10)
+
+	setRegistryFailSwitcher(true)
+	m := agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.NotRegister)
+		}
+	}
+	agentStatus := getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.NotRegister)
+	agent.SetAllServicesAvailable()
+	m = agent.GetRegistryStatus()
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterFailed)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.RegisterSuccess)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.RegisterSuccess)
+	setRegistryFailSwitcher(true)
+	agent.SetAllServicesUnavailable()
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterFailed)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterFailed)
+	setRegistryFailSwitcher(false)
+	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	m = agent.GetRegistryStatus()
+	assert.Equal(t, len(m), 1)
+	for _, mm := range m[0] {
+		if mm.Service.Path == "helloService" {
+			assert.Equal(t, mm.Status, core.UnregisterSuccess)
+		}
+	}
+	agentStatus = getCurAgentStatus(12604)
+	assert.Equal(t, agentStatus, core.UnregisterSuccess)
+}
+
+type testRegistry struct {
+	url                 *core.URL
+	namingServiceStatus *core.CopyOnWriteMap
+	registeredServices  map[string]*core.URL
+}
+
+func (t *testRegistry) Initialize() {
+	t.registeredServices = make(map[string]*core.URL)
+	t.namingServiceStatus = core.NewCopyOnWriteMap()
+}
+
+func (t *testRegistry) GetName() string {
+	return "test-registry"
+}
+
+func (t *testRegistry) GetURL() *core.URL {
+	return t.url
+}
+
+func (t *testRegistry) SetURL(url *core.URL) {
+	t.url = url
+}
+
+func (t *testRegistry) Subscribe(url *core.URL, listener core.NotifyListener) {
+}
+
+func (t *testRegistry) Unsubscribe(url *core.URL, listener core.NotifyListener) {
+}
+
+func (t *testRegistry) Discover(url *core.URL) []*core.URL {
+	return nil
+}
+
+func (t *testRegistry) Register(serverURL *core.URL) {
+	t.registeredServices[serverURL.GetIdentity()] = serverURL
+	t.namingServiceStatus.Store(serverURL.GetIdentity(), &core.RegistryStatus{
+		Status:   core.NotRegister,
+		Service:  serverURL,
+		Registry: t,
+		IsCheck:  registry.IsCheck(serverURL),
+	})
+
+}
+
+func (t *testRegistry) UnRegister(serverURL *core.URL) {
+	delete(t.registeredServices, serverURL.GetIdentity())
+	t.namingServiceStatus.Delete(serverURL.GetIdentity())
+}
+
+func (t *testRegistry) Available(serverURL *core.URL) {
+	if getRegistryFailSwitcher() {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.RegisterFailed,
+				Registry: t,
+				Service:  u,
+				ErrMsg:   "error",
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	} else {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.RegisterSuccess,
+				Registry: t,
+				Service:  u,
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	}
+}
+
+func (t *testRegistry) Unavailable(serverURL *core.URL) {
+	if getRegistryFailSwitcher() {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.UnregisterFailed,
+				Registry: t,
+				Service:  u,
+				ErrMsg:   "error",
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	} else {
+		for _, u := range t.registeredServices {
+			t.namingServiceStatus.Store(u.GetIdentity(), &core.RegistryStatus{
+				Status:   core.UnregisterSuccess,
+				Registry: t,
+				Service:  u,
+				IsCheck:  registry.IsCheck(u),
+			})
+		}
+	}
+}
+
+func (t *testRegistry) GetRegisteredServices() []*core.URL {
+	return nil
+}
+
+func (t *testRegistry) StartSnapshot(conf *core.SnapshotConf) {
+}
+
+func (t *testRegistry) GetRegistryStatus() map[string]*core.RegistryStatus {
+	res := make(map[string]*core.RegistryStatus)
+	t.namingServiceStatus.Range(func(k, v interface{}) bool {
+		res[k.(string)] = v.(*core.RegistryStatus)
+		return true
+	})
+	return res
+}
+
+func setRegistryFailSwitcher(b bool) {
+	if b {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 1)
+	} else {
+		atomic.StoreInt64(&testRegistryFailSwitcher, 0)
+	}
+
+}
+
+func getRegistryFailSwitcher() bool {
+	return atomic.LoadInt64(&testRegistryFailSwitcher) == 1
+}
+
+func getCurAgentStatus(port int64) string {
+	type (
+		Result struct {
+			Status         string      `json:"status"`
+			RegistryStatus interface{} `json:"registryStatus"`
+		}
+	)
+	client := http.Client{
+		Timeout: time.Second * 3,
+	}
+	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/registry/status", port))
+	if err != nil {
+		return err.Error()
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err.Error()
+	}
+	res := Result{}
+	err = json.Unmarshal(b, &res)
+	if err != nil {
+		return err.Error()
+	}
+	return res.Status
 }
