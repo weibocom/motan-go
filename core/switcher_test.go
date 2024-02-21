@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
 	"time"
@@ -55,4 +56,38 @@ func TestSwitcher(t *testing.T) {
 	if switchers := s.GetAllSwitchers(); len(switchers) != 2 {
 		t.Error("GetAllSwitchers error. expect: 3, return:", len(switchers))
 	}
+}
+
+func TestSwitcherManager(t *testing.T) {
+	s := GetSwitcherManager()
+	s.clear()
+	// test IsOpen
+	assert.False(t, s.IsOpen("sw1")) // not exist
+	s.Register("sw1", false)
+	assert.False(t, s.IsOpen("sw1"))
+	s.SetValue("sw1", true)
+	assert.True(t, s.IsOpen("sw1"))
+	s.SetValue("sw1", false)
+	assert.False(t, s.IsOpen("sw1"))
+
+	// test GetOrRegister
+	s.clear()
+	sw1 := s.GetOrRegister("sw1", true) // register
+	assert.NotNil(t, sw1)
+	assert.True(t, sw1.IsOpen())
+	sw2 := s.GetOrRegister("sw1", false) // get
+	assert.True(t, sw1 == sw2)           // same instance
+
+	// test set value
+	s.clear()
+	s.SetValue("sw1", true) // set value for not exist switcher
+	assert.True(t, s.IsOpen("sw1"))
+	s.clear()
+	s.SetValue("sw1", false) // set value for not exist switcher
+	assert.False(t, s.IsOpen("sw1"))
+	sw1 = s.GetSwitcher("sw1")
+	s.SetValue("sw1", true) // set value for exist switcher
+	assert.True(t, sw1.IsOpen())
+	sw2 = s.GetSwitcher("sw1")
+	assert.True(t, sw1 == sw2) // same instance
 }
