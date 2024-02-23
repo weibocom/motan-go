@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -931,7 +932,11 @@ func (l *lastEndPointFilter) Filter(caller Caller, request Request) Response {
 	if request.GetRPCContext(true).Tc != nil {
 		request.GetRPCContext(true).Tc.PutReqSpan(&Span{Name: EpFilterEnd, Addr: caller.GetURL().GetAddressStr(), Time: time.Now()})
 	}
-	return caller.Call(request)
+	resp := caller.Call(request)
+	if caller.GetURL() != nil {
+		resp.GetRPCContext(true).RemoteAddr = net.JoinHostPort(caller.GetURL().Host, strconv.Itoa(caller.GetURL().Port))
+	}
+	return resp
 }
 
 func (l *lastEndPointFilter) HasNext() bool {
