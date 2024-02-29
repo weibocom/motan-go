@@ -223,6 +223,23 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	a.startAgent()
 }
 
+func (a *Agent) initSwitchers() {
+	// init metrics request application switcher
+	enableMetricsReqApp := a.agentURL.GetParam(motan.EnableMetricsReqApp, "false")
+	on, e := strconv.ParseBool(enableMetricsReqApp)
+	if e != nil {
+		vlog.Warningln("illegal value for enableMetricsReqApp, use default value: false")
+	} else {
+		switcher := motan.GetSwitcherManager().GetSwitcher(motan.MetricsReqApplication)
+		if switcher == nil {
+			vlog.Warningln("metrics request application switcher is nil, use default value: false")
+		} else {
+			vlog.Infoln("enableMetricsReqApp: ", on, ", set metrics request application switcher value")
+			switcher.SetValue(on)
+		}
+	}
+}
+
 func (a *Agent) startRegistryFailback() {
 	vlog.Infoln("start agent failback")
 	ticker := time.NewTicker(registry.DefaultFailbackInterval * time.Millisecond)

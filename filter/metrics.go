@@ -16,8 +16,13 @@ const (
 	MetricsSlowCountSuffix       = ".slow_count"
 )
 
+func init() {
+	motan.GetSwitcherManager().Register(motan.MetricsReqApplication, false)
+}
+
 type MetricsFilter struct {
-	next motan.EndPointFilter
+	next     motan.EndPointFilter
+	switcher *motan.Switcher
 }
 
 func (m *MetricsFilter) GetIndex() int {
@@ -25,7 +30,9 @@ func (m *MetricsFilter) GetIndex() int {
 }
 
 func (m *MetricsFilter) NewFilter(url *motan.URL) motan.Filter {
-	return &MetricsFilter{}
+	return &MetricsFilter{
+		switcher: motan.GetSwitcherManager().GetSwitcher(motan.MetricsReqApplication),
+	}
 }
 
 func (m *MetricsFilter) GetName() string {
@@ -83,6 +90,18 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	application := request.GetAttachment(protocol.MSource)
 	if provider {
 		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
+	} else {
+		// to support application in caller URL
+		callerApplication := caller.GetURL().GetParam(motan.ApplicationKey, "")
+		if m.switcher.IsOpen() {
+			if application != callerApplication {
+				keys := []string{role, callerApplication, request.GetMethod()}
+				addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
+					keys, time.Since(start).Nanoseconds()/1e6, response)
+			}
+		} else {
+			application = callerApplication
+		}
 	}
 	keys := []string{role, application, request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
