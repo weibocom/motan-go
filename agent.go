@@ -199,6 +199,7 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 	// start metrics reporter early, here agent context has already initialized
 	metrics.StartReporter(a.Context)
 	a.registerStatusSampler()
+	a.initSwitchers()
 	a.initStatus()
 	a.initClusters()
 	a.startServerAgent()
