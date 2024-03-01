@@ -4,6 +4,7 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/metrics"
 	"github.com/weibocom/motan-go/protocol"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,11 @@ const (
 	MetricsSlowCountSuffix       = ".slow_count"
 )
 
+var (
+	metricOnce            = sync.Once{}
+	metricsReqAppSwitcher *motan.Switcher
+)
+
 type MetricsFilter struct {
 	next motan.EndPointFilter
 }
@@ -25,6 +31,7 @@ func (m *MetricsFilter) GetIndex() int {
 }
 
 func (m *MetricsFilter) NewFilter(url *motan.URL) motan.Filter {
+	initReqAppSwitcher()
 	return &MetricsFilter{}
 }
 
@@ -80,9 +87,15 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 		}
 	}
 	//get application
-	application := request.GetAttachment(protocol.MSource)
-	if provider {
-		application = caller.GetURL().GetParam(motan.ApplicationKey, "")
+	application := caller.GetURL().GetParam(motan.ApplicationKey, "")
+	if !provider && metricsReqAppSwitcher.IsOpen() {
+		// to support application in caller URL
+		reqApplication := request.GetAttachment(protocol.MSource)
+		if application != reqApplication {
+			keys := []string{role, reqApplication, request.GetMethod()}
+			addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
+				keys, time.Since(start).Nanoseconds()/1e6, response)
+		}
 	}
 	keys := []string{role, application, request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
@@ -110,4 +123,13 @@ func addMetricWithKeys(group, groupSuffix string, service string, keys []string,
 
 func (m *MetricsFilter) SetContext(context *motan.Context) {
 	metrics.StartReporter(context)
+}
+
+func initReqAppSwitcher() {
+	// registry default switcher value here
+	// if the switcher has already been registered in Context.Initialize,
+	// the default value will not overwrite it.
+	metricOnce.Do(func() {
+		metricsReqAppSwitcher = motan.GetSwitcherManager().GetOrRegister(motan.MetricsReqApplication, false)
+	})
 }

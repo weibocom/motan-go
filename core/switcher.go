@@ -1,9 +1,8 @@
 package core
 
 import (
-	"sync"
-
 	"github.com/weibocom/motan-go/log"
+	"sync"
 )
 
 var (
@@ -19,8 +18,23 @@ type SwitcherListener interface {
 	Notify(value bool)
 }
 
+type switcherConfig map[string]bool
+
 func GetSwitcherManager() *SwitcherManager {
 	return manager
+}
+
+func initSwitcher(c *Context) {
+	var sc switcherConfig
+	err := c.Config.GetStruct("switchers", &sc)
+	if err != nil {
+		vlog.Warningf("init switcher config fail: %v", err)
+		return
+	}
+	for k, v := range sc {
+		GetSwitcherManager().Register(k, v)
+	}
+
 }
 
 func (s *SwitcherManager) Register(name string, value bool, listeners ...SwitcherListener) {
@@ -51,7 +65,7 @@ func (s *SwitcherManager) GetAllSwitchers() map[string]bool {
 	return result
 }
 
-//GetSwitcher returns the switcher with the given name, or nil if not found.
+// GetSwitcher returns the switcher with the given name, or nil if not found.
 func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
 	s.switcherLock.RLock()
 	defer s.switcherLock.RUnlock()
@@ -62,7 +76,7 @@ func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
 	return nil
 }
 
-//GetOrRegister returns the switcher with the given name if it's already registered, otherwise registers and returns the new switcher.
+// GetOrRegister returns the switcher with the given name if it's already registered, otherwise registers and returns the new switcher.
 func (s *SwitcherManager) GetOrRegister(name string, value bool, listeners ...SwitcherListener) *Switcher {
 	sw := s.GetSwitcher(name)
 	if sw == nil {

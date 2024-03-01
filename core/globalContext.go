@@ -4,12 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/log"
 	"os"
 	"reflect"
 	"strings"
-
-	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -250,6 +249,7 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHTTPClients()
+	initSwitcher(c)
 }
 
 func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {

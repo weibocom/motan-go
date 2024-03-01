@@ -59,6 +59,27 @@ func TestMetricsFilter(t *testing.T) {
 			assert.Equal(t, 1, int(metrics.GetStatItem(testGroup, "", testService).SnapshotAndClear().Count(getKeysStr(test.keys)+MetricsTotalCountSuffix)), "metric count")
 		})
 	}
+	// test different client application
+	motan.GetSwitcherManager().GetSwitcher(motan.MetricsReqApplication).SetValue(true)
+	request3 := request.Clone().(motan.Request)
+	request3.SetAttachment(protocol.MSource, "test")
+	time.Sleep(10 * time.Millisecond)
+	mf.Filter(ep, request3)
+	time.Sleep(1000 * time.Millisecond)
+	snapShot := metrics.GetStatItem(testGroup, "", testService).SnapshotAndClear()
+	// The metrics filter has do escape
+	assert.Equal(t, 1, int(snapShot.Count(getKeysStr([]string{"motan-client-agent", application, testMethod})+MetricsTotalCountSuffix)), "metric count")
+	assert.Equal(t, 1, int(snapShot.Count(getKeysStr([]string{"motan-client-agent", "test", testMethod})+MetricsTotalCountSuffix)), "metric count")
+	// test switcher
+	motan.GetSwitcherManager().GetSwitcher(motan.MetricsReqApplication).SetValue(false)
+	request4 := request.Clone().(motan.Request)
+	time.Sleep(10 * time.Millisecond)
+	mf.Filter(ep, request4)
+	time.Sleep(1000 * time.Millisecond)
+	snapShot1 := metrics.GetStatItem(testGroup, "", testService).SnapshotAndClear()
+	// The metrics filter has do escape
+	assert.Equal(t, 1, int(snapShot1.Count(getKeysStr([]string{"motan-client-agent", application, testMethod})+MetricsTotalCountSuffix)), "metric count")
+	assert.Equal(t, 0, int(snapShot1.Count(getKeysStr([]string{"motan-client-agent", "test", testMethod})+MetricsTotalCountSuffix)), "metric count")
 }
 
 func TestAddMetric(t *testing.T) {

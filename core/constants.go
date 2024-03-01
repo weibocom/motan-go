@@ -70,6 +70,11 @@ const (
 	UnixSockProtocolFlag    = "unix://"
 )
 
+// metrics request application
+const (
+	MetricsReqApplication = "metricsReqApp"
+)
+
 // attachment keys
 const (
 	XForwardedForLower = "x-forwarded-for" // used as motan default proxy key
