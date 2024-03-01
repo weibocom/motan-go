@@ -4,12 +4,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/log"
 	"os"
 	"reflect"
 	"strings"
-
-	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
+	"sync"
 )
 
 const (
@@ -69,8 +69,9 @@ var (
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
-	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
-	extFilters = make(map[string]bool)
+	urlFields    = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	extFilters   = make(map[string]bool)
+	switcherOnce = sync.Once{}
 )
 
 // all env flag in motan-go
@@ -250,6 +251,7 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHTTPClients()
+	initSwitcher(c)
 }
 
 func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {

@@ -16,6 +16,7 @@ func (c *ClusterMetricsFilter) GetIndex() int {
 }
 
 func (c *ClusterMetricsFilter) NewFilter(url *motan.URL) motan.Filter {
+	initReqAppSwitcher()
 	return &ClusterMetricsFilter{}
 }
 
@@ -56,7 +57,22 @@ func (c *ClusterMetricsFilter) Filter(haStrategy motan.HaStrategy, loadBalance m
 	if ctx != nil && ctx.Proxy {
 		role = "motan-client-agent"
 	}
-	keys := []string{role, request.GetAttachment(protocol.MSource), request.GetMethod()}
+	var application string
+	url := haStrategy.GetURL()
+	if url != nil {
+		application = url.GetParam(motan.ApplicationKey, "")
+	}
+	// to support application in caller URL
+	if metricsReqAppSwitcher.IsOpen() {
+		reqApplication := request.GetAttachment(protocol.MSource)
+		if application != reqApplication {
+			keys := []string{role, reqApplication, request.GetMethod()}
+			addMetricWithKeys(request.GetAttachment(protocol.MGroup), ".cluster", request.GetServiceName(),
+				keys, time.Since(start).Nanoseconds()/1e6, response)
+		}
+	}
+
+	keys := []string{role, application, request.GetMethod()}
 	addMetricWithKeys(request.GetAttachment(protocol.MGroup), ".cluster",
 		request.GetServiceName(), keys, time.Since(start).Nanoseconds()/1e6, response)
 	return response

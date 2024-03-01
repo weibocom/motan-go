@@ -28,7 +28,7 @@ func RegistDefaultFilters(extFactory motan.ExtensionFactory) {
 	})
 
 	extFactory.RegistExtFilter(Metrics, func() motan.Filter {
-		return &MetricsFilter{switcher: motan.GetSwitcherManager().GetSwitcher(motan.MetricsReqApplication)}
+		return &MetricsFilter{}
 	})
 
 	extFactory.RegistExtFilter(CircuitBreaker, func() motan.Filter {

@@ -80,7 +80,6 @@ func TestMetricsFilter(t *testing.T) {
 	// The metrics filter has do escape
 	assert.Equal(t, 1, int(snapShot1.Count(getKeysStr([]string{"motan-client-agent", application, testMethod})+MetricsTotalCountSuffix)), "metric count")
 	assert.Equal(t, 0, int(snapShot1.Count(getKeysStr([]string{"motan-client-agent", "test", testMethod})+MetricsTotalCountSuffix)), "metric count")
-
 }
 
 func TestAddMetric(t *testing.T) {

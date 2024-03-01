@@ -73,7 +73,6 @@ const (
 // metrics request application
 const (
 	MetricsReqApplication = "metricsReqApp"
-	EnableMetricsReqApp   = "enableMetricsReqApp"
 )
 
 // attachment keys
