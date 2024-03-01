@@ -9,7 +9,6 @@ import (
 	"os"
 	"reflect"
 	"strings"
-	"sync"
 )
 
 const (
@@ -69,9 +68,8 @@ var (
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
-	urlFields    = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
-	extFilters   = make(map[string]bool)
-	switcherOnce = sync.Once{}
+	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	extFilters = make(map[string]bool)
 )
 
 // all env flag in motan-go

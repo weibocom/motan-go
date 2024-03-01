@@ -25,17 +25,16 @@ func GetSwitcherManager() *SwitcherManager {
 }
 
 func initSwitcher(c *Context) {
-	switcherOnce.Do(func() {
-		var sc switcherConfig
-		err := c.Config.GetStruct("switchers", &sc)
-		if err != nil {
-			vlog.Warningf("init switcher config fail: %v", err)
-			return
-		}
-		for k, v := range sc {
-			GetSwitcherManager().Register(k, v)
-		}
-	})
+	var sc switcherConfig
+	err := c.Config.GetStruct("switchers", &sc)
+	if err != nil {
+		vlog.Warningf("init switcher config fail: %v", err)
+		return
+	}
+	for k, v := range sc {
+		GetSwitcherManager().Register(k, v)
+	}
+
 }
 
 func (s *SwitcherManager) Register(name string, value bool, listeners ...SwitcherListener) {

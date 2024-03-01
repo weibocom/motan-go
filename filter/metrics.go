@@ -88,15 +88,13 @@ func (m *MetricsFilter) Filter(caller motan.Caller, request motan.Request) motan
 	}
 	//get application
 	application := caller.GetURL().GetParam(motan.ApplicationKey, "")
-	if !provider {
+	if !provider && metricsReqAppSwitcher.IsOpen() {
 		// to support application in caller URL
 		reqApplication := request.GetAttachment(protocol.MSource)
-		if metricsReqAppSwitcher.IsOpen() {
-			if application != reqApplication {
-				keys := []string{role, reqApplication, request.GetMethod()}
-				addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
-					keys, time.Since(start).Nanoseconds()/1e6, response)
-			}
+		if application != reqApplication {
+			keys := []string{role, reqApplication, request.GetMethod()}
+			addMetricWithKeys(request.GetAttachment(protocol.MGroup), "", request.GetServiceName(),
+				keys, time.Since(start).Nanoseconds()/1e6, response)
 		}
 	}
 	keys := []string{role, application, request.GetMethod()}
