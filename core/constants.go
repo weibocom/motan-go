@@ -122,6 +122,8 @@ const (
 	DirectRPCEnvironmentName = "MESH_DIRECT_RPC"
 	FilterEnvironmentName    = "MESH_FILTERS"
 	HandlerEnvironmentName   = "MESH_ADMIN_EXT_HANDLERS"
+	RegGroupSuffix           = "RPC_REG_GROUP_SUFFIX"
+	SubGroupSuffix           = "MESH_MULTI_SUB_GROUP_SUFFIX"
 )
 
 // meta keys

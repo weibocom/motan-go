@@ -531,8 +531,57 @@ func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
 	}
 }
 
+func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
+	regGroupSuffix := os.Getenv(RegGroupSuffix)
+	if regGroupSuffix == "" {
+		return
+	}
+	filterMap := make(map[string]struct{}, len(urlMap))
+	for _, url := range urlMap {
+		filterMap[url.GetIdentityWithRegistry()] = struct{}{}
+	}
+	for k, url := range urlMap {
+		if strings.HasSuffix(url.Group, regGroupSuffix) {
+			continue
+		}
+		newUrl := url.Copy()
+		newUrl.Group += regGroupSuffix
+		if _, ok := filterMap[newUrl.GetIdentityWithRegistry()]; ok {
+			continue
+		}
+		filterMap[newUrl.GetIdentityWithRegistry()] = struct{}{}
+		urlMap[k] = newUrl
+	}
+}
+
+func (c *Context) parseSubGroupSuffix(urlMap map[string]*URL) {
+	subGroupSuffix := os.Getenv(SubGroupSuffix)
+	if subGroupSuffix == "" || c.AgentURL == nil {
+		return
+	}
+	filterMap := make(map[string]struct{}, len(urlMap)*2)
+	for _, url := range urlMap {
+		filterMap[url.GetIdentity()] = struct{}{}
+	}
+	for k, url := range urlMap {
+		if strings.HasSuffix(url.Group, subGroupSuffix) {
+			continue
+		}
+		groupWithSuffix := url.Group + subGroupSuffix
+		newUrl := url.Copy()
+		newUrl.Group += subGroupSuffix
+		if _, ok := filterMap[newUrl.GetIdentity()]; ok {
+			continue
+		}
+		filterMap[newUrl.GetIdentity()] = struct{}{}
+		urlMap["auto_"+k+groupWithSuffix] = newUrl
+	}
+}
+
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(refersSection)
+	referUrls := c.basicConfToURLs(refersSection)
+	c.parseSubGroupSuffix(referUrls)
+	c.RefersURLs = referUrls
 }
 
 func (c *Context) parseBasicRefers() {
@@ -542,6 +591,7 @@ func (c *Context) parseBasicRefers() {
 func (c *Context) parseServices() {
 	urlsMap := c.basicConfToURLs(servicesSection)
 	c.parseMultipleServiceGroup(urlsMap)
+	c.parseRegGroupSuffix(urlsMap)
 	c.ServiceURLs = urlsMap
 }
 

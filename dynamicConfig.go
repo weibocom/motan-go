@@ -89,6 +89,10 @@ func (c *DynamicConfigurer) Register(url *core.URL) error {
 }
 
 func (c *DynamicConfigurer) doRegister(url *core.URL) error {
+	regGroupSuffix := os.Getenv(core.RegGroupSuffix)
+	if regGroupSuffix != "" && !strings.HasSuffix(url.Group, regGroupSuffix) {
+		url.Group += regGroupSuffix
+	}
 	c.regLock.Lock()
 	defer c.regLock.Unlock()
 	if _, ok := c.registerNodes[url.GetIdentityWithRegistry()]; ok {
@@ -127,6 +131,15 @@ func (c *DynamicConfigurer) Subscribe(url *core.URL) error {
 	err := c.doSubscribe(url)
 	if err != nil {
 		return err
+	}
+	subGroupSuffix := os.Getenv(core.SubGroupSuffix)
+	if subGroupSuffix != "" && !strings.HasSuffix(url.Group, subGroupSuffix) {
+		newUrl := url.Copy()
+		newUrl.Group = url.Group + subGroupSuffix
+		err = c.doSubscribe(newUrl)
+		if err != nil {
+			return err
+		}
 	}
 	c.saveSnapshot()
 	return nil
