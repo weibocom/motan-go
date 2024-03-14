@@ -202,6 +202,170 @@ func TestContext_parseMultipleServiceGroup(t *testing.T) {
 	assert.Equal(t, data3["service1"].Group, "hello")
 }
 
+func TestContext_parseRegGroupSuffix(t *testing.T) {
+	regGroupSuffix := "-test"
+	countGroup := func(urlMap map[string]*URL) map[string]int {
+		groupMap := map[string]int{}
+		for _, i2 := range urlMap {
+			groupMap[i2.Group] += 1
+		}
+		return groupMap
+	}
+	cases := []struct {
+		UrlMap     map[string]*URL
+		AssertFunc func(t *testing.T, urlMap map[string]*URL)
+	}{
+		{
+			UrlMap: map[string]*URL{
+				"service1": {
+					Group: "group1",
+				},
+				"service2": {
+					Group: "group1",
+				},
+				"service3": {
+					Group: "group2",
+				},
+				"service4": {
+					Group: "group3",
+				},
+				"service5": {
+					Group: "group3" + regGroupSuffix,
+				},
+				"service6": {
+					Group: "group4",
+					Parameters: map[string]string{
+						RegistryKey: "reg1",
+					},
+				},
+				"service7": {
+					Group: "group4",
+					Parameters: map[string]string{
+						RegistryKey: "reg2",
+					},
+				},
+				"service8": {
+					Group: "group5",
+					Parameters: map[string]string{
+						RegistryKey: "reg1",
+					},
+				},
+				"service9": {
+					Group: "group5" + regGroupSuffix,
+					Parameters: map[string]string{
+						RegistryKey: "reg2",
+					},
+				},
+			},
+			AssertFunc: func(t *testing.T, urlMap map[string]*URL) {
+				groupMap := countGroup(urlMap)
+				assert.Equal(t, 1, groupMap["group1"])
+				assert.Equal(t, 1, groupMap["group1"+regGroupSuffix])
+				assert.Equal(t, 1, groupMap["group2"+regGroupSuffix])
+				assert.Equal(t, 1, groupMap["group3"])
+				assert.Equal(t, 1, groupMap["group3"+regGroupSuffix])
+				assert.Equal(t, 2, groupMap["group4"+regGroupSuffix])
+				assert.Equal(t, 2, groupMap["group5"+regGroupSuffix])
+			},
+		},
+	}
+	os.Setenv(RegGroupSuffix, regGroupSuffix)
+	ctx := &Context{}
+	for _, s := range cases {
+		ctx.parseRegGroupSuffix(s.UrlMap)
+		s.AssertFunc(t, s.UrlMap)
+	}
+	os.Unsetenv(RegGroupSuffix)
+}
+
+func TestContext_parseSubGroupSuffix(t *testing.T) {
+	subGroupSuffix := "-test"
+	countGroup := func(urlMap map[string]*URL) map[string]int {
+		groupMap := map[string]int{}
+		for _, i2 := range urlMap {
+			groupMap[i2.Group] += 1
+		}
+		return groupMap
+	}
+	cases := []struct {
+		Ctx        *Context
+		UrlMap     map[string]*URL
+		AssertFunc func(t *testing.T, urlMap map[string]*URL)
+	}{
+		{
+			Ctx: &Context{
+				AgentURL: &URL{},
+			},
+			UrlMap: map[string]*URL{
+				"refer1": {
+					Group: "group1",
+					Path:  "p1",
+				},
+				"refer2": {
+					Group: "group1",
+					Path:  "p2",
+				},
+				"refer3": {
+					Group: "group2",
+				},
+				"refer4": {
+					Group: "group3",
+				},
+				"refer5": {
+					Group: "group3" + subGroupSuffix,
+				},
+			},
+			AssertFunc: func(t *testing.T, urlMap map[string]*URL) {
+				groupMap := countGroup(urlMap)
+				assert.Equal(t, 2, groupMap["group1"])
+				assert.Equal(t, 2, groupMap["group1"+subGroupSuffix])
+				assert.Equal(t, 1, groupMap["group2"])
+				assert.Equal(t, 1, groupMap["group2"+subGroupSuffix])
+				assert.Equal(t, 1, groupMap["group3"])
+				assert.Equal(t, 1, groupMap["group3"+subGroupSuffix])
+			},
+		},
+		{
+			Ctx: &Context{},
+			UrlMap: map[string]*URL{
+				"refer1": {
+					Group: "group1",
+					Path:  "p1",
+				},
+				"refer2": {
+					Group: "group1",
+					Path:  "p2",
+				},
+				"refer3": {
+					Group: "group2",
+				},
+				"refer4": {
+					Group: "group3",
+				},
+				"refer5": {
+					Group: "group3" + subGroupSuffix,
+				},
+			},
+			AssertFunc: func(t *testing.T, urlMap map[string]*URL) {
+				groupMap := countGroup(urlMap)
+				assert.Equal(t, 2, groupMap["group1"])
+				assert.Equal(t, 0, groupMap["group1"+subGroupSuffix])
+				assert.Equal(t, 1, groupMap["group2"])
+				assert.Equal(t, 0, groupMap["group2"+subGroupSuffix])
+				assert.Equal(t, 1, groupMap["group3"])
+				assert.Equal(t, 1, groupMap["group3"+subGroupSuffix])
+				assert.Equal(t, 5, len(urlMap))
+			},
+		},
+	}
+	os.Setenv(SubGroupSuffix, subGroupSuffix)
+	for _, s := range cases {
+		s.Ctx.parseSubGroupSuffix(s.UrlMap)
+		s.AssertFunc(t, s.UrlMap)
+	}
+	os.Unsetenv(SubGroupSuffix)
+}
+
 func TestContext_mergeDefaultFilter(t *testing.T) {
 	c := Context{AgentURL: &URL{
 		Parameters: map[string]string{"defaultFilter": "a,b,d"},
