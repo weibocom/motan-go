@@ -45,8 +45,7 @@ var (
 	metricsKeyBuilderBufferSize = 64
 	// NewStatItem is the factory func for StatItem
 	NewStatItem = NewDefaultStatItem
-	items       = make(map[string]StatItem, 64)
-	itemsLock   sync.RWMutex
+	items       sync.Map
 	start       sync.Once
 	rp          = &reporter{
 		interval:  defaultSinkDuration,
@@ -106,26 +105,21 @@ type StatWriter interface {
 
 func GetOrRegisterStatItem(group, groupSuffix string, service string) StatItem {
 	k := group + groupSuffix + service
-	itemsLock.RLock()
-	item := items[k]
-	itemsLock.RUnlock()
-	if item != nil {
-		return item
+	item, ok := items.Load(k)
+	if ok {
+		return item.(StatItem)
 	}
-	itemsLock.Lock()
-	item = items[k]
-	if item == nil {
-		item = NewStatItem(group, groupSuffix, service)
-		items[k] = item
-	}
-	itemsLock.Unlock()
-	return item
+	newItem := NewStatItem(group, groupSuffix, service)
+	items.Store(k, newItem)
+	return newItem
 }
 
 func GetStatItem(group, groupSuffix string, service string) StatItem {
-	itemsLock.RLock()
-	defer itemsLock.RUnlock()
-	return items[group+groupSuffix+service]
+	item, ok := items.Load(group + groupSuffix + service)
+	if ok {
+		return item.(StatItem)
+	}
+	return nil
 }
 
 // NewDefaultStatItem create a new statistic item, you should escape input parameter before call this function
@@ -134,43 +128,34 @@ func NewDefaultStatItem(group, groupSuffix string, service string) StatItem {
 }
 
 func RMStatItem(group, groupSuffix string, service string) {
-	itemsLock.RLock()
-	i := items[group+groupSuffix+service]
-	itemsLock.RUnlock()
-	if i != nil {
-		i.Clear()
-		itemsLock.Lock()
-		delete(items, group+groupSuffix+service)
-		itemsLock.Unlock()
+	item, ok := items.Load(group + groupSuffix + service)
+	if ok {
+		items.Delete(group + groupSuffix + service)
+		item.(StatItem).Clear()
 	}
 }
 
 func ClearStatItems() {
-	itemsLock.Lock()
-	old := items
-	items = make(map[string]StatItem, 64)
-	itemsLock.Unlock()
-	for _, item := range old {
-		item.Clear()
-	}
+	items.Range(func(key, value interface{}) bool {
+		value.(StatItem).Clear()
+		items.Delete(key)
+		return true
+	})
 }
 
 func RangeAllStatItem(f func(k string, v StatItem) bool) {
-	itemsLock.RLock()
-	defer itemsLock.RUnlock()
-	var b bool
-	for k, i := range items {
-		b = f(k, i)
-		if !b {
-			return
-		}
-	}
+	items.Range(func(key, value interface{}) bool {
+		return f(key.(string), value.(StatItem))
+	})
 }
 
 func StatItemSize() int {
-	itemsLock.RLock()
-	defer itemsLock.RUnlock()
-	return len(items)
+	lenght := 0
+	items.Range(func(key, value interface{}) bool {
+		lenght++
+		return true
+	})
+	return lenght
 }
 
 // Escape the string avoid invalid graphite key
