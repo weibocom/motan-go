@@ -55,6 +55,17 @@ type HTTPProxyServer struct {
 	defaultDomain  string
 }
 
+func (s *HTTPProxyServer) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if s.url != nil {
+		info[core.RuntimeUrlKey] = s.url.ToExtInfo()
+	}
+	info[core.RuntimeDenyKey] = s.deny
+	info[core.RuntimeKeepaliveKey] = s.keepalive
+	info[core.RuntimeDefaultDomainKey] = s.defaultDomain
+	return info
+}
+
 func NewHTTPProxyServer(url *core.URL) *HTTPProxyServer {
 	return &HTTPProxyServer{url: url}
 }

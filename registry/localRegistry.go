@@ -8,6 +8,12 @@ type LocalRegistry struct {
 	url *motan.URL
 }
 
+func (d *LocalRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: d.GetName(),
+	}
+}
+
 func (d *LocalRegistry) GetURL() *motan.URL {
 	return d.url
 }

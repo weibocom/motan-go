@@ -4,13 +4,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/weibocom/motan-go/config"
-	vlog "github.com/weibocom/motan-go/log"
-	"sync"
-
 	"github.com/weibocom/motan-go/cluster"
+	"github.com/weibocom/motan-go/config"
 	motan "github.com/weibocom/motan-go/core"
+	vlog "github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"sync"
 )
 
 var (
@@ -72,13 +71,14 @@ func (c *Client) BaseGo(req motan.Request, reply interface{}, done chan *motan.A
 	rc := req.GetRPCContext(true)
 	rc.ExtFactory = c.extFactory
 	rc.Result = result
-	rc.AsyncCall = true
-	rc.Result.Reply = reply
-	res := c.cluster.Call(req)
-	if res.GetException() != nil {
-		result.Error = errors.New(res.GetException().ErrMsg)
+	rc.Reply = reply
+	go func() {
+		res := c.cluster.Call(req)
+		if res.GetException() != nil {
+			result.Error = errors.New(res.GetException().ErrMsg)
+		}
 		result.Done <- result
-	}
+	}()
 	return result
 }
 

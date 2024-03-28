@@ -3,6 +3,7 @@ package cluster
 import (
 	"bytes"
 	"fmt"
+	"github.com/stretchr/testify/assert"
 	"strconv"
 	"strings"
 	"testing"
@@ -137,6 +138,8 @@ func TestGetResultWithCommand(t *testing.T) {
 	if !hasRule {
 		t.Errorf("notify urls not has rule url! urls:%+v\n", urls)
 	}
+	// check runtime info
+	checkDefaultCommandWrapperRuntimeInfo(crw, t)
 
 	// has static command
 	crw = getDefaultCommandWrapper(true)
@@ -152,6 +155,9 @@ func TestGetResultWithCommand(t *testing.T) {
 
 	crw.processCommand(ServiceCmd, "")
 	validateResult(crw, []string{"test-group1", "test-group2", "test-group3"}, t)
+
+	// check runtime info
+	checkDefaultCommandWrapperRuntimeInfo(crw, t)
 }
 
 func validateResult(crw *CommandRegistryWrapper, notifyGroups []string, t *testing.T) {
@@ -214,6 +220,9 @@ func TestProcessCommand(t *testing.T) {
 	}
 	fmt.Printf("notify:%t, crw:%+v\n", notify, crw)
 
+	// check runtime info
+	checkDefaultCommandWrapperRuntimeInfo(crw, t)
+
 	// has static command
 	crw = getDefaultCommandWrapper(true)
 	processServiceCmd(crw, cl, t)
@@ -233,6 +242,8 @@ func TestProcessCommand(t *testing.T) {
 		}
 	}
 
+	// check runtime info
+	checkDefaultCommandWrapperRuntimeInfo(crw, t)
 }
 
 func processServiceCmd(crw *CommandRegistryWrapper, cl string, t *testing.T) {
@@ -362,6 +373,51 @@ func checkHost(urls []*motan.URL, f func(host string) bool, t *testing.T) {
 			t.Errorf("test fail in prefix match pattern. url:%+v\n", u)
 		}
 	}
+}
+
+func checkDefaultCommandWrapperRuntimeInfo(crw *CommandRegistryWrapper, t *testing.T) {
+	info := crw.GetRuntimeInfo()
+	assert.NotNil(t, info)
+
+	registryName, ok := info[motan.RuntimeNameKey]
+	assert.True(t, ok)
+	assert.Equal(t, "testRegistry", registryName)
+
+	subscribeInfo, ok := info[motan.RuntimeSubscribeInfoKey]
+	assert.True(t, ok)
+	assert.NotNil(t, subscribeInfo)
+
+	subscribe, ok := subscribeInfo.(map[string]interface{})
+	assert.True(t, ok)
+
+	weightsInfo, ok := subscribe[motan.RuntimeWeightKey]
+	assert.True(t, ok)
+	assert.NotNil(t, weightsInfo)
+
+	staticCommand, ok := subscribe[motan.RuntimeStaticCommandKey]
+	if crw.staticTcCommand == nil {
+		assert.False(t, ok)
+		assert.Nil(t, staticCommand)
+	} else {
+		assert.True(t, ok)
+		assert.NotNil(t, staticCommand)
+	}
+
+	agentCommandInfo, ok := subscribe[motan.RuntimeAgentCommandKey]
+	assert.True(t, ok)
+	assert.NotNil(t, agentCommandInfo)
+
+	serviceCommandInfo, ok := subscribe[motan.RuntimeServiceCommandKey]
+	assert.True(t, ok)
+	assert.NotNil(t, serviceCommandInfo)
+
+	commandHistory, ok := subscribe[motan.RuntimeCommandHistoryKey]
+	assert.True(t, ok)
+	assert.NotNil(t, commandHistory)
+
+	notifyHistory, ok := subscribe[motan.RuntimeNotifyHistoryKey]
+	assert.True(t, ok)
+	assert.NotNil(t, notifyHistory)
 }
 
 func getDefaultCommandWrapper(withStaticCommand bool) *CommandRegistryWrapper {

@@ -20,6 +20,10 @@ type FailfastFilter struct {
 	eps     *endpointStatus
 }
 
+func (e *FailfastFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(e)
+}
+
 type endpointStatus struct {
 	available                 bool
 	availMutex                sync.RWMutex

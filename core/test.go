@@ -15,6 +15,10 @@ type TestFilter struct {
 	next  ClusterFilter
 }
 
+func (t *TestFilter) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
 func (t *TestFilter) GetName() string {
 	return "TestFilter"
 }
@@ -55,6 +59,10 @@ type TestEndPointFilter struct {
 	Index int
 	URL   *URL
 	next  EndPointFilter
+}
+
+func (t *TestEndPointFilter) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
 }
 
 func (t *TestEndPointFilter) GetName() string {
@@ -99,6 +107,10 @@ type TestProvider struct {
 	URL *URL
 }
 
+func (t *TestProvider) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
 func (t *TestProvider) SetService(s interface{}) {
 }
 
@@ -129,6 +141,10 @@ type TestEndPoint struct {
 	URL         *URL
 	ProcessTime int64
 	available   atomic.Value
+}
+
+func (t *TestEndPoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
 }
 
 func (t *TestEndPoint) GetURL() *URL {
@@ -231,6 +247,12 @@ type TestRegistry struct {
 	URL           *URL
 	GroupService  map[string][]string
 	DiscoverError bool
+}
+
+func (t *TestRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		RuntimeNameKey: t.GetName(),
+	}
 }
 
 func (t *TestRegistry) GetName() string {

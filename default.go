@@ -65,6 +65,7 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/debug/pprof/goroutine"] = debug
 		defaultManageHandlers["/debug/pprof/mutex"] = debug
 		defaultManageHandlers["/debug/pprof/heap"] = debug
+		defaultManageHandlers["/debug/endpoint_profile_downgrade"] = debug
 
 		switcher := &SwitcherHandler{}
 		defaultManageHandlers["/switcher/set"] = switcher
@@ -84,6 +85,9 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 
 		hotReload := &HotReload{}
 		defaultManageHandlers["/reload/clusters"] = hotReload
+
+		runtimeHandler := &RuntimeHandler{}
+		defaultManageHandlers["/runtime/info"] = runtimeHandler
 	})
 	return defaultManageHandlers
 }

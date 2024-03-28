@@ -68,6 +68,14 @@ func TestHTTPProvider_Call(t *testing.T) {
 	body, _ := serialization.SerializeMulti(req.Arguments)
 	req.Arguments = []interface{}{&core.DeserializableValue{Serialization: serialization, Body: body}}
 	assert.Equal(t, "/2/p1/test?a=b", string(provider.Call(req).GetValue().([]interface{})[1].([]byte)))
+
+	// runtime info
+	info := provider.GetRuntimeInfo()
+	assert.NotNil(t, info)
+
+	urlInfo, ok := info[core.RuntimeUrlKey]
+	assert.True(t, ok)
+	assert.Equal(t, providerURL.ToExtInfo(), urlInfo)
 }
 
 func TestHTTPProvider_Http_Exception(t *testing.T) {

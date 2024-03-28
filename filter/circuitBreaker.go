@@ -24,6 +24,10 @@ type CircuitBreakerFilter struct {
 	includeBizException bool
 }
 
+func (c *CircuitBreakerFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(c)
+}
+
 func (c *CircuitBreakerFilter) GetIndex() int {
 	return 20
 }

@@ -10,6 +10,12 @@ type LocalEndpoint struct {
 	provider motan.Provider
 }
 
+func (l *LocalEndpoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: l.GetName(),
+	}
+}
+
 func (l *LocalEndpoint) GetName() string {
 	return "localEndpoint"
 }
