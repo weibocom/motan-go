@@ -106,20 +106,11 @@ type StatWriter interface {
 
 func GetOrRegisterStatItem(group, groupSuffix string, service string) StatItem {
 	k := group + groupSuffix + service
-	itemsLock.RLock()
-	item := items[k]
-	itemsLock.RUnlock()
+	item := safeGet(k)
 	if item != nil {
 		return item
 	}
-	itemsLock.Lock()
-	item = items[k]
-	if item == nil {
-		item = NewStatItem(group, groupSuffix, service)
-		items[k] = item
-	}
-	itemsLock.Unlock()
-	return item
+	return safePutAbsent(k, group, groupSuffix, service)
 }
 
 func GetStatItem(group, groupSuffix string, service string) StatItem {
@@ -134,22 +125,16 @@ func NewDefaultStatItem(group, groupSuffix string, service string) StatItem {
 }
 
 func RMStatItem(group, groupSuffix string, service string) {
-	itemsLock.RLock()
-	i := items[group+groupSuffix+service]
-	itemsLock.RUnlock()
-	if i != nil {
-		i.Clear()
-		itemsLock.Lock()
-		delete(items, group+groupSuffix+service)
-		itemsLock.Unlock()
+	k := group + groupSuffix + service
+	item := safeGet(k)
+	if item != nil {
+		safeDelete(k)
+		item.Clear()
 	}
 }
 
 func ClearStatItems() {
-	itemsLock.Lock()
-	old := items
-	items = make(map[string]StatItem, 64)
-	itemsLock.Unlock()
+	old := safeExchangeNew()
 	for _, item := range old {
 		item.Clear()
 	}
@@ -171,6 +156,37 @@ func StatItemSize() int {
 	itemsLock.RLock()
 	defer itemsLock.RUnlock()
 	return len(items)
+}
+
+func safeGet(k string) StatItem {
+	itemsLock.RLock()
+	defer itemsLock.RUnlock()
+	return items[k]
+}
+
+func safePutAbsent(k, group, groupSuffix, service string) StatItem {
+	itemsLock.Lock()
+	defer itemsLock.Unlock()
+	item := items[k]
+	if item == nil {
+		item = NewStatItem(group, groupSuffix, service)
+		items[k] = item
+	}
+	return item
+}
+
+func safeDelete(k string) {
+	itemsLock.Lock()
+	defer itemsLock.Unlock()
+	delete(items, k)
+}
+
+func safeExchangeNew() map[string]StatItem {
+	itemsLock.Lock()
+	defer itemsLock.Unlock()
+	old := items
+	items = make(map[string]StatItem, 64)
+	return old
 }
 
 // Escape the string avoid invalid graphite key

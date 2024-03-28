@@ -411,7 +411,7 @@ func DecodeWithTime(reader *bufio.Reader, buf *[]byte, maxContentLength int) (ms
 	// get a message from pool
 	msg = AcquireMessage()
 	defer func() {
-		if err != nil {
+		if err != nil && msg != nil {
 			msg.SetCanRelease()
 			ReleaseMessage(msg)
 		}
