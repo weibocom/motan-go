@@ -1,9 +1,8 @@
 package core
 
 import (
-	"sync"
-
 	"github.com/weibocom/motan-go/log"
+	"sync"
 )
 
 var (
@@ -19,8 +18,23 @@ type SwitcherListener interface {
 	Notify(value bool)
 }
 
+type switcherConfig map[string]bool
+
 func GetSwitcherManager() *SwitcherManager {
 	return manager
+}
+
+func initSwitcher(c *Context) {
+	var sc switcherConfig
+	err := c.Config.GetStruct("switchers", &sc)
+	if err != nil {
+		vlog.Warningf("init switcher config fail: %v", err)
+		return
+	}
+	for k, v := range sc {
+		GetSwitcherManager().Register(k, v)
+	}
+
 }
 
 func (s *SwitcherManager) Register(name string, value bool, listeners ...SwitcherListener) {
@@ -51,6 +65,7 @@ func (s *SwitcherManager) GetAllSwitchers() map[string]bool {
 	return result
 }
 
+// GetSwitcher returns the switcher with the given name, or nil if not found.
 func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
 	s.switcherLock.RLock()
 	defer s.switcherLock.RUnlock()
@@ -59,6 +74,37 @@ func (s *SwitcherManager) GetSwitcher(name string) *Switcher {
 	}
 	vlog.Warningf("[switcher] get switcher failed: %s is not registered", name)
 	return nil
+}
+
+// GetOrRegister returns the switcher with the given name if it's already registered, otherwise registers and returns the new switcher.
+func (s *SwitcherManager) GetOrRegister(name string, value bool, listeners ...SwitcherListener) *Switcher {
+	sw := s.GetSwitcher(name)
+	if sw == nil {
+		s.Register(name, value, listeners...)
+	}
+	return s.GetSwitcher(name)
+}
+
+// IsOpen returns true if the switcher is present and on, otherwise false.
+func (s *SwitcherManager) IsOpen(sn string) bool {
+	s.switcherLock.RLock()
+	defer s.switcherLock.RUnlock()
+	if sw, ok := s.switcherMap[sn]; ok {
+		return sw.IsOpen()
+	}
+	return false
+}
+
+// SetValue sets the value of the switcher with the given name.
+func (s *SwitcherManager) SetValue(name string, value bool) {
+	s.GetOrRegister(name, value).SetValue(value)
+}
+
+// clear clears all registered switchers. only for testing.
+func (s *SwitcherManager) clear() {
+	s.switcherLock.Lock()
+	defer s.switcherLock.Unlock()
+	s.switcherMap = make(map[string]*Switcher)
 }
 
 type Switcher struct {

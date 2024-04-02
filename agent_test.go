@@ -91,6 +91,58 @@ motan-refer:
 	assert.Equal(t, "Hello jack from motan server", resp.GetValue())
 	assert.Equal(t, 100, server.GetProcessPoolSize())
 }
+
+func Test_envHandler(t *testing.T) {
+	t.Parallel()
+	time.Sleep(time.Second * 3)
+	// start client mesh
+	ext := GetDefaultExtFactory()
+	os.Remove("agent.sock")
+	config, _ := config.NewConfigFromReader(bytes.NewReader([]byte(`
+motan-agent:
+  mport: 13500
+  port: 14821
+  eport: 14281
+  htport: 25282
+
+motan-registry:
+  direct:
+    protocol: direct
+    address: 127.0.0.1:22991
+
+motan-refer:
+    recom-engine-refer:
+      group: hello
+      path: helloService
+      protocol: motan2
+      registry: direct
+      asyncInitConnection: false
+      serialization: breeze`)))
+	agent := NewAgent(ext)
+	agent.RegisterEnvHandlers("testHandler", map[string]http.Handler{
+		"/test/test": testHandler(),
+	})
+	os.Setenv(core.HandlerEnvironmentName, "testHandler")
+	go agent.StartMotanAgentFromConfig(config)
+	time.Sleep(time.Second * 3)
+	client := http.Client{
+		Timeout: time.Second,
+	}
+	resp, err := client.Get("http://127.0.0.1:13500/test/test")
+	assert.Nil(t, err)
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	assert.Equal(t, string(b), "OK")
+	os.Unsetenv(core.HandlerEnvironmentName)
+}
+
+func testHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("OK"))
+	}
+}
+
 func Test_unixClientCall2(t *testing.T) {
 	t.Parallel()
 	startServer(t, "helloService", 22992)

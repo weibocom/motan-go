@@ -4,12 +4,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	cfg "github.com/weibocom/motan-go/config"
+	"github.com/weibocom/motan-go/log"
 	"os"
 	"reflect"
 	"strings"
-
-	cfg "github.com/weibocom/motan-go/config"
-	"github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -69,7 +68,8 @@ var (
 	defaultConfigPath = "./"
 	defaultFileSuffix = ".yaml"
 
-	urlFields = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
+	extFilters = make(map[string]bool)
 )
 
 // all env flag in motan-go
@@ -86,6 +86,17 @@ var (
 	Application = flag.String("application", "", "assist for application pool config.")
 	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
+
+func AddRelevantFilter(filterStr string) {
+	k := strings.TrimSpace(filterStr)
+	if k != "" {
+		extFilters[k] = true
+	}
+}
+
+func GetRelevantFilters() map[string]bool {
+	return extFilters
+}
 
 func (c *Context) confToURLs(section string) map[string]*URL {
 	urls := map[string]*URL{}
@@ -238,6 +249,7 @@ func (c *Context) Initialize() {
 	c.parserBasicServices()
 	c.parseServices()
 	c.parseHTTPClients()
+	initSwitcher(c)
 }
 
 func (c *Context) parseSingleConfiguration() (*cfg.Config, error) {
@@ -397,11 +409,12 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 			newURL = url
 		}
 
-		//final filters: defaultFilter + globalFilter + filters + envFilter
+		//final filters: defaultFilter + globalFilter + filters + envFilter + relevantFilters
 		finalFilters := c.MergeFilterSet(
 			c.GetDefaultFilterSet(newURL),
 			c.GetGlobalFilterSet(newURL),
 			c.GetEnvGlobalFilterSet(),
+			GetRelevantFilters(),
 			c.GetFilterSet(newURL.GetStringParamsWithDefault(FilterKey, ""), ""),
 		)
 		if len(finalFilters) > 0 {
@@ -518,8 +531,57 @@ func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
 	}
 }
 
+func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
+	regGroupSuffix := os.Getenv(RegGroupSuffix)
+	if regGroupSuffix == "" {
+		return
+	}
+	filterMap := make(map[string]struct{}, len(urlMap))
+	for _, url := range urlMap {
+		filterMap[url.GetIdentityWithRegistry()] = struct{}{}
+	}
+	for k, url := range urlMap {
+		if strings.HasSuffix(url.Group, regGroupSuffix) {
+			continue
+		}
+		newUrl := url.Copy()
+		newUrl.Group += regGroupSuffix
+		if _, ok := filterMap[newUrl.GetIdentityWithRegistry()]; ok {
+			continue
+		}
+		filterMap[newUrl.GetIdentityWithRegistry()] = struct{}{}
+		urlMap[k] = newUrl
+	}
+}
+
+func (c *Context) parseSubGroupSuffix(urlMap map[string]*URL) {
+	subGroupSuffix := os.Getenv(SubGroupSuffix)
+	if subGroupSuffix == "" || c.AgentURL == nil {
+		return
+	}
+	filterMap := make(map[string]struct{}, len(urlMap)*2)
+	for _, url := range urlMap {
+		filterMap[url.GetIdentity()] = struct{}{}
+	}
+	for k, url := range urlMap {
+		if strings.HasSuffix(url.Group, subGroupSuffix) {
+			continue
+		}
+		groupWithSuffix := url.Group + subGroupSuffix
+		newUrl := url.Copy()
+		newUrl.Group += subGroupSuffix
+		if _, ok := filterMap[newUrl.GetIdentity()]; ok {
+			continue
+		}
+		filterMap[newUrl.GetIdentity()] = struct{}{}
+		urlMap["auto_"+k+groupWithSuffix] = newUrl
+	}
+}
+
 func (c *Context) parseRefers() {
-	c.RefersURLs = c.basicConfToURLs(refersSection)
+	referUrls := c.basicConfToURLs(refersSection)
+	c.parseSubGroupSuffix(referUrls)
+	c.RefersURLs = referUrls
 }
 
 func (c *Context) parseBasicRefers() {
@@ -529,6 +591,7 @@ func (c *Context) parseBasicRefers() {
 func (c *Context) parseServices() {
 	urlsMap := c.basicConfToURLs(servicesSection)
 	c.parseMultipleServiceGroup(urlsMap)
+	c.parseRegGroupSuffix(urlsMap)
 	c.ServiceURLs = urlsMap
 }
 

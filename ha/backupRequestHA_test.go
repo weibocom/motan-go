@@ -122,9 +122,11 @@ func TestBackupRequestHA_Call3(t *testing.T) {
 
 func getEP(processTime int64) motan.EndPoint {
 	caller := &motan.TestEndPoint{ProcessTime: processTime}
+	caller.SetURL(&motan.URL{})
 	motan.Initialize(caller)
 	fep := &motan.FilterEndPoint{Caller: caller}
-	mf := &filter.MetricsFilter{}
+	metricsFilter := &filter.MetricsFilter{}
+	mf := metricsFilter.NewFilter(nil).(*filter.MetricsFilter)
 	mf.SetContext(&motan.Context{Config: config.NewConfig()})
 	mf.SetNext(motan.GetLastEndPointFilter())
 	fep.Filter = mf
