@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/weibocom/motan-go/endpoint"
 	vlog "github.com/weibocom/motan-go/log"
+	"github.com/weibocom/motan-go/meta"
+	"github.com/weibocom/motan-go/provider"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net"
@@ -193,6 +195,8 @@ func (a *Agent) StartMotanAgentFromConfig(config *cfg.Config) {
 		return
 	}
 	fmt.Println("init agent context success.")
+	// initialize meta package
+	meta.Initialize(a.Context)
 	a.initParam()
 	a.SetSanpshotConf()
 	a.initAgentURL()
@@ -932,11 +936,18 @@ func (a *Agent) doExportService(url *motan.URL) {
 }
 
 type serverAgentMessageHandler struct {
-	providers *motan.CopyOnWriteMap
+	providers          *motan.CopyOnWriteMap
+	frameworkProviders *motan.CopyOnWriteMap
 }
 
 func (sa *serverAgentMessageHandler) Initialize() {
 	sa.providers = motan.NewCopyOnWriteMap()
+	sa.frameworkProviders = motan.NewCopyOnWriteMap()
+	sa.initFrameworkServiceProvider()
+}
+
+func (sa *serverAgentMessageHandler) initFrameworkServiceProvider() {
+	sa.frameworkProviders.Store(meta.MetaServiceName, &provider.MetaProvider{})
 }
 
 func getServiceKey(group, path string) string {
@@ -954,6 +965,13 @@ func (sa *serverAgentMessageHandler) Call(request motan.Request) (res motan.Resp
 		group = request.GetAttachment(motan.GroupKey)
 	}
 	serviceKey := getServiceKey(group, request.GetServiceName())
+	if mfs := request.GetAttachment(mpro.MFrameworkService); mfs != "" {
+		if fp, ok := sa.frameworkProviders.Load(request.GetServiceName()); ok {
+			return fp.(motan.Provider).Call(request)
+		}
+		//throw specific exception to avoid triggering forced fusing on the client side。
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 501, ErrMsg: motan.ServiceNotSupport, ErrType: motan.ServiceException})
+	}
 	if p := sa.providers.LoadOrNil(serviceKey); p != nil {
 		p := p.(motan.Provider)
 		res = p.Call(request)

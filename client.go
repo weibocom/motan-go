@@ -173,3 +173,7 @@ func (m *MCContext) GetRefer(service string) interface{} {
 	// TODO 对client的封装，可以根据idl自动生成代码时支持
 	return nil
 }
+
+func (m *MCContext) GetContext() *motan.Context {
+	return m.context
+}

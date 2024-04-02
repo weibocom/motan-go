@@ -268,6 +268,9 @@ func (m *MotanCluster) Destroy() {
 			vlog.Infof("destroy endpoint %s .", e.GetURL().GetIdentity())
 			e.Destroy()
 		}
+		if d, ok := m.LoadBalance.(motan.Destroyable); ok {
+			d.Destroy()
+		}
 		m.closed = true
 	}
 }

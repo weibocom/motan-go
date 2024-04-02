@@ -100,6 +100,24 @@ func SliceShuffle(slice []string) []string {
 	return slice
 }
 
+func EndpointShuffle(slice []EndPoint) []EndPoint {
+	for i := 0; i < len(slice); i++ {
+		a := rand.Intn(len(slice))
+		b := rand.Intn(len(slice))
+		slice[a], slice[b] = slice[b], slice[a]
+	}
+	return slice
+}
+
+func ByteSliceShuffle(slice []byte) []byte {
+	for i := 0; i < len(slice); i++ {
+		a := rand.Intn(len(slice))
+		b := rand.Intn(len(slice))
+		slice[a], slice[b] = slice[b], slice[a]
+	}
+	return slice
+}
+
 func FirstUpper(s string) string {
 	r := []rune(s)
 
@@ -285,4 +303,11 @@ func GetDirectEnvRegistry(url *URL) *URL {
 func ClearDirectEnvRegistry() {
 	directRpc = nil
 	initDirectEnv = sync.Once{}
+}
+
+func GetNonNegative(originValue int64) int64 {
+	if originValue > 0 {
+		return originValue
+	}
+	return 0x7fffffff & originValue
 }

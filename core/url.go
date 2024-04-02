@@ -336,9 +336,11 @@ func (u *URL) CanServe(other *URL) bool {
 		vlog.Errorf("can not serve path, err : p1:%s, p2:%s", u.Path, other.Path)
 		return false
 	}
-	if !IsSame(u.Parameters, other.Parameters, SerializationKey, "") {
-		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
-		return false
+	if u.Protocol != "motan2" {
+		if !IsSame(u.Parameters, other.Parameters, SerializationKey, "") {
+			vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
+			return false
+		}
 	}
 	// compatible with old version: 0.1
 	if !(IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") || IsSame(u.Parameters, other.Parameters, VersionKey, DefaultReferVersion)) {

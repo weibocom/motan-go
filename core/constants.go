@@ -142,3 +142,17 @@ const (
 const (
 	DefaultReferVersion = "1.0"
 )
+
+// meta info
+const (
+	DefaultMetaPrefix            = "META_"
+	EnvMetaPrefixKey             = "envMetaPrefix"
+	URLRegisterMeta              = "registerMeta"
+	DefaultRegisterMeta          = true
+	MetaCacheExpireSecondKey     = "metaCacheExpireSecond"
+	DynamicMetaKey               = "dynamicMeta"
+	DefaultDynamicMeta           = true
+	WeightRefreshPeriodSecondKey = "weightRefreshPeriodSecond"
+	WeightMetaSuffixKey          = "WEIGHT"
+	ServiceNotSupport            = "service not support"
+)

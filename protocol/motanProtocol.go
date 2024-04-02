@@ -41,18 +41,19 @@ const (
 )
 
 const (
-	MPath          = "M_p"
-	MMethod        = "M_m"
-	MException     = "M_e"
-	MProcessTime   = "M_pt"
-	MMethodDesc    = "M_md"
-	MGroup         = "M_g"
-	MProxyProtocol = "M_pp"
-	MVersion       = "M_v"
-	MModule        = "M_mdu"
-	MSource        = "M_s"
-	MRequestID     = "M_rid"
-	MTimeout       = "M_tmo"
+	MPath             = "M_p"
+	MMethod           = "M_m"
+	MException        = "M_e"
+	MProcessTime      = "M_pt"
+	MMethodDesc       = "M_md"
+	MGroup            = "M_g"
+	MProxyProtocol    = "M_pp"
+	MVersion          = "M_v"
+	MModule           = "M_mdu"
+	MSource           = "M_s"
+	MRequestID        = "M_rid"
+	MTimeout          = "M_tmo"
+	MFrameworkService = "M_fws"
 )
 
 type Header struct {
