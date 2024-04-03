@@ -313,6 +313,7 @@ func buildTestDynamicEpsWithUnavailable(size int, sameStaticWeight bool, maxWeig
 }
 
 func buildTestEps(size int, sameStaticWeight bool, maxWeight int64, adjust bool, unavailableSize int, group string, url *core.URL) []core.EndPoint {
+	rand.Seed(time.Now().UnixNano())
 	var res []core.EndPoint
 	for i := 0; i < size; i++ {
 		weight := maxWeight
