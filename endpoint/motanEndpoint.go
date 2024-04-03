@@ -29,8 +29,6 @@ var (
 	ErrRecvRequestTimeout       = fmt.Errorf("timeout err: receive request timeout")
 	ErrUnsupportedMessage       = fmt.Errorf("stream notify : Unsupported message")
 
-	defaultAsyncResponse = &motan.MotanResponse{Attachment: motan.NewStringMap(motan.DefaultAttachmentSize), RPCContext: &motan.RPCContext{AsyncCall: true}}
-
 	errPanic     = errors.New("panic error")
 	v2StreamPool = sync.Pool{New: func() interface{} {
 		return &V2Stream{
@@ -39,6 +37,7 @@ var (
 	}}
 )
 
+// Deprecated: Use MotanCommonEndpoint instead.
 type MotanEndpoint struct {
 	url                          *motan.URL
 	lock                         sync.Mutex
@@ -61,6 +60,12 @@ type MotanEndpoint struct {
 	keepaliveID      uint64
 	keepaliveRunning bool
 	serialization    motan.Serialization
+}
+
+func (m *MotanEndpoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
 }
 
 func (m *MotanEndpoint) setAvailable(available bool) {
@@ -146,9 +151,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "motanEndpoint error: channels is null")
 	}
-	if rc.AsyncCall {
-		rc.Result.StartTime = time.Now().UnixNano()
-	}
 	// get a channel
 	channel, err := m.channels.Get()
 	if err != nil {
@@ -182,9 +184,6 @@ func (m *MotanEndpoint) Call(request motan.Request) motan.Response {
 		vlog.Errorf("motanEndpoint call fail. ep:%s, req:%s, msgid:%d, error: %s", m.url.GetAddressStr(), motan.GetReqInfo(request), msg.Header.RequestID, err.Error())
 		m.recordErrAndKeepalive()
 		return m.defaultErrMotanResponse(request, "channel call error:"+err.Error())
-	}
-	if rc.AsyncCall {
-		return defaultAsyncResponse
 	}
 	recvMsg.Header.SetProxy(m.proxy)
 	recvMsg.Header.RequestID = request.GetRequestID()
@@ -225,7 +224,7 @@ func (m *MotanEndpoint) initChannelPoolWithRetry(factory ConnFactory, config *Ch
 			for {
 				select {
 				case <-ticker.C:
-					channels, err := NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
+					channels, err = NewV2ChannelPool(m.clientConnection, factory, config, m.serialization, m.lazyInit)
 					if err == nil {
 						m.channels = channels
 						m.setAvailable(true)
@@ -419,16 +418,11 @@ func (s *V2Stream) Send() error {
 	ready := sendReady{message: s.sendMsg}
 	select {
 	case s.channel.sendCh <- ready:
-		// read/write data race
 		if s.rc != nil {
 			sendTime := time.Now()
 			s.rc.RequestSendTime = sendTime
 			if s.rc.Tc != nil {
 				s.rc.Tc.PutReqSpan(&motan.Span{Name: motan.Send, Addr: s.channel.address, Time: sendTime})
-			}
-			if s.rc.AsyncCall {
-				// only return send success, it can release in V2Stream.notify
-				s.canRelease.Store(true)
 			}
 		}
 		return nil
@@ -479,30 +473,6 @@ func (s *V2Stream) notify(msg *mpro.Message, t time.Time) {
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Receive, Addr: s.channel.address, Time: t})
 			s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Decode, Time: time.Now()})
 		}
-		if s.rc.AsyncCall {
-			defer func() {
-				s.RemoveFromChannel()
-				releaseV2Stream(s)
-			}()
-			msg.Header.SetProxy(s.rc.Proxy)
-			result := s.rc.Result
-			response, err := mpro.ConvertToResponse(msg, s.channel.serialization)
-			if err != nil {
-				vlog.Errorf("convert to response fail. ep: %s, requestid:%d, err:%s", s.channel.address, msg.Header.RequestID, err.Error())
-				result.Error = err
-				result.Done <- result
-				return
-			}
-			if err = response.ProcessDeserializable(result.Reply); err != nil {
-				result.Error = err
-			}
-			response.SetProcessTime((time.Now().UnixNano() - result.StartTime) / 1000000)
-			if s.rc.Tc != nil {
-				s.rc.Tc.PutResSpan(&motan.Span{Name: motan.Convert, Addr: s.channel.address, Time: time.Now()})
-			}
-			result.Done <- result
-			return
-		}
 	}
 
 	s.recvMsg = msg
@@ -543,11 +513,7 @@ func (c *V2Channel) newStream(msg *mpro.Message, rc *motan.RPCContext) (*V2Strea
 		c.streamLock.Unlock()
 		s.isHeartBeat = false
 	}
-	if rc != nil && rc.AsyncCall { // release by Stream.Notify
-		s.canRelease.Store(false)
-	} else { // release by Channel self
-		s.canRelease.Store(true)
-	}
+	s.canRelease.Store(true)
 	return s, nil
 }
 
@@ -579,18 +545,11 @@ func (c *V2Channel) Call(msg *mpro.Message, deadline time.Duration, rc *motan.RP
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if rc == nil || !rc.AsyncCall {
-			releaseV2Stream(stream)
-		}
-	}()
+	defer releaseV2Stream(stream)
 
 	stream.SetDeadline(deadline)
 	if err = stream.Send(); err != nil {
 		return nil, err
-	}
-	if rc != nil && rc.AsyncCall {
-		return nil, nil
 	}
 	return stream.Recv()
 }

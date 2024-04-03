@@ -380,6 +380,10 @@ type MockFilter struct {
 	filter func(caller core.Caller, request core.Request) core.Response
 }
 
+func (f *MockFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(f)
+}
+
 func (*MockFilter) SetNext(nextFilter core.EndPointFilter) {
 	panic("implement me")
 }
@@ -421,6 +425,10 @@ type Provider struct {
 	url       *core.URL
 }
 
+func (p *Provider) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
 func (p *Provider) SetService(s interface{}) {
 	if f, ok := s.(func(request core.Request) core.Response); ok {
 		p.handler = f
@@ -457,6 +465,10 @@ type Referrer struct {
 	available bool
 
 	call func(caller core.Caller, request core.Request) core.Response
+}
+
+func (r *Referrer) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{}
 }
 
 func (r *Referrer) GetName() string {

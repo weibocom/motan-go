@@ -133,10 +133,16 @@ const (
 
 // errorCodes
 const (
-	ENoEndpoints = 1001
-	ENoChannel   = 1002
-	EUnkonwnMsg  = 1003
-	EConvertMsg  = 1004
+	ENoEndpoints      = 1001
+	ENoChannel        = 1002
+	EUnkonwnMsg       = 1003
+	EConvertMsg       = 1004
+	EProviderNotExist = 404
+)
+
+// ProviderNotExistPrefix errorMessage
+const (
+	ProviderNotExistPrefix = "provider not exist serviceKey="
 )
 
 const (
@@ -155,4 +161,90 @@ const (
 	WeightRefreshPeriodSecondKey = "weightRefreshPeriodSecond"
 	WeightMetaSuffixKey          = "WEIGHT"
 	ServiceNotSupport            = "service not support"
+)
+
+
+//----------- runtime -------------
+
+const (
+	// -----------top level keys-------------
+
+	RuntimeInstanceTypeKey     = "instanceType"
+	RuntimeExportersKey        = "exporters"
+	RuntimeClustersKey         = "clusters"
+	RuntimeHttpClustersKey     = "httpClusters"
+	RuntimeExtensionFactoryKey = "extensionFactory"
+	RuntimeServersKey          = "servers"
+	RuntimeBasicKey            = "basic"
+
+	//-----------common keys-------------
+
+	RuntimeUrlKey            = "url"
+	RuntimeIsAvailableKey    = "isAvailable"
+	RuntimeProxyKey          = "proxy"
+	RuntimeAvailableKey      = "available"
+	RuntimeEndpointKey       = "endpoint"
+	RuntimeFiltersKey        = "filters"
+	RuntimeClusterFiltersKey = "clusterFilters"
+	RuntimeNameKey           = "name"
+	RuntimeIndexKey          = "index"
+	RuntimeTypeKey           = "type"
+
+	// -----------exporter keys-------------
+
+	RuntimeProviderKey = "provider"
+
+	// -----------server keys-------------
+
+	RuntimeAgentServerKey        = "agentServer"
+	RuntimeAgentPortServerKey    = "agentPortServer"
+	RuntimeMaxContentLengthKey   = "maxContentLength"
+	RuntimeHeartbeatEnabledKey   = "heartbeatEnabled"
+	RuntimeMessageHandlerKey     = "messageHandler"
+	RuntimeProvidersKey          = "providers"
+	RuntimeMessageHandlerTypeKey = "messageHandlerType"
+
+	// -----------http proxy server-------------
+
+	RuntimeHttpProxyServerKey = "httpProxyServer"
+	RuntimeDenyKey            = "deny"
+	RuntimeKeepaliveKey       = "keepalive"
+	RuntimeDefaultDomainKey   = "defaultDomain"
+
+	// -----------cluster keys-------------
+
+	RuntimeReferersKey    = "referers"
+	RuntimeRefererSizeKey = "refererSize"
+	RuntimeUnavailableKey = "unavailable"
+
+	// -----------endpoint keys-------------
+
+	RuntimeErrorCountKey       = "errorCount"
+	RuntimeKeepaliveRunningKey = "keepaliveRunning"
+	RuntimeKeepaliveTypeKey    = "keepaliveType"
+
+	// -----------extensionFactory keys-------------
+
+	RuntimeRegistriesKey = "registries"
+
+	// -----------registry keys-------------
+
+	RuntimeRegisteredServiceUrlsKey = "registeredServiceUrls"
+	RuntimeSubscribedServiceUrlsKey = "subscribedServiceUrls"
+	RuntimeFailedRegisterUrls       = "failedRegisterUrls"
+	RuntimeFailedUnregisterUrls     = "failedUnregisterUrls"
+	RuntimeFailedSubscribeUrls      = "failedSubscribeUrls"
+	RuntimeFailedUnsubScribeUrls    = "failedUnsubscribeUrls"
+	RuntimeSubscribeInfoKey         = "subscribeInfo"
+	RuntimeAgentCommandKey          = "agentCommand"
+	RuntimeServiceCommandKey        = "serviceCommand"
+	RuntimeStaticCommandKey         = "staticCommand"
+	RuntimeWeightKey                = "weight"
+	RuntimeCommandHistoryKey        = "commandHistory"
+	RuntimeNotifyHistoryKey         = "notifyHistory"
+
+	// -----------basic keys-------------
+
+	RuntimeCpuPercentKey = "cpuPercent"
+	RuntimeRssMemoryKey  = "rssMemory"
 )

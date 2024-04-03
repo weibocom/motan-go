@@ -1,6 +1,7 @@
 package core
 
 import (
+	"container/ring"
 	"errors"
 	"net"
 	"strconv"
@@ -88,6 +89,7 @@ type Cloneable interface {
 
 // Caller : can process a motan request. the call maybe process from remote by endpoint, maybe process by some kinds of provider
 type Caller interface {
+	RuntimeInfo
 	WithURL
 	Status
 	Call(request Request) Response
@@ -208,6 +210,7 @@ type SnapshotService interface {
 
 // Registry : can subscribe or register service
 type Registry interface {
+	RuntimeInfo
 	Name
 	WithURL
 	DiscoverService
@@ -241,6 +244,7 @@ type CommandNotifyListener interface {
 
 // Filter : filter request or response in a call processing
 type Filter interface {
+	RuntimeInfo
 	Name
 	// filter must be prototype
 	NewFilter(url *URL) Filter
@@ -272,6 +276,7 @@ type Server interface {
 	WithURL
 	Name
 	Destroyable
+	RuntimeInfo
 	SetMessageHandler(mh MessageHandler)
 	GetMessageHandler() MessageHandler
 	Open(block bool, proxy bool, handler MessageHandler, extFactory ExtensionFactory) error
@@ -280,6 +285,7 @@ type Server interface {
 
 // Exporter : export and manage a service. one exporter bind with a service
 type Exporter interface {
+	RuntimeInfo
 	Export(server Server, extFactory ExtensionFactory, context *Context) error
 	Unexport() error
 	SetProvider(provider Provider)
@@ -299,6 +305,8 @@ type Provider interface {
 
 // MessageHandler : handler message(request) for Server
 type MessageHandler interface {
+	Name
+	RuntimeInfo
 	Call(request Request) (res Response)
 	AddProvider(p Provider) error
 	RmProvider(p Provider)
@@ -316,6 +324,7 @@ type Serialization interface {
 
 // ExtensionFactory : can regiser and get all kinds of extension implements.
 type ExtensionFactory interface {
+	RuntimeInfo
 	GetHa(url *URL) HaStrategy
 	GetLB(url *URL) LoadBalance
 	GetFilter(name string) Filter
@@ -419,7 +428,6 @@ func (c *RPCContext) Reset() {
 	c.BodySize = 0
 	c.SerializeNum = 0
 	c.Serialized = false
-	c.AsyncCall = false
 	c.Result = nil
 	c.Reply = nil
 	c.FinishHandlers = c.FinishHandlers[:0]
@@ -440,10 +448,8 @@ func (c *RPCContext) OnFinish() {
 
 // AsyncResult : async call result
 type AsyncResult struct {
-	StartTime int64
-	Done      chan *AsyncResult
-	Reply     interface{}
-	Error     error
+	Done  chan *AsyncResult
+	Error error
 }
 
 // DeserializableValue : for lazy deserialize
@@ -584,7 +590,6 @@ func (req *MotanRequest) Clone() interface{} {
 			GzipSize:            req.RPCContext.GzipSize,
 			SerializeNum:        req.RPCContext.SerializeNum,
 			Serialized:          req.RPCContext.Serialized,
-			AsyncCall:           req.RPCContext.AsyncCall,
 			Result:              req.RPCContext.Result,
 			Reply:               req.RPCContext.Reply,
 			RequestSendTime:     req.RPCContext.RequestSendTime,
@@ -752,6 +757,20 @@ type DefaultExtensionFactory struct {
 	// singleton instance
 	registries      map[string]Registry
 	newRegistryLock sync.Mutex
+}
+
+func (d *DefaultExtensionFactory) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	// registries runtime info
+	d.newRegistryLock.Lock()
+	defer d.newRegistryLock.Unlock()
+	registriesInfo := map[string]interface{}{}
+	for s, registry := range d.registries {
+		registriesInfo[s] = registry.GetRuntimeInfo()
+	}
+	info[RuntimeRegistriesKey] = registriesInfo
+
+	return info
 }
 
 func (d *DefaultExtensionFactory) GetHa(url *URL) HaStrategy {
@@ -926,6 +945,15 @@ func GetLastClusterFilter() ClusterFilter {
 
 type lastEndPointFilter struct{}
 
+func (l *lastEndPointFilter) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{
+		RuntimeNameKey:  l.GetName(),
+		RuntimeIndexKey: l.GetIndex(),
+		RuntimeTypeKey:  l.GetType(),
+	}
+	return info
+}
+
 func (l *lastEndPointFilter) GetName() string {
 	return "lastEndPointFilter"
 }
@@ -966,6 +994,14 @@ func (l *lastEndPointFilter) GetType() int32 {
 }
 
 type lastClusterFilter struct{}
+
+func (l *lastClusterFilter) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		RuntimeNameKey:  l.GetName(),
+		RuntimeIndexKey: l.GetIndex(),
+		RuntimeTypeKey:  l.GetType(),
+	}
+}
 
 func (l *lastClusterFilter) GetName() string {
 	return "lastClusterFilter"
@@ -1013,6 +1049,13 @@ type FilterEndPoint struct {
 	Filter        EndPointFilter
 	StatusFilters []Status
 	Caller        Caller
+}
+
+func (f *FilterEndPoint) GetRuntimeInfo() map[string]interface{} {
+	if f.Caller != nil {
+		return f.Caller.GetRuntimeInfo()
+	}
+	return map[string]interface{}{}
 }
 
 func (f *FilterEndPoint) Call(request Request) Response {
@@ -1202,4 +1245,77 @@ func GetLocalProvider(service string) Provider {
 		return p.(Provider)
 	}
 	return nil
+}
+
+//-----------RuntimeInfo interface-------------
+
+// RuntimeInfo : output runtime information
+type RuntimeInfo interface {
+	GetRuntimeInfo() map[string]interface{}
+}
+
+// GetRuntimeInfo : call s.GetRuntimeInfo
+func GetRuntimeInfo(s interface{}) map[string]interface{} {
+	if sc, ok := s.(RuntimeInfo); ok {
+		return sc.GetRuntimeInfo()
+	}
+	return map[string]interface{}{}
+}
+
+//-----------CircularRecorder-------------
+type circularRecorderItem struct {
+	timestamp int64
+	value     interface{}
+}
+
+type CircularRecorder struct {
+	ring   *ring.Ring
+	lock   sync.RWMutex
+	keyBuf []byte
+}
+
+func NewCircularRecorder(size int) *CircularRecorder {
+	return &CircularRecorder{
+		ring:   ring.New(size),
+		lock:   sync.RWMutex{},
+		keyBuf: make([]byte, 0, 18),
+	}
+}
+
+func (c *CircularRecorder) AddRecord(item interface{}) {
+	if item == nil {
+		return
+	}
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.ring.Value = &circularRecorderItem{
+		timestamp: time.Now().UnixNano() / 1e6,
+		value:     item,
+	}
+	c.ring = c.ring.Next()
+}
+
+func (c *CircularRecorder) GetRecords() map[string]interface{} {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	records := make(map[string]interface{})
+	idx := int64(0)
+	c.ring.Do(func(i interface{}) {
+		if i != nil {
+			item, ok := i.(*circularRecorderItem)
+			if ok {
+				records[c.generateRecordKey(idx, item.timestamp)] = item.value
+				idx++
+			}
+		}
+	})
+	return records
+}
+
+func (c *CircularRecorder) generateRecordKey(idx, timestamp int64) string {
+	c.keyBuf = c.keyBuf[:0]
+	c.keyBuf = strconv.AppendInt(c.keyBuf, idx, 10)
+	c.keyBuf = append(c.keyBuf, ':')
+	c.keyBuf = strconv.AppendInt(c.keyBuf, timestamp, 10)
+	return string(c.keyBuf)
 }

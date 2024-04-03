@@ -11,6 +11,10 @@ type ClusterCircuitBreakerFilter struct {
 	includeBizException bool
 }
 
+func (c *ClusterCircuitBreakerFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(c)
+}
+
 func (c *ClusterCircuitBreakerFilter) GetIndex() int {
 	return 20
 }

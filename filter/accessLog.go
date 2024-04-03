@@ -18,6 +18,10 @@ type AccessLogFilter struct {
 	next motan.EndPointFilter
 }
 
+func (t *AccessLogFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(t)
+}
+
 func (t *AccessLogFilter) GetIndex() int {
 	return 1
 }

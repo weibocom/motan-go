@@ -55,6 +55,18 @@ type MotanServer struct {
 	heartbeatEnabled bool
 }
 
+func (m *MotanServer) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	info[motan.RuntimeProxyKey] = m.proxy
+	info[motan.RuntimeMaxContentLengthKey] = m.maxContextLength
+	info[motan.RuntimeHeartbeatEnabledKey] = m.heartbeatEnabled
+	if m.URL != nil {
+		info[motan.RuntimeUrlKey] = m.URL.ToExtInfo()
+	}
+	info[motan.RuntimeMessageHandlerKey] = m.handler.GetRuntimeInfo()
+	return info
+}
+
 func (m *MotanServer) Open(block bool, proxy bool, handler motan.MessageHandler, extFactory motan.ExtensionFactory) error {
 	m.isDestroyed = make(chan bool, 1)
 	m.heartbeatEnabled = true

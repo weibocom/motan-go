@@ -11,6 +11,10 @@ type ClusterMetricsFilter struct {
 	next motan.ClusterFilter
 }
 
+func (c *ClusterMetricsFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(c)
+}
+
 func (c *ClusterMetricsFilter) GetIndex() int {
 	return 5
 }
