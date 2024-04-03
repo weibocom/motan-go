@@ -178,6 +178,7 @@ func TestRoundRobinSelector(t *testing.T) {
 func checkRR(t *testing.T, lb *WeightRoundRobinLB, size int, initialMaxWeight int64,
 	round int, expectMaxDelta float64, expectAvgDelta float64, unavailableSize int, url *core.URL) {
 	eps := buildTestDynamicEpsWithUnavailable(size, true, initialMaxWeight, true, unavailableSize, url)
+	rand.Seed(time.Now().UnixNano())
 	eps = core.EndpointShuffle(eps)
 	lb.OnRefresh(eps)
 	_, ok := lb.getSelector().(*roundRobinSelector)
@@ -213,6 +214,7 @@ func TestWeightRingSelector(t *testing.T) {
 func checkKWR(t *testing.T, lb *WeightRoundRobinLB, size int, initialMaxWeight int64,
 	round int, expectMaxDelta float64, expectAvgDelta float64, unavailableSize int, url *core.URL) {
 	eps := buildTestDynamicEpsWithUnavailable(size, false, initialMaxWeight, true, unavailableSize, url)
+	rand.Seed(time.Now().UnixNano())
 	eps = core.EndpointShuffle(eps)
 	lb.OnRefresh(eps)
 	_, ok := lb.getSelector().(*weightedRingSelector)
@@ -256,6 +258,7 @@ func TestSlidingWindowWeightedRoundRobinSelector(t *testing.T) {
 func checkSWWRR(t *testing.T, lb *WeightRoundRobinLB, size int, initialMaxWeight int64,
 	round int, expectMaxDelta float64, expectAvgDelta float64, unavailableSize int, url *core.URL) {
 	eps := buildTestDynamicEpsWithUnavailable(size, false, initialMaxWeight, true, unavailableSize, url)
+	rand.Seed(time.Now().UnixNano())
 	eps = core.EndpointShuffle(eps)
 	lb.OnRefresh(eps)
 	_, ok := lb.getSelector().(*slidingWindowWeightedRoundRobinSelector)
