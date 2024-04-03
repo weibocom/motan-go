@@ -21,8 +21,6 @@ func NewWeightRondRobinLb(url *motan.URL) *WeightRoundRobinLB {
 }
 
 func (r *WeightRoundRobinLB) OnRefresh(endpoints []motan.EndPoint) {
-	//TODO: there was no shuffle operation before, need shuffle?
-	endpoints = motan.EndpointShuffle(endpoints)
 	r.refresher.RefreshWeightedHolders(endpoints)
 }
 
@@ -51,13 +49,20 @@ func (r *WeightRoundRobinLB) getSelector() Selector {
 	return r.selector
 }
 
-func (r *WeightRoundRobinLB) NotifyWeightChange() {
+func (r *WeightRoundRobinLB) setSelector(s Selector) {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
+	r.selector = s
+}
+
+func (r *WeightRoundRobinLB) NotifyWeightChange() {
 	var tempHolders []*WeightedEpHolder
 	h := r.refresher.weightedEpHolders.Load()
 	if h != nil {
 		tempHolders = h.([]*WeightedEpHolder)
+	} else {
+		// fast stop
+		return
 	}
 	weights := make([]int, len(tempHolders))
 	haveSameWeight := true
@@ -69,9 +74,9 @@ func (r *WeightRoundRobinLB) NotifyWeightChange() {
 			haveSameWeight = false
 		}
 	}
-	// if all referers have the same weight, then use RoundRobinSelector
+	// if all eps have the same weight, then use RoundRobinSelector
 	if haveSameWeight { // use RoundRobinLoadBalance
-		selector := r.selector
+		selector := r.getSelector()
 		if selector != nil {
 			if v, ok := selector.(*roundRobinSelector); ok { // reuse the RoundRobinSelector
 				v.refresh(tempHolders)
@@ -79,7 +84,7 @@ func (r *WeightRoundRobinLB) NotifyWeightChange() {
 			}
 		}
 		// new RoundRobinLoadBalance
-		r.selector = newRoundRobinSelector(tempHolders)
+		r.setSelector(newRoundRobinSelector(tempHolders))
 		vlog.Infoln("WeightRoundRobinLoadBalance use RoundRobinSelector. url:" + r.getURLLogInfo())
 		return
 	}
@@ -94,11 +99,11 @@ func (r *WeightRoundRobinLB) NotifyWeightChange() {
 	}
 	// Check whether it is suitable to use WeightedRingSelector
 	if len(weights) <= wrMaxEpSize && totalWeight <= wrMaxTotalWeight {
-		r.selector = newWeightedRingSelector(tempHolders, totalWeight, weights)
+		r.setSelector(newWeightedRingSelector(tempHolders, totalWeight, weights))
 		vlog.Infoln("WeightRoundRobinLoadBalance use WeightedRingSelector. url:" + r.getURLLogInfo())
 		return
 	}
-	r.selector = newSlidingWindowWeightedRoundRobinSelector(tempHolders, weights)
+	r.setSelector(newSlidingWindowWeightedRoundRobinSelector(tempHolders, weights))
 	vlog.Infoln("WeightRoundRobinLoadBalance use SlidingWindowWeightedRoundRobinSelector. url:" + r.getURLLogInfo())
 }
 
@@ -214,9 +219,6 @@ func (r *weightedRingSelector) DoSelect(request motan.Request) motan.EndPoint {
 
 func (r *weightedRingSelector) getHolderIndex(ringIndex int) int {
 	holderIndex := int(r.weightRing[ringIndex%len(r.weightRing)])
-	if holderIndex < 0 {
-		holderIndex += 256
-	}
 	return holderIndex
 }
 
@@ -251,7 +253,7 @@ func newSlidingWindowWeightedRoundRobinSelector(holders []*WeightedEpHolder, wei
 }
 
 func (r *slidingWindowWeightedRoundRobinSelector) DoSelect(request motan.Request) motan.EndPoint {
-	windowStartIndex := motan.GetNonNegative(atomic.AddInt64(&r.idx, 1))
+	windowStartIndex := motan.GetNonNegative(atomic.AddInt64(&r.idx, int64(r.windowSize)))
 	totalWeight := 0
 	var sMaxWeight int64 = 0
 	maxWeightIndex := 0

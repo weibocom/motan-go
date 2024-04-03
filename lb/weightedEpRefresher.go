@@ -26,7 +26,8 @@ type WeightedEpRefresher struct {
 	supportDynamicWeight bool
 	weightedEpHolders    atomic.Value
 	weightLB             motan.WeightLoadBalance
-	isDestroyed          bool
+	isDestroyed          atomic.Bool
+	mutex                sync.Mutex
 }
 
 func NewWeightEpRefresher(url *motan.URL, lb motan.WeightLoadBalance) *WeightedEpRefresher {
@@ -47,7 +48,9 @@ func (w *WeightedEpRefresher) Destroy() {
 }
 
 func (w *WeightedEpRefresher) notifyWeightChange() {
-	vlog.Infoln("weight has changed")
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+	vlog.Infoln("weight has changed, url: " + w.url.GetIdentity())
 	w.weightLB.NotifyWeightChange()
 }
 
@@ -94,7 +97,7 @@ func refreshDynamicWeight(holders []*WeightedEpHolder, taskTimeout int64) bool {
 				defer wg.Done()
 				oldWeight := holder.dynamicWeight
 				var err error
-				holder.dynamicWeight, err = getEpWeight(holder.getEp(), true, 0)
+				dw, err := getEpWeight(holder.getEp(), true, 0)
 				if err != nil {
 					if errors.Is(err, meta.ServiceNotSupportError) {
 						holder.supportDynamicWeight = false
@@ -103,6 +106,7 @@ func refreshDynamicWeight(holders []*WeightedEpHolder, taskTimeout int64) bool {
 					}
 					return
 				}
+				holder.dynamicWeight = dw
 				if oldWeight != holder.dynamicWeight {
 					needNotify.Store(true)
 				}
@@ -114,6 +118,7 @@ func refreshDynamicWeight(holders []*WeightedEpHolder, taskTimeout int64) bool {
 	// just wait certain amount of time
 	timer := time.NewTimer(time.Millisecond * time.Duration(taskTimeout))
 	finishChan := make(chan struct{})
+	defer close(finishChan)
 	go func() {
 		wg.Wait()
 		finishChan <- struct{}{}
@@ -161,10 +166,11 @@ func adjustWeight(ep motan.EndPoint, weight string, defaultWeight int64) int64 {
 
 func (w *WeightedEpRefresher) doRefresh(ctx context.Context, refreshPeriod int64) {
 	ticker := time.NewTicker(time.Second * time.Duration(refreshPeriod))
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			w.isDestroyed = true
+			w.isDestroyed.Store(true)
 			return
 		case <-ticker.C:
 			if w.supportDynamicWeight {

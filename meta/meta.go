@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,31 +36,33 @@ var (
 		"motan2":            true,
 		"motanV1Compatible": true,
 	}
+	once = sync.Once{}
 )
 
 func Initialize(ctx *core.Context) {
-	envMeta = make(map[string]string)
-	expireSecond := defaultCacheExpireSecond
-	if ctx != nil && ctx.Config != nil {
-		envPrefix = ctx.Config.GetStringWithDefault(core.EnvMetaPrefixKey, core.DefaultMetaPrefix)
-		expireSecondStr := ctx.Config.GetStringWithDefault(core.MetaCacheExpireSecondKey, "")
-		if expireSecondStr != "" {
-			tempCacheExpireSecond, err := strconv.Atoi(expireSecondStr)
-			if err == nil && tempCacheExpireSecond > 0 {
-				expireSecond = tempCacheExpireSecond
+	once.Do(func() {
+		expireSecond := defaultCacheExpireSecond
+		if ctx != nil && ctx.Config != nil {
+			envPrefix = ctx.Config.GetStringWithDefault(core.EnvMetaPrefixKey, core.DefaultMetaPrefix)
+			expireSecondStr := ctx.Config.GetStringWithDefault(core.MetaCacheExpireSecondKey, "")
+			if expireSecondStr != "" {
+				tempCacheExpireSecond, err := strconv.Atoi(expireSecondStr)
+				if err == nil && tempCacheExpireSecond > 0 {
+					expireSecond = tempCacheExpireSecond
+				}
 			}
 		}
-	}
-	vlog.Infof("meta cache expire time : %d(s)\n", expireSecond)
-	metaCache = cache.New(time.Second*time.Duration(expireSecond), 30*time.Second)
-	vlog.Infof("using meta prefix : %s\n", envPrefix)
-	// load meta info from env variable
-	for _, env := range os.Environ() {
-		if strings.HasPrefix(env, envPrefix) {
-			kv := strings.Split(env, "=")
-			envMeta[kv[0]] = kv[1]
+		vlog.Infof("meta cache expire time : %d(s)\n", expireSecond)
+		metaCache = cache.New(time.Second*time.Duration(expireSecond), 30*time.Second)
+		vlog.Infof("using meta prefix : %s\n", envPrefix)
+		// load meta info from env variable
+		for _, env := range os.Environ() {
+			if strings.HasPrefix(env, envPrefix) {
+				kv := strings.Split(env, "=")
+				envMeta[kv[0]] = kv[1]
+			}
 		}
-	}
+	})
 }
 
 func GetEnvMeta() map[string]string {
@@ -139,6 +142,7 @@ func getRemoteDynamicMeta(cacheKey string, endpoint core.EndPoint) (map[string]s
 	resp := endpoint.Call(getMetaServiceRequest())
 	if resp.GetException() != nil {
 		if resp.GetException().ErrMsg == core.ServiceNotSupport {
+			notSupportCache.Set(cacheKey, true, cache.DefaultExpiration)
 			return nil, ServiceNotSupportError
 		}
 		return nil, errors.New(resp.GetException().ErrMsg)

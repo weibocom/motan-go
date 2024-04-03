@@ -309,5 +309,5 @@ func GetNonNegative(originValue int64) int64 {
 	if originValue > 0 {
 		return originValue
 	}
-	return 0x7fffffff & originValue
+	return 0x7fffffffffffffff & originValue
 }

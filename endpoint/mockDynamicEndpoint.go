@@ -1,8 +1,7 @@
-package lb
+package endpoint
 
 import (
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/meta"
 	mpro "github.com/weibocom/motan-go/protocol"
 	"strconv"
 	"sync"
@@ -12,9 +11,9 @@ import (
 type MockDynamicEndpoint struct {
 	URL           *motan.URL
 	available     bool
-	dynamicWeight int64
-	staticWeight  int64
-	count         int64
+	DynamicWeight int64
+	StaticWeight  int64
+	Count         int64
 	dynamicMeta   sync.Map
 }
 
@@ -49,10 +48,10 @@ func (m *MockDynamicEndpoint) Call(request motan.Request) motan.Response {
 			resMap[key.(string)] = value.(string)
 			return true
 		})
-		atomic.AddInt64(&m.count, 1)
+		atomic.AddInt64(&m.Count, 1)
 		return &motan.MotanResponse{ProcessTime: 1, Value: resMap}
 	}
-	atomic.AddInt64(&m.count, 1)
+	atomic.AddInt64(&m.Count, 1)
 	return &motan.MotanResponse{ProcessTime: 1, Value: "ok"}
 }
 
@@ -60,29 +59,29 @@ func (m *MockDynamicEndpoint) Destroy() {}
 
 func (m *MockDynamicEndpoint) SetWeight(isDynamic bool, weight int64) {
 	if isDynamic {
-		m.dynamicWeight = weight
+		m.DynamicWeight = weight
 		m.dynamicMeta.Store(motan.DefaultMetaPrefix+motan.WeightMetaSuffixKey, strconv.Itoa(int(weight)))
 	} else {
-		m.staticWeight = weight
+		m.StaticWeight = weight
 		m.URL.PutParam(motan.DefaultMetaPrefix+motan.WeightMetaSuffixKey, strconv.Itoa(int(weight)))
 	}
 }
 
-func newMockDynamicEndpoint(url *motan.URL) *MockDynamicEndpoint {
+func NewMockDynamicEndpoint(url *motan.URL) *MockDynamicEndpoint {
 	return &MockDynamicEndpoint{
 		URL:       url,
 		available: true,
 	}
 }
 
-func newMockDynamicEndpointWithWeight(url *motan.URL, staticWeight int64) *MockDynamicEndpoint {
-	res := newMockDynamicEndpoint(url)
-	res.staticWeight = staticWeight
+func NewMockDynamicEndpointWithWeight(url *motan.URL, staticWeight int64) *MockDynamicEndpoint {
+	res := NewMockDynamicEndpoint(url)
+	res.StaticWeight = staticWeight
 	res.URL.PutParam(motan.DefaultMetaPrefix+motan.WeightMetaSuffixKey, strconv.Itoa(int(staticWeight)))
 	return res
 }
 
 func isMetaServiceRequest(request motan.Request) bool {
-	return request != nil && meta.MetaServiceName == request.GetServiceName() &&
-		meta.MetaMethodName == request.GetMethod() && "y" == request.GetAttachment(mpro.MFrameworkService)
+	return request != nil && "com.weibo.api.motan.runtime.meta.MetaService" == request.GetServiceName() &&
+		"getDynamicMeta" == request.GetMethod() && "y" == request.GetAttachment(mpro.MFrameworkService)
 }

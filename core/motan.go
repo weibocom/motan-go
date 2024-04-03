@@ -730,7 +730,6 @@ func BuildExceptionResponse(requestid uint64, e *Exception) *MotanResponse {
 type DefaultFilterFunc func() Filter
 type NewHaFunc func(url *URL) HaStrategy
 type NewLbFunc func(url *URL) LoadBalance
-type NewLbWithDestroyFunc func(url *URL) (LoadBalance, func())
 type NewEndpointFunc func(url *URL) EndPoint
 type NewProviderFunc func(url *URL) Provider
 type NewRegistryFunc func(url *URL) Registry
@@ -740,16 +739,15 @@ type NewSerializationFunc func() Serialization
 
 type DefaultExtensionFactory struct {
 	// factories
-	filterFactories    map[string]DefaultFilterFunc
-	haFactories        map[string]NewHaFunc
-	lbFactories        map[string]NewLbFunc
-	endpointFactories  map[string]NewEndpointFunc
-	providerFactories  map[string]NewProviderFunc
-	frameworkFactories map[string]NewProviderFunc
-	registryFactories  map[string]NewRegistryFunc
-	servers            map[string]NewServerFunc
-	messageHandlers    map[string]NewMessageHandlerFunc
-	serializations     map[string]NewSerializationFunc
+	filterFactories   map[string]DefaultFilterFunc
+	haFactories       map[string]NewHaFunc
+	lbFactories       map[string]NewLbFunc
+	endpointFactories map[string]NewEndpointFunc
+	providerFactories map[string]NewProviderFunc
+	registryFactories map[string]NewRegistryFunc
+	servers           map[string]NewServerFunc
+	messageHandlers   map[string]NewMessageHandlerFunc
+	serializations    map[string]NewSerializationFunc
 
 	// singleton instance
 	registries      map[string]Registry
