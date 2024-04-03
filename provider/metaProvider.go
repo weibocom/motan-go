@@ -44,3 +44,7 @@ func (m *MetaProvider) Destroy() {}
 func (m *MetaProvider) IsAvailable() bool {
 	return true
 }
+
+func (m *MetaProvider) GetRuntimeInfo() map[string]interface{} {
+	return make(map[string]interface{})
+}

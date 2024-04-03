@@ -57,6 +57,10 @@ func (m *MockDynamicEndpoint) Call(request motan.Request) motan.Response {
 
 func (m *MockDynamicEndpoint) Destroy() {}
 
+func (m *MockDynamicEndpoint) GetRuntimeInfo() map[string]interface{} {
+	return make(map[string]interface{})
+}
+
 func (m *MockDynamicEndpoint) SetWeight(isDynamic bool, weight int64) {
 	if isDynamic {
 		m.DynamicWeight = weight

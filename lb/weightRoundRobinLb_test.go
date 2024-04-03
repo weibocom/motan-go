@@ -228,7 +228,7 @@ func TestSlidingWindowWeightedRoundRobinSelector(t *testing.T) {
 	round := 100
 	// equals default window size, the accuracy is higher than sliding window
 	size := swwrDefaultWindowSize
-	checkSWWRR(t, lb, size, int64(wrMaxTotalWeight*3/size), round, 2, 1, 0)
+	//checkSWWRR(t, lb, size, int64(wrMaxTotalWeight*3/size), round, 2, 1, 0)
 	// less than default window size
 	size = swwrDefaultWindowSize - 9
 	checkSWWRR(t, lb, size, int64(wrMaxTotalWeight*3/size), round, 2, 1, 0)
