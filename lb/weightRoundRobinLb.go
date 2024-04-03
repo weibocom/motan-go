@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type WeightRoundRobinLB struct {
@@ -206,6 +207,7 @@ func (r *weightedRingSelector) DoSelect(request motan.Request) motan.EndPoint {
 		return ep
 	}
 	// If the ep is not available, loop selection from random position
+	rand.Seed(time.Now().UnixNano())
 	start := rand.Intn(len(r.weightRing))
 	for i := 0; i < len(r.weightRing); i++ {
 		// byte could indicate 0~255
