@@ -24,6 +24,7 @@ zj*
 # gdb
 *.gdb_history
 __*
+*.log
 
 # motan-go
 *.pid

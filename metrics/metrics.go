@@ -39,6 +39,10 @@ const (
 	DefaultStatService     = "status"
 	DefaultStatRole        = "motan-agent"
 	DefaultStatApplication = "unknown"
+
+	DefaultRuntimeErrorApplication      = "runtime-error"
+	DefaultRuntimeCircuitBreakerGroup   = "circuit-breaker"
+	DefaultRuntimeCircuitBreakerService = "endpoint"
 )
 
 var (

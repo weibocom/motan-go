@@ -84,6 +84,9 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 
 		hotReload := &HotReload{}
 		defaultManageHandlers["/reload/clusters"] = hotReload
+
+		runtimeHandler := &RuntimeHandler{}
+		defaultManageHandlers["/runtime/info"] = runtimeHandler
 	})
 	return defaultManageHandlers
 }

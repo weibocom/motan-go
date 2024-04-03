@@ -15,6 +15,16 @@ type MotanProvider struct {
 	extFactory motan.ExtensionFactory
 }
 
+func (m *MotanProvider) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if m.url != nil {
+		info[motan.RuntimeUrlKey] = m.url.ToExtInfo()
+	}
+	info[motan.RuntimeAvailableKey] = m.available
+	info[motan.RuntimeEndpointKey] = m.ep.GetRuntimeInfo()
+	return info
+}
+
 const (
 	ProxyHostKey = "proxy.host"
 	DefaultHost  = "127.0.0.1"

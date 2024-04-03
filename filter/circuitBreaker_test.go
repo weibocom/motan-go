@@ -189,6 +189,10 @@ func TestMockException(t *testing.T) {
 
 type mockEndPointFilter struct{}
 
+func (m *mockEndPointFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(m)
+}
+
 func (m *mockEndPointFilter) GetName() string {
 	return "mockEndPointFilter"
 }
@@ -225,6 +229,10 @@ func (m *mockEndPointFilter) GetType() int32 {
 }
 
 type mockExceptionEPFilter struct{}
+
+func (m *mockExceptionEPFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(m)
+}
 
 func (m *mockExceptionEPFilter) GetName() string {
 	return "mockEndPointFilter"

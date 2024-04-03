@@ -23,6 +23,15 @@ func TestInitFilter(t *testing.T) {
 	cluster.initFilters()
 	checkClusterFilter(cluster.clusterFilter, 4, t)
 	checkEndpointFilter(cluster.Filters, 3, t)
+	// check runtime info filters
+	info := cluster.GetRuntimeInfo()
+	filters, ok := info[motan.RuntimeFiltersKey]
+	assert.True(t, ok)
+	assert.Equal(t, 3, len(filters.([]interface{})))
+
+	clusterFilters, ok := info[motan.RuntimeClusterFiltersKey]
+	assert.True(t, ok)
+	assert.Equal(t, 4, len(clusterFilters.([]interface{})))
 }
 
 func checkClusterFilter(filter motan.ClusterFilter, expectDeep int, t *testing.T) {
@@ -94,6 +103,38 @@ func TestNotify(t *testing.T) {
 	if destroyEndpoint.IsAvailable() {
 		t.Fatalf("cluster endpoint should not be available")
 	}
+
+	// check runtime info
+	info := cluster.GetRuntimeInfo()
+	assert.NotNil(t, info)
+
+	name, ok := info[motan.RuntimeNameKey]
+	assert.True(t, ok)
+	assert.Equal(t, cluster.GetName(), name)
+
+	refersSize, ok := info[motan.RuntimeRefererSizeKey]
+	assert.True(t, ok)
+	assert.Equal(t, len(cluster.Refers), refersSize)
+
+	urlInfo, ok := info[motan.RuntimeUrlKey]
+	assert.True(t, ok)
+	assert.NotNil(t, urlInfo)
+
+	refers, ok := info[motan.RuntimeReferersKey]
+	assert.True(t, ok)
+	assert.NotNil(t, refers)
+
+	available, ok := refers.(map[string]interface{})[motan.RuntimeAvailableKey]
+	assert.True(t, ok)
+	assert.NotNil(t, available)
+
+	unavailable, ok := refers.(map[string]interface{})[motan.RuntimeUnavailableKey]
+	assert.True(t, ok)
+	assert.NotNil(t, unavailable)
+
+	registries, ok := info[motan.RuntimeRegistriesKey]
+	assert.True(t, ok)
+	assert.NotNil(t, registries)
 }
 
 func TestCall(t *testing.T) {

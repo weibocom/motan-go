@@ -81,6 +81,10 @@ func TestClusterCircuitBreakerOther(t *testing.T) {
 
 type mockClusterFilter struct{}
 
+func (c *mockClusterFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(c)
+}
+
 func (c *mockClusterFilter) GetIndex() int {
 	return 101
 }

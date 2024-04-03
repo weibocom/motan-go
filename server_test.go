@@ -95,6 +95,9 @@ motan-server:
 }
 
 func TestServerRegisterFailBack(t *testing.T) {
+	currentFailbackInterval := registry.GetFailbackInterval()
+	newInterval := uint32(1000 * 5)
+	registry.SetFailbackInterval(newInterval)
 	assert := assert2.New(t)
 	cfgText := `
 motan-server:
@@ -148,7 +151,7 @@ motan-service:
 		}
 	}
 	setRegistryFailSwitcher(false)
-	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	time.Sleep(time.Duration(newInterval) * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
@@ -166,7 +169,7 @@ motan-service:
 		}
 	}
 	setRegistryFailSwitcher(false)
-	time.Sleep(registry.DefaultFailbackInterval * time.Millisecond)
+	time.Sleep(time.Duration(newInterval) * time.Millisecond)
 	m = mscontext.GetRegistryStatus()
 	assert.Equal(len(m), 1)
 	for _, mm := range m[0] {
@@ -174,6 +177,7 @@ motan-service:
 			assert.Equal(mm.Status, motan.UnregisterSuccess)
 		}
 	}
+	registry.SetFailbackInterval(currentFailbackInterval)
 }
 
 func TestNewMotanServerContextFromConfig(t *testing.T) {

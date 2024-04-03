@@ -7,8 +7,12 @@ import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/log"
 	"golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
-	metadata "google.golang.org/grpc/metadata"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+)
+
+const (
+	GRPCSerialNum = 1
 )
 
 type GrpcEndPoint struct {
@@ -17,9 +21,11 @@ type GrpcEndPoint struct {
 	proxy    bool
 }
 
-const (
-	GRPCSerialNum = 1
-)
+func (g *GrpcEndPoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: g.GetName(),
+	}
+}
 
 func (g *GrpcEndPoint) Initialize() {
 	grpcconn, err := grpc.Dial((g.url.Host + ":" + strconv.Itoa((int)(g.url.Port))), grpc.WithInsecure(), grpc.WithCodec(&agentCodec{}))

@@ -119,6 +119,10 @@ type TracingFilter struct {
 	next core.EndPointFilter
 }
 
+func (t *TracingFilter) GetRuntimeInfo() map[string]interface{} {
+	return GetFilterRuntimeInfo(t)
+}
+
 func (t *TracingFilter) SetNext(nextFilter core.EndPointFilter) {
 	t.next = nextFilter
 }

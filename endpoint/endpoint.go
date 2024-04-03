@@ -26,7 +26,7 @@ var idOffset uint64 // id generator offset
 
 func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
-		return &MotanEndpoint{url: url}
+		return &MotanCommonEndpoint{url: url}
 	})
 
 	extFactory.RegistExtEndpoint(Grpc, func(url *motan.URL) motan.EndPoint {
@@ -63,6 +63,12 @@ func GenerateRequestID() uint64 {
 type MockEndpoint struct {
 	URL          *motan.URL
 	MockResponse motan.Response
+}
+
+func (m *MockEndpoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
 }
 
 func (m *MockEndpoint) GetName() string {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -19,7 +20,6 @@ const (
 	DefaultHeartbeatInterval = 10 * 1000 //ms
 	DefaultTimeout           = 3 * 1000  //ms
 	DefaultSnapshotDir       = "./snapshot"
-	DefaultFailbackInterval  = 30 * 1000 //ms
 )
 
 // ext name
@@ -32,8 +32,17 @@ const (
 )
 
 var (
-	setSnapshotConfLock sync.Mutex
+	setSnapshotConfLock     sync.Mutex
+	defaultFailbackInterval uint32 = 30000 // ms
 )
+
+func GetFailbackInterval() uint32 {
+	return atomic.LoadUint32(&defaultFailbackInterval)
+}
+
+func SetFailbackInterval(interval uint32) {
+	atomic.StoreUint32(&defaultFailbackInterval, interval)
+}
 
 type SnapshotNodeInfo struct {
 	ExtInfo string `json:"extInfo"`

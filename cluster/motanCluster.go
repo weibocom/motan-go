@@ -347,6 +347,61 @@ func (m *MotanCluster) NotifyAgentCommand(commandInfo string) {
 	}
 }
 
+func (m *MotanCluster) GetRuntimeInfo() map[string]interface{} {
+	m.notifyLock.Lock()
+	defer m.notifyLock.Unlock()
+
+	referSize := len(m.Refers)
+	info := map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
+	info[motan.RuntimeRefererSizeKey] = referSize
+	if m.url != nil {
+		info[motan.RuntimeUrlKey] = m.url.ToExtInfo()
+	}
+
+	unavailableRefers := make(map[string]interface{})
+	availableRefers := make(map[string]interface{}, referSize)
+	i := 0
+	for _, endpoint := range m.Refers {
+		ep := endpoint.(*motan.FilterEndPoint)
+		if ep.IsAvailable() {
+			availableRefers[fmt.Sprintf("%d-%s", i, ep.URL.GetIdentity())] = ep.Caller.GetRuntimeInfo()
+		} else {
+			unavailableRefers[fmt.Sprintf("%d-%s", i, ep.URL.GetIdentity())] = ep.Caller.GetRuntimeInfo()
+		}
+		i++
+	}
+	info[motan.RuntimeReferersKey] = map[string]interface{}{
+		motan.RuntimeAvailableKey:   availableRefers,
+		motan.RuntimeUnavailableKey: unavailableRefers,
+	}
+	registriesInfo := make(map[string]interface{}, len(m.Registries))
+	for _, registry := range m.Registries {
+		registriesInfo[registry.GetURL().GetIdentity()] = registry.GetRuntimeInfo()
+	}
+	info[motan.RuntimeRegistriesKey] = registriesInfo
+
+	var filtersInfo []interface{}
+	for _, filter := range m.Filters {
+		filtersInfo = append(filtersInfo, filter.GetRuntimeInfo())
+	}
+	if len(filtersInfo) > 0 {
+		info[motan.RuntimeFiltersKey] = filtersInfo
+	}
+
+	var clusterFilters []interface{}
+	clusterFilter := m.clusterFilter
+	for clusterFilter != nil {
+		clusterFilters = append(clusterFilters, clusterFilter.GetRuntimeInfo())
+		clusterFilter = clusterFilter.GetNext()
+	}
+	if len(clusterFilters) > 0 {
+		info[motan.RuntimeClusterFiltersKey] = clusterFilters
+	}
+	return info
+}
+
 const (
 	clusterIdcPlaceHolder = "${idc}"
 )

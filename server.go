@@ -271,7 +271,7 @@ func (m *MSContext) GetRegistryStatus() []map[string]*motan.RegistryStatus {
 
 func (m *MSContext) startRegistryFailback() {
 	vlog.Infoln("start MSContext registry failback")
-	ticker := time.NewTicker(registry.DefaultFailbackInterval * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(registry.GetFailbackInterval()) * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		m.registryLock.Lock()
