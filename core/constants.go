@@ -154,7 +154,7 @@ const (
 	DefaultMetaPrefix            = "META_"
 	EnvMetaPrefixKey             = "envMetaPrefix"
 	URLRegisterMeta              = "registerMeta"
-	DefaultRegisterMeta          = true
+	DefaultRegisterMeta          = false
 	MetaCacheExpireSecondKey     = "metaCacheExpireSecond"
 	DynamicMetaKey               = "dynamicMeta"
 	DefaultDynamicMeta           = true
@@ -162,7 +162,6 @@ const (
 	WeightMetaSuffixKey          = "WEIGHT"
 	ServiceNotSupport            = "service not support"
 )
-
 
 //----------- runtime -------------
 

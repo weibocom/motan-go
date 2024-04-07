@@ -103,7 +103,7 @@ func TestCopyAndMerge(t *testing.T) {
 	}
 }
 
-func TestCanServer(t *testing.T) {
+func TestCanServe(t *testing.T) {
 	params1 := make(map[string]string)
 	params2 := make(map[string]string)
 	url1 := &URL{Protocol: "motan", Path: "test/path", Parameters: params1}
@@ -146,6 +146,33 @@ func TestCanServer(t *testing.T) {
 		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
 	}
 	fmt.Printf("url1:%+v, url2:%+v\n", url1, url2)
+	url1.Path = ""
+	url2.Path = ""
+	url1.Protocol = "motan2"
+	url2.Protocol = "motanV1Compatible"
+	if !url1.CanServe(url2) {
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
+	}
+	url1.Protocol = "motan"
+	url2.Protocol = "motanV1Compatible"
+	if !url1.CanServe(url2) {
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
+	}
+	url1.Protocol = "local"
+	url2.Protocol = "motanV1Compatible"
+	if !url1.CanServe(url2) {
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
+	}
+	url1.Protocol = "abc"
+	url2.Protocol = "motanV1Compatible"
+	if url1.CanServe(url2) {
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
+	}
+	url1.Protocol = "motan"
+	url2.Protocol = "motan2"
+	if url1.CanServe(url2) {
+		t.Fatalf("url CanServe testFail url1: %+v, url2: %+v\n", url1, url2)
+	}
 }
 
 func TestGetPositiveIntValue(t *testing.T) {
