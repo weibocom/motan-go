@@ -58,12 +58,11 @@ func (r *WeightRoundRobinLB) setSelector(s Selector) {
 func (r *WeightRoundRobinLB) NotifyWeightChange() {
 	var tempHolders []*WeightedEpHolder
 	h := r.refresher.weightedEpHolders.Load()
-	if h != nil {
-		tempHolders = h.([]*WeightedEpHolder)
-	} else {
+	if h == nil {
 		// fast stop
 		return
 	}
+	tempHolders = h.([]*WeightedEpHolder)
 	weights := make([]int, len(tempHolders))
 	haveSameWeight := true
 	totalWeight := 0

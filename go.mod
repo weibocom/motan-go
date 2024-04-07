@@ -25,7 +25,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/valyala/fasthttp v1.2.0
 	github.com/weibreeze/breeze-go v0.1.1
-	go.uber.org/atomic v1.4.0 // indirect
+	go.uber.org/atomic v1.4.0
 	go.uber.org/multierr v1.1.0 // indirect
 	go.uber.org/zap v1.10.0
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
