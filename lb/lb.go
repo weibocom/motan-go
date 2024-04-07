@@ -16,6 +16,7 @@ const (
 	Random            = "random"
 	Roundrobin        = "roundrobin"
 	ConsistentHashKey = "consistentHashKey"
+	WeightRoundRobin  = "wrr"
 )
 
 const (
@@ -39,6 +40,9 @@ func RegistDefaultLb(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtLb(ConsistentHashKey, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
 		return &ConsistentHashLB{url: url}
 	}))
+	extFactory.RegistExtLb(WeightRoundRobin, NewWeightLbFunc(func(url *motan.URL) motan.LoadBalance {
+		return NewWeightRondRobinLb(url)
+	}))
 }
 
 // WeightedLbWrapper support multi group weighted LB
@@ -52,6 +56,25 @@ type WeightedLbWrapper struct {
 func NewWeightLbFunc(newLb motan.NewLbFunc) motan.NewLbFunc {
 	return func(url *motan.URL) motan.LoadBalance {
 		return &WeightedLbWrapper{url: url, newLb: newLb, refers: &singleGroupRefers{lb: newLb(url)}}
+	}
+}
+
+func (w *WeightedLbWrapper) Destroy() {
+	destroyInnerRefers(w.refers)
+}
+
+func destroyInnerRefers(refers innerRefers) {
+	if v, ok := refers.(*singleGroupRefers); ok {
+		if vlb, ok := v.lb.(motan.Destroyable); ok {
+			vlb.Destroy()
+		}
+	}
+	if v, ok := refers.(*weightedRefers); ok {
+		for _, lb := range v.groupLb {
+			if vlb, ok := lb.(motan.Destroyable); ok {
+				vlb.Destroy()
+			}
+		}
 	}
 }
 
@@ -130,7 +153,9 @@ func (w *WeightedLbWrapper) OnRefresh(endpoints []motan.EndPoint) {
 	}
 	wr.weightRing = motan.SliceShuffle(ring)
 	wr.ringSize = len(wr.weightRing)
+	oldRefers := w.refers
 	w.refers = wr
+	destroyInnerRefers(oldRefers)
 	vlog.Infof("WeightedLbWrapper: %s - OnRefresh: weight:%s", w.url.GetIdentity(), w.weightString)
 }
 
@@ -140,7 +165,9 @@ func (w *WeightedLbWrapper) onRefreshSingleGroup(endpoints []motan.EndPoint) {
 	} else {
 		lb := w.newLb(w.url)
 		lb.OnRefresh(endpoints)
+		oldRefers := w.refers
 		w.refers = &singleGroupRefers{lb: lb}
+		destroyInnerRefers(oldRefers)
 	}
 }
 

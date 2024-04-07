@@ -162,6 +162,12 @@ type LoadBalance interface {
 	SetWeight(weight string)
 }
 
+// WeightLoadBalance : weight loadBalance for cluster
+type WeightLoadBalance interface {
+	LoadBalance
+	NotifyWeightChange()
+}
+
 // DiscoverService : discover service for cluster
 type DiscoverService interface {
 	Subscribe(url *URL, listener NotifyListener)

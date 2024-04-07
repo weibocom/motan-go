@@ -620,7 +620,7 @@ func (s *Stream) RemoveFromChannel() bool {
 
 // Call send request to the server.
 //
-//	about return: exception in response will record error count, err will not.
+//	about return: exception in response will record error Count, err will not.
 func (c *Channel) Call(req motan.Request, deadline time.Duration, rc *motan.RPCContext) (motan.Response, error) {
 	stream, err := c.newStream(req, rc, deadline)
 	if err != nil {

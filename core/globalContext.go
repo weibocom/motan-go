@@ -438,7 +438,6 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		if len(finalFilters) > 0 {
 			newURL.PutParam(FilterKey, c.FilterSetToStr(finalFilters))
 		}
-
 		newURLs[key] = newURL
 	}
 	return newURLs
