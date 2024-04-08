@@ -328,7 +328,7 @@ func (u *URL) MergeParams(params map[string]string) {
 }
 
 func (u *URL) CanServe(other *URL) bool {
-	if u.Protocol != other.Protocol && u.Protocol != ProtocolLocal {
+	if !u.CanServeProtocol(other) {
 		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s", u.Protocol, other.Protocol)
 		return false
 	}
@@ -348,6 +348,14 @@ func (u *URL) CanServe(other *URL) bool {
 		return false
 	}
 	return true
+}
+
+func (u *URL) CanServeProtocol(other *URL) bool {
+	// motanV1Compatible should compatible with motan2, motan and motanV1Compatible
+	if other.Protocol == "motanV1Compatible" && (u.Protocol == "motan2" || u.Protocol == "motan" || u.Protocol == "motanV1Compatible") {
+		return true
+	}
+	return u.Protocol == other.Protocol || u.Protocol == ProtocolLocal
 }
 
 func IsSame(m1 map[string]string, m2 map[string]string, key string, defaultValue string) bool {
