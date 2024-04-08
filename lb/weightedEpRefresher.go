@@ -121,7 +121,17 @@ func refreshDynamicWeight(holders []*WeightedEpHolder, taskTimeout int64) bool {
 	defer close(finishChan)
 	go func() {
 		wg.Wait()
-		finishChan <- struct{}{}
+		// the chan might be closed
+		select {
+		case _, ok := <-finishChan:
+			if !ok {
+				// chan has been closed
+				return
+			}
+		default:
+			finishChan <- struct{}{}
+			return
+		}
 	}()
 	select {
 	case <-timer.C:
