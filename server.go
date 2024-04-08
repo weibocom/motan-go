@@ -207,6 +207,10 @@ func (m *MSContext) Initialize() {
 	}
 }
 
+func (m *MSContext) GetContext() *motan.Context {
+	return m.context
+}
+
 // RegisterService register service with serviceId for config ref.
 // the type.string will used as serviceId if sid is not set. e.g. 'packageName.structName'
 func (m *MSContext) RegisterService(s interface{}, sid string) error {
