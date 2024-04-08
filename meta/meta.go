@@ -23,6 +23,7 @@ var (
 	dynamicMeta            = core.NewStringMap(30)
 	envMeta                = make(map[string]string)
 	envPrefix              = core.DefaultMetaPrefix
+	metaEmptyMap           = make(map[string]string)
 	metaCache              = cache.New(time.Second*time.Duration(defaultCacheExpireSecond), 30*time.Second)
 	notSupportCache        = cache.New(time.Second*time.Duration(notSupportCacheExpireSecond), 30*time.Second)
 	ServiceNotSupportError = errors.New(core.ServiceNotSupport)
@@ -152,7 +153,12 @@ func getRemoteDynamicMeta(cacheKey string, endpoint core.EndPoint) (map[string]s
 	if err != nil {
 		return nil, err
 	}
-	return resp.GetValue().(map[string]string), nil
+	// multiple serialization might encode empty map into interface{}, not map[string]string
+	// in this case, return a public empty string map
+	if res, ok := resp.GetValue().(map[string]string); ok && res != nil {
+		return res, nil
+	}
+	return metaEmptyMap, nil
 }
 
 func getMetaServiceRequest() core.Request {
