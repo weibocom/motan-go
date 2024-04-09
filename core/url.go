@@ -64,7 +64,7 @@ func (u *URL) IsMatch(service, group, protocol, version string) bool {
 	}
 	// for motan v1 request, parameter protocol should be empty
 	if protocol != "" {
-		if u.Protocol == "motanV1Compatible" {
+		if u.Protocol == "motan2" {
 			if protocol != "motan2" && protocol != "motan" {
 				return false
 			}
@@ -351,8 +351,8 @@ func (u *URL) CanServe(other *URL) bool {
 }
 
 func (u *URL) CanServeProtocol(other *URL) bool {
-	// motanV1Compatible should compatible with motan2, motan and motanV1Compatible
-	if other.Protocol == "motanV1Compatible" && (u.Protocol == "motan2" || u.Protocol == "motan" || u.Protocol == "motanV1Compatible") {
+	// motan2 is compatible with motan
+	if other.Protocol == "motan" && u.Protocol == "motan2" {
 		return true
 	}
 	return u.Protocol == other.Protocol || u.Protocol == ProtocolLocal

@@ -128,10 +128,6 @@ func (c *DynamicConfigurer) doUnregister(url *core.URL) error {
 }
 
 func (c *DynamicConfigurer) Subscribe(url *core.URL) error {
-	// use motanV1Compatible to compatible with protocol: motan
-	if url.Protocol == "motan" {
-		url.Protocol = "motanV1Compatible"
-	}
 	err := c.doSubscribe(url)
 	if err != nil {
 		return err

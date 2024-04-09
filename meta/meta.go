@@ -33,9 +33,8 @@ var (
 		"grpc-pb-json": true,
 	}
 	supportProtocols = map[string]bool{
-		"motan":             true,
-		"motan2":            true,
-		"motanV1Compatible": true,
+		"motan":  true,
+		"motan2": true,
 	}
 	once = sync.Once{}
 )
