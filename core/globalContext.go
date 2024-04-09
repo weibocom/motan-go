@@ -598,6 +598,12 @@ func (c *Context) parseSubGroupSuffix(urlMap map[string]*URL) {
 func (c *Context) parseRefers() {
 	referUrls := c.basicConfToURLs(refersSection)
 	c.parseSubGroupSuffix(referUrls)
+	//TODO: to compatible with removed protocol: motanV1Compatible
+	for k := range referUrls {
+		if referUrls[k].Protocol == "motanV1Compatible" {
+			referUrls[k].Protocol = "motan"
+		}
+	}
 	c.RefersURLs = referUrls
 }
 
