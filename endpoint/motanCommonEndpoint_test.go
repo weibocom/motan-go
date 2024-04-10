@@ -14,7 +14,7 @@ import (
 )
 
 func TestGetV1Name(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanCommonEndpoint{}
@@ -33,7 +33,7 @@ func TestGetV1Name(t *testing.T) {
 }
 
 func TestV1RecordErrEmptyThreshold(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ClientConnectionKey, "1")
 	url.PutParam(motan.AsyncInitConnection, "false")
@@ -55,7 +55,7 @@ func TestV1RecordErrEmptyThreshold(t *testing.T) {
 }
 
 func TestV1RecordErrWithErrThreshold(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "5")
 	url.PutParam(motan.ClientConnectionKey, "1")
@@ -89,7 +89,7 @@ func TestV1RecordErrWithErrThreshold(t *testing.T) {
 }
 
 func TestNotFoundProviderCircuitBreaker(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "5")
 	url.PutParam(motan.ClientConnectionKey, "10")
@@ -135,7 +135,7 @@ func TestNotFoundProviderCircuitBreaker(t *testing.T) {
 }
 
 func TestMotanCommonEndpoint_SuccessCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "2000")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
@@ -158,7 +158,7 @@ func TestMotanCommonEndpoint_SuccessCall(t *testing.T) {
 }
 
 func TestMotanCommonEndpoint_ErrorCall(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
@@ -187,7 +187,7 @@ func TestMotanCommonEndpoint_ErrorCall(t *testing.T) {
 }
 
 func TestMotanCommonEndpoint_RequestTimeout(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible"}
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
@@ -215,7 +215,7 @@ func TestMotanCommonEndpoint_RequestTimeout(t *testing.T) {
 }
 
 func TestV1LazyInit(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"lazyInit": "true"}}
+	url := &motan.URL{Port: 8989, Protocol: "motan", Parameters: map[string]string{"lazyInit": "true"}}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")
@@ -242,7 +242,7 @@ func TestV1LazyInit(t *testing.T) {
 }
 
 func TestV1AsyncInit(t *testing.T) {
-	url := &motan.URL{Port: 8989, Protocol: "motanV1Compatible", Parameters: map[string]string{"asyncInitConnection": "true"}}
+	url := &motan.URL{Port: 8989, Protocol: "motan", Parameters: map[string]string{"asyncInitConnection": "true"}}
 	url.PutParam(motan.TimeOutKey, "100")
 	url.PutParam(motan.ErrorCountThresholdKey, "1")
 	url.PutParam(motan.ClientConnectionKey, "1")

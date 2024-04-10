@@ -39,9 +39,6 @@ func (m *MotanProvider) Initialize() {
 		vlog.Errorln("reverse proxy service port config error!")
 		return
 	}
-	if protocol == "motan2" || protocol == "motan" { // TODO temp compatible with motan1. remove if MotanCommonEndpoint as default Motan endpoint
-		protocol = "motanV1Compatible"
-	}
 	host := m.url.GetParam(ProxyHostKey, DefaultHost)
 	endpointURL := m.url.Copy()
 	endpointURL.Protocol = protocol

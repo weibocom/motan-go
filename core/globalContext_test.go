@@ -30,6 +30,15 @@ func TestGetContext(t *testing.T) {
 	assert.Equal(t, "motan-demo-rpc", rs.ServiceURLs["mytest-motan2"].Group, "parse serivce key fail")
 }
 
+func TestCompatible(t *testing.T) {
+	rs := &Context{ConfigFile: "../config/compatible.yaml"}
+	rs.Initialize()
+	assert.NotNil(t, rs.RefersURLs)
+	for _, j := range rs.RefersURLs {
+		assert.Equal(t, j.Protocol, "motan")
+	}
+}
+
 func TestNewContext(t *testing.T) {
 	configFile := filepath.Join("testdata", "app.yaml")
 	pool1Context := NewContext(configFile, "app", "app-idc1")

@@ -1,0 +1,57 @@
+#only for unit test!!
+motan-agent:
+  port: 9981
+  mport: 8002
+  #log_dir: "/data1/logs/agentlog/"
+  log_dir: "./logs"
+  registry: "vintage"
+  application: "pc-yf-test"
+
+motan-server:
+  testkey:testv
+
+motan-client:
+  testkey:testv
+
+#config of registries
+motan-registry:
+  vintage:
+    protocol: vintage
+    host: 10.**.**.**
+    port: 8090
+    registryRetryPeriod: 30000
+    registrySessionTimeout: 10000
+    requestTimeout: 5000
+  consul:
+    protocol: consul
+    host: 10.**.**.**
+    port: 8090
+  direct:
+    protocol: direct
+    host: 10.**.**.**
+    port: 8013
+
+#conf of basic refers
+motan-basicRefer:
+  mybasicRefer:
+    group: basic-group
+    registry: "vintage"
+    requestTimeout: 1000
+    haStrategy: failover
+    loadbalance: random
+    filter: "accessLog,metrics"
+    maxClientConnection: 10
+    minClientConnection: 1
+    retries: 0
+    application: pc
+
+#conf of refers
+motan-refer:
+  status-rpc-json:
+    path: com.weibo.api.test.service.TestRpc
+    group: test-group
+    registry: vintage
+    serialization: simple
+    protocol: motanV1Compatible
+    version: 0.1
+    basicRefer: mybasicRefer

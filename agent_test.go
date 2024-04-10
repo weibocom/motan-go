@@ -173,7 +173,7 @@ motan-refer:
     test-refer:
       group: hello
       path: helloService
-      protocol: motanV1Compatible
+      protocol: motan2
       registry: direct
       serialization: breeze
       asyncInitConnection: false
@@ -196,7 +196,7 @@ motan-refer:
   test-refer:
     registry: local
     serialization: breeze
-    protocol: motanV1Compatible
+    protocol: motan2
     group: hello
     path: helloService
     requestTimeout: 3000
@@ -559,7 +559,7 @@ func TestNotFoundProvider(t *testing.T) {
 	notFoundService := "notFoundService"
 	request := meshClient.BuildRequest(notFoundService, "test", []interface{}{})
 	epUrl := &core.URL{
-		Protocol: endpoint.MotanV1Compatible,
+		Protocol: endpoint.Motan2,
 		Host:     "127.0.0.1",
 		Port:     9982,
 		Path:     notFoundService,
