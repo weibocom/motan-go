@@ -37,7 +37,7 @@ type MotanCommonEndpoint struct {
 	channels                     *ChannelPool
 	destroyed                    bool
 	destroyCh                    chan struct{}
-	available                    bool
+	available                    atomic.Value
 	errorCount                   uint32
 	proxy                        bool
 	errorCountThreshold          int64
@@ -68,7 +68,7 @@ func (m *MotanCommonEndpoint) GetRuntimeInfo() map[string]interface{} {
 }
 
 func (m *MotanCommonEndpoint) setAvailable(available bool) {
-	m.available = available
+	m.available.Store(available)
 }
 
 func (m *MotanCommonEndpoint) SetSerialization(s motan.Serialization) {
@@ -306,7 +306,9 @@ func (m *MotanCommonEndpoint) keepalive() {
 			if atomic.LoadUint32(&m.keepaliveType) == KeepaliveProfile {
 				m.profile()
 			} else {
-				m.heartbeat()
+				if m.heartbeat() {
+					return
+				}
 			}
 		case <-m.destroyCh:
 			return
@@ -314,7 +316,7 @@ func (m *MotanCommonEndpoint) keepalive() {
 	}
 }
 
-func (m *MotanCommonEndpoint) heartbeat() {
+func (m *MotanCommonEndpoint) heartbeat() bool {
 	if channel, err := m.channels.Get(); err != nil {
 		vlog.Infof("[keepalive] failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
 	} else {
@@ -323,10 +325,11 @@ func (m *MotanCommonEndpoint) heartbeat() {
 			m.setAvailable(true)
 			m.resetErr()
 			vlog.Infof("[keepalive] heartbeat success. url: %s", m.url.GetIdentity())
-			return
+			return true
 		}
 		vlog.Infof("[keepalive] heartbeat failed. url:%s, err:%s", m.url.GetIdentity(), err.Error())
 	}
+	return false
 }
 
 func (m *MotanCommonEndpoint) profile() {
@@ -357,7 +360,7 @@ func (m *MotanCommonEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MotanCommonEndpoint) IsAvailable() bool {
-	return m.available
+	return m.available.Load().(bool)
 }
 
 type Channel struct {

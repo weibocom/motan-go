@@ -319,15 +319,17 @@ func handle(netListen net.Listener) {
 }
 
 func handleConnection(conn net.Conn, timeout int) {
-	reader := bufio.NewReader(conn)
-	decodeBuf := make([]byte, 100)
-	msg, err := protocol.Decode(reader, &decodeBuf)
-	if err != nil {
-		time.Sleep(time.Millisecond * 1000)
-		conn.Close()
-		return
+	for {
+		reader := bufio.NewReader(conn)
+		decodeBuf := make([]byte, 100)
+		msg, err := protocol.Decode(reader, &decodeBuf)
+		if err != nil {
+			time.Sleep(time.Millisecond * 1000)
+			conn.Close()
+			return
+		}
+		processMsg(msg, conn)
 	}
-	processMsg(msg, conn)
 }
 
 func processMsg(msg *protocol.Message, conn net.Conn) {
@@ -342,7 +344,12 @@ func processMsg(msg *protocol.Message, conn net.Conn) {
 	if msg.Header.IsHeartbeat() {
 		res = protocol.BuildHeartbeat(msg.Header.RequestID, protocol.Res)
 	} else {
-		time.Sleep(time.Millisecond * 1000)
+		sleepTimeStr, _ := msg.Metadata.Load("sleep_time")
+		sleepTimeValue, _ := strconv.Atoi(sleepTimeStr)
+		if sleepTimeValue <= 0 {
+			sleepTimeValue = 1000
+		}
+		time.Sleep(time.Millisecond * time.Duration(sleepTimeValue))
 		var resp *motan.MotanResponse
 		e, _ := msg.Metadata.Load("exception")
 		switch e {
@@ -351,6 +358,12 @@ func processMsg(msg *protocol.Message, conn net.Conn) {
 				&motan.Exception{
 					ErrCode: motan.EProviderNotExist,
 					ErrMsg:  motan.ProviderNotExistPrefix,
+					ErrType: motan.ServiceException})
+		case "other_exception":
+			resp = motan.BuildExceptionResponse(lastRequestID,
+				&motan.Exception{
+					ErrCode: motan.EUnkonwnMsg,
+					ErrMsg:  "exception",
 					ErrType: motan.ServiceException})
 		default:
 			resp = &motan.MotanResponse{

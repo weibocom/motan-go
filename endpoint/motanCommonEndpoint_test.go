@@ -8,6 +8,7 @@ import (
 	"github.com/weibocom/motan-go/serialize"
 	"net"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -55,9 +56,10 @@ func TestV1RecordErrEmptyThreshold(t *testing.T) {
 }
 
 func TestV1RecordErrWithErrThreshold(t *testing.T) {
+	errorCountThreshold := 5
 	url := &motan.URL{Port: 8989, Protocol: "motan"}
-	url.PutParam(motan.TimeOutKey, "100")
-	url.PutParam(motan.ErrorCountThresholdKey, "5")
+	url.PutParam(motan.TimeOutKey, "1100")
+	url.PutParam(motan.ErrorCountThresholdKey, strconv.Itoa(errorCountThreshold))
 	url.PutParam(motan.ClientConnectionKey, "1")
 	url.PutParam(motan.AsyncInitConnection, "false")
 	ep := &MotanCommonEndpoint{}
@@ -66,15 +68,25 @@ func TestV1RecordErrWithErrThreshold(t *testing.T) {
 	ep.SetSerialization(&serialize.SimpleSerialization{})
 	ep.Initialize()
 	assert.Equal(t, 1, ep.clientConnection)
-	for j := 0; j < 10; j++ {
+	for j := 0; j < errorCountThreshold; j++ {
 		request := &motan.MotanRequest{ServiceName: "test", Method: "test"}
 		request.Attachment = motan.NewStringMap(0)
-		ep.Call(request)
-		if j < 4 {
+		request.Attachment.Store("exception", "other_exception")
+		request.Attachment.Store("sleep_time", "200")
+		resp := ep.Call(request)
+		assert.NotNil(t, resp)
+		assert.NotNil(t, resp.GetException())
+		assert.Equal(t, motan.EUnkonwnMsg, resp.GetException().ErrCode)
+		if j < errorCountThreshold-1 {
 			assert.True(t, ep.IsAvailable())
 		} else {
-			assert.False(t, ep.IsAvailable())
 			assert.Equal(t, KeepaliveHeartbeat, atomic.LoadUint32(&ep.keepaliveType))
+			// wait keepalive goroutine set keepaliveRunning status
+			time.Sleep(time.Millisecond * 100)
+			assert.True(t, ep.keepaliveRunning.Load().(bool))
+			time.Sleep(ep.keepaliveInterval * 2)
+			assert.True(t, ep.IsAvailable())
+			assert.False(t, ep.keepaliveRunning.Load().(bool))
 		}
 	}
 	<-ep.channels.channels
@@ -90,7 +102,7 @@ func TestV1RecordErrWithErrThreshold(t *testing.T) {
 
 func TestNotFoundProviderCircuitBreaker(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan"}
-	url.PutParam(motan.TimeOutKey, "2000")
+	url.PutParam(motan.TimeOutKey, "1200")
 	url.PutParam(motan.ErrorCountThresholdKey, "5")
 	url.PutParam(motan.ClientConnectionKey, "10")
 	url.PutParam(motan.AsyncInitConnection, "false")
