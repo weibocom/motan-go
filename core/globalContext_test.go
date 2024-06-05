@@ -268,11 +268,11 @@ func TestContext_parseRegGroupSuffix(t *testing.T) {
 			},
 			AssertFunc: func(t *testing.T, urlMap map[string]*URL) {
 				groupMap := countGroup(urlMap)
-				assert.Equal(t, 1, groupMap["group1"])
-				assert.Equal(t, 1, groupMap["group1"+regGroupSuffix])
+				assert.Equal(t, 0, groupMap["group1"])
+				assert.Equal(t, 2, groupMap["group1"+regGroupSuffix])
 				assert.Equal(t, 1, groupMap["group2"+regGroupSuffix])
-				assert.Equal(t, 1, groupMap["group3"])
-				assert.Equal(t, 1, groupMap["group3"+regGroupSuffix])
+				assert.Equal(t, 0, groupMap["group3"])
+				assert.Equal(t, 2, groupMap["group3"+regGroupSuffix])
 				assert.Equal(t, 2, groupMap["group4"+regGroupSuffix])
 				assert.Equal(t, 2, groupMap["group5"+regGroupSuffix])
 			},
@@ -280,6 +280,7 @@ func TestContext_parseRegGroupSuffix(t *testing.T) {
 	}
 	os.Setenv(RegGroupSuffix, regGroupSuffix)
 	ctx := &Context{}
+	// replace all groups with regGroupSuffix
 	for _, s := range cases {
 		ctx.parseRegGroupSuffix(s.UrlMap)
 		s.AssertFunc(t, s.UrlMap)
