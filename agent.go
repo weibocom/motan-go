@@ -906,6 +906,9 @@ func (a *Agent) unavailableAllServices() {
 func (a *Agent) doExportService(url *motan.URL) {
 	a.svcLock.Lock()
 	defer a.svcLock.Unlock()
+	if _, ok := a.serviceExporters.Load(url.GetIdentityWithRegistry()); ok {
+		return
+	}
 
 	globalContext := a.Context
 	exporter := &mserver.DefaultExporter{}

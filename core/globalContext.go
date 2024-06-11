@@ -553,21 +553,11 @@ func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
 	if regGroupSuffix == "" {
 		return
 	}
-	filterMap := make(map[string]struct{}, len(urlMap))
 	for _, url := range urlMap {
-		filterMap[url.GetIdentityWithRegistry()] = struct{}{}
-	}
-	for k, url := range urlMap {
 		if strings.HasSuffix(url.Group, regGroupSuffix) {
 			continue
 		}
-		newUrl := url.Copy()
-		newUrl.Group += regGroupSuffix
-		if _, ok := filterMap[newUrl.GetIdentityWithRegistry()]; ok {
-			continue
-		}
-		filterMap[newUrl.GetIdentityWithRegistry()] = struct{}{}
-		urlMap[k] = newUrl
+		url.Group += regGroupSuffix
 	}
 }
 
