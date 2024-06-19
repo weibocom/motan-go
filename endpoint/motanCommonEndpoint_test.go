@@ -14,6 +14,23 @@ import (
 	"time"
 )
 
+func TestNotInitCommonEndpoint(t *testing.T) {
+	url := &motan.URL{Port: 8989, Protocol: "motan"}
+	url.PutParam(motan.TimeOutKey, "100")
+	url.PutParam(motan.AsyncInitConnection, "false")
+	ep := &MotanCommonEndpoint{}
+	ep.SetURL(url)
+
+	ep.SetProxy(true)
+	ep.SetSerialization(&serialize.SimpleSerialization{})
+	assert.Equal(t, false, ep.IsAvailable())
+	assert.Nil(t, ep.keepaliveRunning.Load())
+
+	ep.Initialize()
+	assert.Equal(t, true, ep.IsAvailable())
+	assert.Equal(t, false, ep.keepaliveRunning.Load())
+}
+
 func TestGetV1Name(t *testing.T) {
 	url := &motan.URL{Port: 8989, Protocol: "motan"}
 	url.PutParam(motan.TimeOutKey, "100")

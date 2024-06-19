@@ -360,6 +360,9 @@ func (m *MotanCommonEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MotanCommonEndpoint) IsAvailable() bool {
+	if m.available.Load() == nil {
+		return false
+	}
 	return m.available.Load().(bool)
 }
 
