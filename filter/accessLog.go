@@ -3,7 +3,7 @@ package filter
 import (
 	"encoding/json"
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
+	vlog "github.com/weibocom/motan-go/log"
 	"strconv"
 	"time"
 )
@@ -56,6 +56,10 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 		resCtx.AddFinishHandler(motan.FinishHandleFunc(func() {
 			totalTime := reqCtx.ResponseSendTime.Sub(reqCtx.RequestReceiveTime).Nanoseconds() / 1e6
 			doAccessLog(t.GetName(), role, address, totalTime, request, response)
+			finalResCtx := response.GetRPCContext(true)
+			if finalResCtx.BodySize == 5 {
+				vlog.Warningf("bad response. content:%v, resAttachment:%v, reqArgs:%v, req: %+v, res:%+v", response.GetValue(), response.GetAttachments(), request.GetArguments(), request, response)
+			}
 		}))
 	} else {
 		doAccessLog(t.GetName(), role, address, time.Now().Sub(start).Nanoseconds()/1e6, request, response)

@@ -338,6 +338,7 @@ func (h *HTTPProvider) DoProxy(request motan.Request, t int64, ip string) motan.
 	httpReq.URI().SetScheme(h.proxySchema)
 	httpReq.URI().SetPath(rewritePath)
 	if len(httpReq.Header.Host()) == 0 {
+		httpReq.UseHostHeader = true
 		httpReq.Header.SetHost(h.domain)
 	}
 	if httpReq.Header.Peek(motan.XForwardedFor) == nil {
