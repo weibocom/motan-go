@@ -56,6 +56,10 @@ func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) mot
 		resCtx.AddFinishHandler(motan.FinishHandleFunc(func() {
 			totalTime := reqCtx.ResponseSendTime.Sub(reqCtx.RequestReceiveTime).Nanoseconds() / 1e6
 			doAccessLog(t.GetName(), role, address, totalTime, request, response)
+			finalResCtx := response.GetRPCContext(true) // 重新获取ctx，response的大小需要在发送完毕后获取
+			if finalResCtx.BodySize == 5 {              // 异常请求
+				vlog.Warningf("--- bad response. content:%v, resAttachment:%v, reqArgs:%v, req: %+v, res:%+v", response.GetValue(), response.GetAttachments(), request.GetArguments(), request, response)
+			}
 		}))
 	} else {
 		doAccessLog(t.GetName(), role, address, time.Now().Sub(start).Nanoseconds()/1e6, request, response)

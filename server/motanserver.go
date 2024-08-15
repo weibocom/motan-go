@@ -3,7 +3,8 @@ package server
 import (
 	"bufio"
 	"errors"
-	"github.com/panjf2000/ants/v2"
+
+	//"github.com/panjf2000/ants/v2"
 	mhttp "github.com/weibocom/motan-go/http"
 	"net"
 	"strconv"
@@ -21,14 +22,16 @@ import (
 
 var currentConnections int64
 var motanServerOnce sync.Once
-var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
+
+//var processPool, _ = ants.NewPool(50000, ants.WithMaxBlockingTasks(1024))
 
 func SetProcessPoolSize(size int) {
-	processPool.Tune(size)
+	//processPool.Tune(size)
 }
 
 func GetProcessPoolSize() int {
-	return processPool.Cap()
+	//return processPool.Cap()
+	return 100
 }
 
 func incrConnections() {
@@ -197,9 +200,10 @@ func (m *MotanServer) handleConn(conn net.Conn) {
 				break
 			}
 
-			processPool.Submit(func() {
-				m.processV2(msg, t, ip, conn)
-			})
+			go m.processV2(msg, t, ip, conn)
+			//processPool.Submit(func() {
+			//	m.processV2(msg, t, ip, conn)
+			//})
 		} else {
 			vlog.Warningf("unsupported motan version! version:%d con:%s", v, conn.RemoteAddr().String())
 			break

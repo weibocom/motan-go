@@ -373,6 +373,12 @@ func (d *defaultLogger) AccessLog(logObject *AccessLogEntity) {
 }
 
 func (d *defaultLogger) doAccessLog(logObject *AccessLogEntity) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("--- doAccessLog failed. err:%v, logObject: %+v", err, logObject)
+			debug.PrintStack()
+		}
+	}()
 	if d.accessStructured {
 		d.accessLogger.Info("",
 			zap.String("filterName", logObject.FilterName),
