@@ -767,8 +767,8 @@ func (a *agentMessageHandler) httpCall(request motan.Request, ck string, httpClu
 	}
 	httpRequest := fasthttp.AcquireRequest()
 	httpResponse := fasthttp.AcquireResponse()
+	// do not release http response
 	defer fasthttp.ReleaseRequest(httpRequest)
-	defer fasthttp.ReleaseResponse(httpResponse)
 	httpRequest.Header.Del("Host")
 	httpRequest.SetHost(originalService)
 	httpRequest.URI().SetPath(request.GetMethod())

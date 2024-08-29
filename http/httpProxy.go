@@ -552,6 +552,7 @@ func MotanRequestToFasthttpRequest(motanRequest core.Request, fasthttpRequest *f
 }
 
 // FasthttpResponseToMotanResponse convert a http response to a motan response
+// Notice:: Do not release HttpResponse early using this method
 // For http mesh server side, the httpServer response to the server agent but client need a motan response
 // Contrast to request convert, we put all headers to meta, an body maybe just use it with type []byte
 func FasthttpResponseToMotanResponse(motanResponse core.Response, fasthttpResponse *fasthttp.Response) {

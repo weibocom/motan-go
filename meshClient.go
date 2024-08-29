@@ -119,8 +119,8 @@ func (c *MeshClient) BaseCall(request core.Request, reply interface{}) core.Resp
 	}
 	httpRequest := fasthttp.AcquireRequest()
 	httpResponse := fasthttp.AcquireResponse()
+	// do not release http response
 	defer fasthttp.ReleaseRequest(httpRequest)
-	defer fasthttp.ReleaseResponse(httpResponse)
 	httpRequest.Header.Del("Host")
 	httpRequest.SetHost(request.GetServiceName())
 	httpRequest.URI().SetPath(request.GetMethod())

@@ -271,7 +271,7 @@ func (h *HTTPProvider) DoTransparentProxy(request motan.Request, t int64, ip str
 		fillHttpException(resp, http.StatusNotFound, t, err.Error())
 		return resp
 	}
-	// sets rewrite
+	// set rewrite
 	httpReq.URI().SetScheme(h.proxySchema)
 	httpReq.URI().SetPath(rewritePath)
 	request.GetAttachments().Range(func(k, v string) bool {

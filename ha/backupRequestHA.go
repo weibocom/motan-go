@@ -97,10 +97,9 @@ func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBal
 			break
 		}
 		// log & clone backup request
-		pr := request
+		pr := request.Clone().(motan.Request)
 		if i > 0 {
 			vlog.Infof("[backup request ha] delay %d request id: %d, service: %s, method: %s", delay, request.GetRequestID(), request.GetServiceName(), request.GetMethod())
-			pr = request.Clone().(motan.Request)
 		}
 		lastErrorCh = make(chan motan.Response, 1)
 		go func(postRequest motan.Request, endpoint motan.EndPoint, errorCh chan motan.Response) {
