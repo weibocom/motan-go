@@ -1262,7 +1262,7 @@ func GetRuntimeInfo(s interface{}) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
-//-----------CircularRecorder-------------
+// -----------CircularRecorder-------------
 type circularRecorderItem struct {
 	timestamp int64
 	value     interface{}

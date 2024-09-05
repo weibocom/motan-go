@@ -1249,8 +1249,10 @@ func (a *Agent) mhandle(k string, h http.Handler) {
 		setAgentLock.Unlock()
 	}
 	http.HandleFunc(k, func(w http.ResponseWriter, r *http.Request) {
+		vlog.Infof("mport request: %s, address: %s", r.URL.Path, r.RemoteAddr)
 		if !PermissionCheck(r) {
 			w.Write([]byte("need permission!"))
+			vlog.Warningf("mport request no permission: %s, address: %s", r.URL.Path, r.RemoteAddr)
 			return
 		}
 		defer func() {
