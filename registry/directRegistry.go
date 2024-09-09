@@ -13,6 +13,12 @@ type DirectRegistry struct {
 	urls []*motan.URL
 }
 
+func (d *DirectRegistry) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: d.GetName(),
+	}
+}
+
 func (d *DirectRegistry) GetURL() *motan.URL {
 	return d.url
 }

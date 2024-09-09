@@ -82,8 +82,17 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 		defaultManageHandlers["/registry/list"] = dynamicConfigurer
 		defaultManageHandlers["/registry/info"] = dynamicConfigurer
 
+		metaInfo := &MetaInfo{}
+		defaultManageHandlers["/meta/update"] = metaInfo
+		defaultManageHandlers["/meta/delete"] = metaInfo
+		defaultManageHandlers["/meta/get"] = metaInfo
+		defaultManageHandlers["/meta/getAll"] = metaInfo
+
 		hotReload := &HotReload{}
 		defaultManageHandlers["/reload/clusters"] = hotReload
+
+		runtimeHandler := &RuntimeHandler{}
+		defaultManageHandlers["/runtime/info"] = runtimeHandler
 	})
 	return defaultManageHandlers
 }

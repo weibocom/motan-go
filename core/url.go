@@ -64,7 +64,7 @@ func (u *URL) IsMatch(service, group, protocol, version string) bool {
 	}
 	// for motan v1 request, parameter protocol should be empty
 	if protocol != "" {
-		if u.Protocol == "motanV1Compatible" {
+		if u.Protocol == "motan2" {
 			if protocol != "motan2" && protocol != "motan" {
 				return false
 			}
@@ -328,7 +328,7 @@ func (u *URL) MergeParams(params map[string]string) {
 }
 
 func (u *URL) CanServe(other *URL) bool {
-	if u.Protocol != other.Protocol && u.Protocol != ProtocolLocal {
+	if !u.CanServeProtocol(other) {
 		vlog.Errorf("can not serve protocol, err : p1:%s, p2:%s", u.Protocol, other.Protocol)
 		return false
 	}
@@ -336,9 +336,11 @@ func (u *URL) CanServe(other *URL) bool {
 		vlog.Errorf("can not serve path, err : p1:%s, p2:%s", u.Path, other.Path)
 		return false
 	}
-	if !IsSame(u.Parameters, other.Parameters, SerializationKey, "") {
-		vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
-		return false
+	if u.Protocol != "motan2" {
+		if !IsSame(u.Parameters, other.Parameters, SerializationKey, "") {
+			vlog.Errorf("can not serve serialization, err : s1:%s, s2:%s", u.Parameters[SerializationKey], other.Parameters[SerializationKey])
+			return false
+		}
 	}
 	// compatible with old version: 0.1
 	if !(IsSame(u.Parameters, other.Parameters, VersionKey, "0.1") || IsSame(u.Parameters, other.Parameters, VersionKey, DefaultReferVersion)) {
@@ -346,6 +348,14 @@ func (u *URL) CanServe(other *URL) bool {
 		return false
 	}
 	return true
+}
+
+func (u *URL) CanServeProtocol(other *URL) bool {
+	// motan2 is compatible with motan
+	if other.Protocol == "motan" && u.Protocol == "motan2" {
+		return true
+	}
+	return u.Protocol == other.Protocol || u.Protocol == ProtocolLocal
 }
 
 func IsSame(m1 map[string]string, m2 map[string]string, key string, defaultValue string) bool {

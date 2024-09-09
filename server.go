@@ -207,6 +207,10 @@ func (m *MSContext) Initialize() {
 	}
 }
 
+func (m *MSContext) GetContext() *motan.Context {
+	return m.context
+}
+
 // RegisterService register service with serviceId for config ref.
 // the type.string will used as serviceId if sid is not set. e.g. 'packageName.structName'
 func (m *MSContext) RegisterService(s interface{}, sid string) error {
@@ -271,7 +275,7 @@ func (m *MSContext) GetRegistryStatus() []map[string]*motan.RegistryStatus {
 
 func (m *MSContext) startRegistryFailback() {
 	vlog.Infoln("start MSContext registry failback")
-	ticker := time.NewTicker(registry.DefaultFailbackInterval * time.Millisecond)
+	ticker := time.NewTicker(time.Duration(registry.GetFailbackInterval()) * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		m.registryLock.Lock()

@@ -10,11 +10,12 @@ import (
 
 // ext name
 const (
-	Grpc              = "grpc"
-	Motan2            = "motan2"
-	Local             = "local"
-	Mock              = "mockEndpoint"
-	MotanV1Compatible = "motanV1Compatible"
+	Grpc   = "grpc"
+	Motan2 = "motan2"
+	// Motan1 endpoint is to support dynamic configuration. Golang cannot build motan1 request
+	Motan1 = "motan"
+	Local  = "local"
+	Mock   = "mockEndpoint"
 )
 
 const (
@@ -26,7 +27,7 @@ var idOffset uint64 // id generator offset
 
 func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 	extFactory.RegistExtEndpoint(Motan2, func(url *motan.URL) motan.EndPoint {
-		return &MotanEndpoint{url: url}
+		return &MotanCommonEndpoint{url: url}
 	})
 
 	extFactory.RegistExtEndpoint(Grpc, func(url *motan.URL) motan.EndPoint {
@@ -41,7 +42,7 @@ func RegistDefaultEndpoint(extFactory motan.ExtensionFactory) {
 		return &MockEndpoint{URL: url}
 	})
 
-	extFactory.RegistExtEndpoint(MotanV1Compatible, func(url *motan.URL) motan.EndPoint {
+	extFactory.RegistExtEndpoint(Motan1, func(url *motan.URL) motan.EndPoint {
 		return &MotanCommonEndpoint{url: url}
 	})
 }
@@ -63,6 +64,12 @@ func GenerateRequestID() uint64 {
 type MockEndpoint struct {
 	URL          *motan.URL
 	MockResponse motan.Response
+}
+
+func (m *MockEndpoint) GetRuntimeInfo() map[string]interface{} {
+	return map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
 }
 
 func (m *MockEndpoint) GetName() string {

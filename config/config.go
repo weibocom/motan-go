@@ -127,12 +127,17 @@ func (c *Config) Int64(key string) (int64, error) {
 
 // String returns the string value for a given key.
 func (c *Config) String(key string) string {
+	return c.GetStringWithDefault(key, "")
+}
+
+// String returns the string value for a given key.
+func (c *Config) GetStringWithDefault(key string, def string) string {
 	if value, err := c.getData(key); err != nil {
-		return ""
+		return def
 	} else if vv, ok := value.(string); ok {
 		return vv
 	}
-	return ""
+	return def
 }
 
 // GetSection returns map for the given key

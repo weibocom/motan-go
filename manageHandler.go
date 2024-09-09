@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/weibocom/motan-go/meta"
+	mserver "github.com/weibocom/motan-go/server"
 	"html/template"
 	"io"
 	"log"
@@ -741,6 +743,36 @@ func setLogStatus(jsonEncoder *json.Encoder, logType, available string) {
 	}
 }
 
+type MetaInfo struct {
+	agent *Agent
+}
+
+func (m *MetaInfo) SetAgent(agent *Agent) {
+	m.agent = agent
+}
+
+func (m *MetaInfo) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/meta/update":
+		if r.Form == nil {
+			r.ParseMultipartForm(32 << 20)
+		}
+		for k, v := range r.Form {
+			if len(v) > 0 {
+				meta.PutDynamicMeta(k, v[0])
+			}
+		}
+		JSONSuccess(w, "ok")
+	case "/meta/delete":
+		meta.RemoveDynamicMeta(r.FormValue("key"))
+		JSONSuccess(w, "ok")
+	case "/meta/get":
+		JSONSuccess(w, map[string]string{r.FormValue("key"): meta.GetDynamicMeta()[r.FormValue("key")]})
+	case "/meta/getAll":
+		JSONSuccess(w, map[string]map[string]string{"meta": meta.GetDynamicMeta()})
+	}
+}
+
 type HotReload struct {
 	agent *Agent
 }
@@ -765,6 +797,143 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Body: string(refersURLs),
 		})
 	}
+}
+
+type RuntimeHandler struct {
+	agent *Agent
+}
+
+func (h *RuntimeHandler) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/runtime/info":
+		result := map[string]interface{}{
+			"result":                     "ok",
+			motan.RuntimeInstanceTypeKey: "motan-agent",
+		}
+		// cluster info
+		result[motan.RuntimeClustersKey] = h.getClusterInfo()
+
+		// http cluster info
+		result[motan.RuntimeHttpClustersKey] = h.getHttpClusterInfo()
+
+		// exporter info
+		result[motan.RuntimeExportersKey] = h.getExporterInfo()
+
+		// extensionFactory info
+		result[motan.RuntimeExtensionFactoryKey] = GetDefaultExtFactory().GetRuntimeInfo()
+
+		// servers info
+		result[motan.RuntimeServersKey] = h.getServersInfo()
+
+		// basic info
+		result[motan.RuntimeBasicKey] = h.getBasicInfo()
+
+		res, _ := json.Marshal(result)
+		w.Write(res)
+	}
+}
+
+func (h *RuntimeHandler) getClusterInfo() map[string]interface{} {
+	info := make(map[string]interface{}, h.agent.clusterMap.Len())
+	h.agent.clusterMap.Range(func(k, v interface{}) bool {
+		cls, ok := v.(*cluster.MotanCluster)
+		if !ok {
+			return true
+		}
+		info[k.(string)] = cls.GetRuntimeInfo()
+		return true
+	})
+	return info
+}
+
+func (h *RuntimeHandler) getHttpClusterInfo() map[string]interface{} {
+	info := make(map[string]interface{}, h.agent.httpClusterMap.Len())
+	h.agent.httpClusterMap.Range(func(k, v interface{}) bool {
+		cls, ok := v.(*cluster.HTTPCluster)
+		if !ok {
+			return true
+		}
+		h.addInfos(cls.GetRuntimeInfo(), k.(string), info)
+		return true
+	})
+	return info
+}
+
+func (h *RuntimeHandler) getExporterInfo() map[string]interface{} {
+	info := make(map[string]interface{}, h.agent.serviceExporters.Len())
+	h.agent.serviceExporters.Range(func(k, v interface{}) bool {
+		exporter, ok := v.(*mserver.DefaultExporter)
+		if !ok {
+			return true
+		}
+		h.addInfos(exporter.GetRuntimeInfo(), k.(string), info)
+		return true
+	})
+	return info
+}
+
+func (h *RuntimeHandler) getServersInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	h.addInfos(h.agent.agentServer.GetRuntimeInfo(), motan.RuntimeAgentServerKey, info)
+	agentPortServerInfo := map[string]interface{}{}
+	for port, server := range h.agent.agentPortServer {
+		agentPortServerInfo[strconv.Itoa(port)] = server.GetRuntimeInfo()
+	}
+	h.addInfos(agentPortServerInfo, motan.RuntimeAgentPortServerKey, info)
+	h.addInfos(h.agent.httpProxyServer.GetRuntimeInfo(), motan.RuntimeHttpProxyServerKey, info)
+	return info
+}
+
+func (h *RuntimeHandler) getBasicInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	info[motan.RuntimeCpuPercentKey] = GetCpuPercent()
+	info[motan.RuntimeRssMemoryKey] = GetRssMemory()
+	return info
+}
+
+func (h *RuntimeHandler) addInfos(info map[string]interface{}, key string, result map[string]interface{}) {
+	if info != nil && len(info) > 0 {
+		result[key] = info
+	}
+}
+
+// JSONSuccess return success JSON data
+func JSONSuccess(w http.ResponseWriter, data interface{}) {
+	JSON(w, "", "ok", data)
+}
+
+// JSONError return Error JSON data
+func JSONError(w http.ResponseWriter, msg string) {
+	JSON(w, msg, "fail", nil)
+}
+
+func JSON(w http.ResponseWriter, errMsg string, result string, data interface{}) {
+	if errMsg != "" {
+		d := struct {
+			Result string `json:"result"`
+			Error  string `json:"error"`
+		}{
+			Result: result,
+			Error:  errMsg,
+		}
+		bs, _ := json.Marshal(d)
+		w.Write(bs)
+	} else {
+		d := struct {
+			Result string      `json:"result"`
+			Data   interface{} `json:"data"`
+		}{
+			Result: result,
+			Data:   data,
+		}
+		bs, _ := json.Marshal(d)
+		w.Write(bs)
+	}
+
 }
 
 //------------ below code is copied from net/http/pprof -------------

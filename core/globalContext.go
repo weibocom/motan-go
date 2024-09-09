@@ -9,6 +9,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -86,6 +88,22 @@ var (
 	Application = flag.String("application", "", "assist for application pool config.")
 	Recover     = flag.Bool("recover", false, "recover from accidental exit")
 )
+
+func GetMport() int {
+	return *(*int)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Mport))))
+}
+
+func SetMport(v int) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Mport)), unsafe.Pointer(&v))
+}
+
+func GetApplication() string {
+	return *(*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&Application))))
+}
+
+func SetApplication(v string) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&Application)), unsafe.Pointer(&v))
+}
 
 func AddRelevantFilter(filterStr string) {
 	k := strings.TrimSpace(filterStr)
@@ -192,7 +210,7 @@ func (c *Context) Initialize() {
 		c.pool = *Pool
 	}
 	if c.application == "" {
-		c.application = *Application
+		c.application = GetApplication()
 	}
 
 	c.RegistryURLs = make(map[string]*URL)
@@ -420,7 +438,6 @@ func (c *Context) basicConfToURLs(section string) map[string]*URL {
 		if len(finalFilters) > 0 {
 			newURL.PutParam(FilterKey, c.FilterSetToStr(finalFilters))
 		}
-
 		newURLs[key] = newURL
 	}
 	return newURLs
@@ -536,21 +553,11 @@ func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
 	if regGroupSuffix == "" {
 		return
 	}
-	filterMap := make(map[string]struct{}, len(urlMap))
 	for _, url := range urlMap {
-		filterMap[url.GetIdentityWithRegistry()] = struct{}{}
-	}
-	for k, url := range urlMap {
 		if strings.HasSuffix(url.Group, regGroupSuffix) {
 			continue
 		}
-		newUrl := url.Copy()
-		newUrl.Group += regGroupSuffix
-		if _, ok := filterMap[newUrl.GetIdentityWithRegistry()]; ok {
-			continue
-		}
-		filterMap[newUrl.GetIdentityWithRegistry()] = struct{}{}
-		urlMap[k] = newUrl
+		url.Group += regGroupSuffix
 	}
 }
 
@@ -581,6 +588,12 @@ func (c *Context) parseSubGroupSuffix(urlMap map[string]*URL) {
 func (c *Context) parseRefers() {
 	referUrls := c.basicConfToURLs(refersSection)
 	c.parseSubGroupSuffix(referUrls)
+	//TODO: to compatible with removed protocol: motanV1Compatible
+	for k := range referUrls {
+		if referUrls[k].Protocol == "motanV1Compatible" {
+			referUrls[k].Protocol = "motan"
+		}
+	}
 	c.RefersURLs = referUrls
 }
 

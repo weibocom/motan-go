@@ -30,6 +30,15 @@ func TestGetContext(t *testing.T) {
 	assert.Equal(t, "motan-demo-rpc", rs.ServiceURLs["mytest-motan2"].Group, "parse serivce key fail")
 }
 
+func TestCompatible(t *testing.T) {
+	rs := &Context{ConfigFile: "../config/compatible.yaml"}
+	rs.Initialize()
+	assert.NotNil(t, rs.RefersURLs)
+	for _, j := range rs.RefersURLs {
+		assert.Equal(t, j.Protocol, "motan")
+	}
+}
+
 func TestNewContext(t *testing.T) {
 	configFile := filepath.Join("testdata", "app.yaml")
 	pool1Context := NewContext(configFile, "app", "app-idc1")
@@ -259,11 +268,11 @@ func TestContext_parseRegGroupSuffix(t *testing.T) {
 			},
 			AssertFunc: func(t *testing.T, urlMap map[string]*URL) {
 				groupMap := countGroup(urlMap)
-				assert.Equal(t, 1, groupMap["group1"])
-				assert.Equal(t, 1, groupMap["group1"+regGroupSuffix])
+				assert.Equal(t, 0, groupMap["group1"])
+				assert.Equal(t, 2, groupMap["group1"+regGroupSuffix])
 				assert.Equal(t, 1, groupMap["group2"+regGroupSuffix])
-				assert.Equal(t, 1, groupMap["group3"])
-				assert.Equal(t, 1, groupMap["group3"+regGroupSuffix])
+				assert.Equal(t, 0, groupMap["group3"])
+				assert.Equal(t, 2, groupMap["group3"+regGroupSuffix])
 				assert.Equal(t, 2, groupMap["group4"+regGroupSuffix])
 				assert.Equal(t, 2, groupMap["group5"+regGroupSuffix])
 			},
@@ -271,6 +280,7 @@ func TestContext_parseRegGroupSuffix(t *testing.T) {
 	}
 	os.Setenv(RegGroupSuffix, regGroupSuffix)
 	ctx := &Context{}
+	// replace all groups with regGroupSuffix
 	for _, s := range cases {
 		ctx.parseRegGroupSuffix(s.UrlMap)
 		s.AssertFunc(t, s.UrlMap)

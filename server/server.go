@@ -3,6 +3,9 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/weibocom/motan-go/meta"
+	mpro "github.com/weibocom/motan-go/protocol"
+	"github.com/weibocom/motan-go/provider"
 	"sync"
 
 	motan "github.com/weibocom/motan-go/core"
@@ -50,6 +53,16 @@ type DefaultExporter struct {
 	// 服务管理单位，负责服务注册、心跳、导出和销毁，内部包含provider，与provider是一对一关系
 }
 
+func (d *DefaultExporter) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	if d.url != nil {
+		info[motan.RuntimeUrlKey] = d.url.ToExtInfo()
+	}
+	info[motan.RuntimeProviderKey] = d.provider.GetRuntimeInfo()
+	info[motan.RuntimeIsAvailableKey] = d.available
+	return info
+}
+
 func (d *DefaultExporter) Export(server motan.Server, extFactory motan.ExtensionFactory, context *motan.Context) (err error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -64,6 +77,12 @@ func (d *DefaultExporter) Export(server motan.Server, extFactory motan.Extension
 	d.extFactory = extFactory
 	d.server = server
 	d.url = d.provider.GetURL()
+	// add server side meta info to the url, so these meta info can be passed to the client side through the registration mechanism.
+	if d.url.GetBoolValue(motan.URLRegisterMeta, motan.DefaultRegisterMeta) {
+		for k, v := range meta.GetEnvMeta() {
+			d.url.PutParam(k, v)
+		}
+	}
 	d.url.PutParam(motan.NodeTypeKey, motan.NodeTypeService) // node type must be service in export
 	regs, ok := d.url.Parameters[motan.RegistryKey]
 	if !ok {
@@ -142,11 +161,33 @@ func (d *DefaultExporter) SetURL(url *motan.URL) {
 }
 
 type DefaultMessageHandler struct {
-	providers map[string]motan.Provider
+	providers          map[string]motan.Provider
+	frameworkProviders map[string]motan.Provider
+}
+
+func (d *DefaultMessageHandler) GetName() string {
+	return "defaultMessageHandler"
+}
+
+func (d *DefaultMessageHandler) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	info[motan.RuntimeMessageHandlerTypeKey] = d.GetName()
+	providersInfo := map[string]interface{}{}
+	for s, provider := range d.providers {
+		providersInfo[s] = provider.GetRuntimeInfo()
+	}
+	info[motan.RuntimeProvidersKey] = providersInfo
+	return info
 }
 
 func (d *DefaultMessageHandler) Initialize() {
 	d.providers = make(map[string]motan.Provider)
+	d.frameworkProviders = make(map[string]motan.Provider)
+	d.initFrameworkServiceProvider()
+}
+
+func (d *DefaultMessageHandler) initFrameworkServiceProvider() {
+	d.frameworkProviders[meta.MetaServiceName] = &provider.MetaProvider{}
 }
 
 func (d *DefaultMessageHandler) AddProvider(p motan.Provider) error {
@@ -170,19 +211,40 @@ func (d *DefaultMessageHandler) Call(request motan.Request) (res motan.Response)
 		res = motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "provider call panic", ErrType: motan.ServiceException})
 		vlog.Errorf("provider call panic. req:%s", motan.GetReqInfo(request))
 	})
+	if mfs := request.GetAttachment(mpro.MFrameworkService); mfs != "" {
+		if fp, ok := d.frameworkProviders[request.GetServiceName()]; ok {
+			return fp.(motan.Provider).Call(request)
+		}
+		//throw specific exception to avoid triggering forced fusing on the client side。
+		return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 501, ErrMsg: motan.ServiceNotSupport, ErrType: motan.ServiceException})
+	}
 	p := d.providers[request.GetServiceName()]
 	if p != nil {
 		res = p.Call(request)
 		res.GetRPCContext(true).GzipSize = int(p.GetURL().GetIntValue(motan.GzipSizeKey, 0))
 		return res
 	}
-	vlog.Errorf("not found provider for %s", motan.GetReqInfo(request))
-	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: 500, ErrMsg: "not found provider for " + request.GetServiceName(), ErrType: motan.ServiceException})
+	vlog.Errorf("%s%s%s", motan.ProviderNotExistPrefix, request.GetServiceName(), motan.GetReqInfo(request))
+	return motan.BuildExceptionResponse(request.GetRequestID(), &motan.Exception{ErrCode: motan.EProviderNotExist, ErrMsg: motan.ProviderNotExistPrefix + request.GetServiceName(), ErrType: motan.ServiceException})
 }
 
 type FilterProviderWrapper struct {
 	provider motan.Provider
 	filter   motan.EndPointFilter
+}
+
+func (f *FilterProviderWrapper) GetRuntimeInfo() map[string]interface{} {
+	info := f.provider.GetRuntimeInfo()
+	var filterInfo []interface{}
+	filter := f.filter
+	for filter != nil {
+		filterInfo = append(filterInfo, filter.GetRuntimeInfo())
+		filter = filter.GetNext()
+	}
+	if len(filterInfo) > 0 {
+		info[motan.RuntimeFiltersKey] = filterInfo
+	}
+	return info
 }
 
 func (f *FilterProviderWrapper) SetService(s interface{}) {

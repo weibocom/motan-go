@@ -75,3 +75,39 @@ func TestXForwardedFor(t *testing.T) {
 	providerCorr.Call(request)
 	assert.NotEqual(t, request.GetAttachment(motan.XForwardedForLower), "test")
 }
+
+func TestMotanProvider_GetRuntimeInfo(t *testing.T) {
+	//init factory
+	factory := &motan.DefaultExtensionFactory{}
+	factory.Initialize()
+	endpoint.RegistDefaultEndpoint(factory)
+	RegistDefaultProvider(factory)
+
+	//init motanProvider
+	mContext := motan.Context{}
+	mContext.ConfigFile = confFilePath
+	mContext.Initialize()
+	request := &motan.MotanRequest{}
+	request.SetAttachment(motan.XForwardedForLower, "test")
+	url := mContext.ServiceURLs[serviceName]
+	//call correct
+	providerCorr := MotanProvider{url: url, extFactory: factory}
+	providerCorr.Initialize()
+
+	// runtime info
+	info := providerCorr.GetRuntimeInfo()
+	assert.NotNil(t, info)
+
+	urlInfo, ok := info[motan.RuntimeUrlKey]
+	assert.True(t, ok)
+	assert.Equal(t, url.ToExtInfo(), urlInfo)
+
+	available, ok := info[motan.RuntimeAvailableKey]
+	assert.True(t, ok)
+	assert.Equal(t, providerCorr.available, available)
+
+	endpointInfo, ok := info[motan.RuntimeEndpointKey]
+	assert.True(t, ok)
+	assert.Equal(t, providerCorr.ep.GetRuntimeInfo(), endpointInfo)
+	assert.NotNil(t, endpointInfo)
+}

@@ -29,6 +29,10 @@ const (
 	RuleProtocol = "rule"
 )
 
+var (
+	recordInfoSize = 10
+)
+
 var oldSwitcherMap = make(map[string]bool) //Save the default value before the switcher last called
 
 // CommandRegistryWrapper wrapper registry for every cluster
@@ -45,6 +49,24 @@ type CommandRegistryWrapper struct {
 	tcCommand          *ClientCommand //effective traffic control command
 	degradeCommand     *ClientCommand //effective degrade command
 	switcherCommand    *ClientCommand
+	weights            map[string]string
+	commandRecorder    *motan.CircularRecorder
+	notifyRecorder     *motan.CircularRecorder
+}
+
+func (c *CommandRegistryWrapper) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{
+		motan.RuntimeNameKey: c.GetName(),
+	}
+	info[motan.RuntimeWeightKey] = c.weights
+	if c.staticTcCommand != nil {
+		info[motan.RuntimeStaticCommandKey] = c.staticTcCommand
+	}
+	info[motan.RuntimeAgentCommandKey] = c.agentCommandInfo
+	info[motan.RuntimeServiceCommandKey] = c.serviceCommandInfo
+	info[motan.RuntimeCommandHistoryKey] = c.commandRecorder.GetRecords()
+	info[motan.RuntimeNotifyHistoryKey] = c.notifyRecorder.GetRecords()
+	return info
 }
 
 type ClientCommand struct {
@@ -144,7 +166,7 @@ func ParseCommand(commandInfo string) *Command {
 }
 
 func GetCommandRegistryWrapper(cluster *MotanCluster, registry motan.Registry) motan.Registry {
-	cmdRegistry := &CommandRegistryWrapper{cluster: cluster, registry: registry}
+	cmdRegistry := &CommandRegistryWrapper{cluster: cluster, registry: registry, weights: map[string]string{}, commandRecorder: motan.NewCircularRecorder(recordInfoSize), notifyRecorder: motan.NewCircularRecorder(recordInfoSize)}
 	cmdRegistry.ownGroupURLs = make([]*motan.URL, 0)
 	cmdRegistry.otherGroupListener = make(map[string]*serviceListener)
 	cmdRegistry.cluster = cluster
@@ -243,6 +265,9 @@ func (c *CommandRegistryWrapper) clear() {
 	for _, l := range c.otherGroupListener {
 		l.unSubscribe(c.registry)
 	}
+	c.weights = make(map[string]string)
+	c.notifyRecorder = motan.NewCircularRecorder(recordInfoSize)
+	c.commandRecorder = motan.NewCircularRecorder(recordInfoSize)
 	c.otherGroupListener = make(map[string]*serviceListener)
 }
 
@@ -305,6 +330,7 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 	}
 	if needNotify {
 		c.notifyListener.Notify(c.registry.GetURL(), result)
+		c.notifyRecorder.AddRecord(result)
 	}
 	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t", c.cluster.GetURL().GetIdentity(), currentCommand != nil, c.degradeCommand != nil, len(result), needNotify)
 	return result
@@ -365,6 +391,8 @@ func buildRuleURL(weight string) *motan.URL {
 }
 
 func (c *CommandRegistryWrapper) processCommand(commandType int, commandInfo string) bool {
+	c.commandRecorder.AddRecord(commandInfo)
+
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	needNotify := false
@@ -426,6 +454,7 @@ func (c *CommandRegistryWrapper) processTcCommand(newTcCommand *ClientCommand) {
 	if newTcCommand == nil && c.staticTcCommand == nil {
 		vlog.Infof("%s process command result : no tc command. ", c.cluster.GetURL().GetIdentity())
 	} else {
+		tempWeight := map[string]string{}
 		var groups []string
 		if newTcCommand != nil {
 			vlog.Infof("%s process command result : has dynamic tc command. tc command will enable.command : %+v", c.cluster.GetURL().GetIdentity(), newTcCommand)
@@ -435,6 +464,9 @@ func (c *CommandRegistryWrapper) processTcCommand(newTcCommand *ClientCommand) {
 		}
 		for _, group := range groups {
 			g := strings.Split(group, ":")
+			if len(g) >= 2 {
+				tempWeight[g[0]] = g[1]
+			}
 			if c.cluster.GetURL().Group == g[0] { // own group already subscribe
 				continue
 			}
@@ -446,6 +478,7 @@ func (c *CommandRegistryWrapper) processTcCommand(newTcCommand *ClientCommand) {
 				newListeners[g[0]] = newSubscribe(c, g[0])
 			}
 		}
+		c.weights = tempWeight
 	}
 
 	c.otherGroupListener = newListeners

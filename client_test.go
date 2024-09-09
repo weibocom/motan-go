@@ -5,6 +5,7 @@ import (
 	"fmt"
 	assert2 "github.com/stretchr/testify/assert"
 	"github.com/weibocom/motan-go/config"
+	motan "github.com/weibocom/motan-go/core"
 	"testing"
 	"time"
 )
@@ -78,6 +79,13 @@ motan-client:
 	err = mclient.BaseCall(req, &reply) // sync call
 	assert.Nil(err)
 	assert.Equal("Hello Ray", reply)
+
+	// test async call
+	var asyncReply string
+	asyncResult := mclient.Go("hello", []interface{}{"Ray"}, &asyncReply, make(chan *motan.AsyncResult, 1))
+	<-asyncResult.Done
+	assert.Nil(asyncResult.Error)
+	assert.Equal("Hello Ray", asyncReply)
 }
 
 func StartServer() {
