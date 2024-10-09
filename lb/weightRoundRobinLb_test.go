@@ -278,8 +278,8 @@ func processCheck(t *testing.T, lb *WeightRoundRobinLB, typ string, eps []core.E
 	for i := 0; i < int(totalWeight)*round; i++ {
 		lb.Select(nil).Call(nil)
 	}
-	var maxDelta float64 = 0.0
-	var totalDelta float64 = 0.0
+	var maxDelta = 0.0
+	var totalDelta = 0.0
 	unavailableCount := 0
 	for _, ep := range eps {
 		if !ep.IsAvailable() {

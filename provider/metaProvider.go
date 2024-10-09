@@ -3,6 +3,7 @@ package provider
 import (
 	motan "github.com/weibocom/motan-go/core"
 	"github.com/weibocom/motan-go/meta"
+	"github.com/weibocom/motan-go/serialize"
 )
 
 type MetaProvider struct{}
@@ -10,9 +11,26 @@ type MetaProvider struct{}
 func (m *MetaProvider) Initialize() {}
 
 func (m *MetaProvider) Call(request motan.Request) motan.Response {
+	// only support motan2 protocol and breeze serialization
+	if request.GetRPCContext(true).IsMotanV1 {
+		return &motan.MotanResponse{
+			Exception: &motan.Exception{ErrCode: 500, ErrMsg: "meta provider not support motan1 protocol"},
+		}
+	}
+	serialization := &serialize.BreezeSerialization{}
+	b, err := serialization.Serialize(meta.GetDynamicMeta())
+	if err != nil {
+		return &motan.MotanResponse{
+			Exception: &motan.Exception{ErrCode: 500, ErrMsg: "meta provider serialize fail"},
+		}
+	}
 	resp := &motan.MotanResponse{
 		RequestID: request.GetRequestID(),
-		Value:     meta.GetDynamicMeta(),
+		Value:     b,
+		RPCContext: &motan.RPCContext{
+			Serialized:   true,
+			SerializeNum: serialize.BreezeNumber,
+		},
 	}
 	return resp
 }
@@ -46,5 +64,8 @@ func (m *MetaProvider) IsAvailable() bool {
 }
 
 func (m *MetaProvider) GetRuntimeInfo() map[string]interface{} {
-	return make(map[string]interface{})
+	info := map[string]interface{}{
+		motan.RuntimeNameKey: m.GetName(),
+	}
+	return info
 }
