@@ -7,6 +7,7 @@ import (
 	"github.com/weibocom/motan-go/endpoint"
 	vlog "github.com/weibocom/motan-go/log"
 	mpro "github.com/weibocom/motan-go/protocol"
+	"github.com/weibocom/motan-go/serialize"
 	"os"
 	"strconv"
 	"strings"
@@ -33,7 +34,7 @@ var (
 		"grpc-pb-json": true,
 	}
 	supportProtocols = map[string]bool{
-		"motan":  true,
+		"motan":  false,
 		"motan2": true,
 	}
 	once = sync.Once{}
@@ -147,10 +148,14 @@ func getRemoteDynamicMeta(cacheKey string, endpoint core.EndPoint) (map[string]s
 		}
 		return nil, errors.New(resp.GetException().ErrMsg)
 	}
-	reply := make(map[string]string)
-	err := resp.ProcessDeserializable(&reply)
-	if err != nil {
-		return nil, err
+	if d, ok := resp.GetValue().(*core.DeserializableValue); ok {
+		reply := make(map[string]string)
+		breezeSerialize := &serialize.BreezeSerialization{}
+		_, err := breezeSerialize.DeSerialize(d.Body, &reply)
+		if err != nil {
+			return nil, err
+		}
+		return reply, nil
 	}
 	// multiple serialization might encode empty map into interface{}, not map[string]string
 	// in this case, return a public empty string map
@@ -167,6 +172,10 @@ func getMetaServiceRequest() core.Request {
 		Method:      MetaMethodName,
 		Attachment:  core.NewStringMap(core.DefaultAttachmentSize),
 		Arguments:   []interface{}{},
+		RPCContext: &core.RPCContext{
+			Serialized:   true,
+			SerializeNum: serialize.BreezeNumber,
+		},
 	}
 	req.SetAttachment(mpro.MFrameworkService, "y")
 	return req
