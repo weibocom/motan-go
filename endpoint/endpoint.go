@@ -64,6 +64,7 @@ func GenerateRequestID() uint64 {
 type MockEndpoint struct {
 	URL          *motan.URL
 	MockResponse motan.Response
+	available    atomic.Value
 }
 
 func (m *MockEndpoint) GetRuntimeInfo() map[string]interface{} {
@@ -85,7 +86,18 @@ func (m *MockEndpoint) SetURL(url *motan.URL) {
 }
 
 func (m *MockEndpoint) IsAvailable() bool {
+	if m.available.Load() == nil {
+		return true
+	}
+	b, ok := m.available.Load().(bool)
+	if ok {
+		return b
+	}
 	return true
+}
+
+func (m *MockEndpoint) SetAvailable(available bool) {
+	m.available.Store(available)
 }
 
 func (m *MockEndpoint) SetProxy(proxy bool) {}
