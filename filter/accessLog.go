@@ -36,20 +36,19 @@ func (t *AccessLogFilter) NewFilter(url *motan.URL) motan.Filter {
 
 func (t *AccessLogFilter) Filter(caller motan.Caller, request motan.Request) motan.Response {
 	role := defaultRole
-	var ip string
+	var address string
 	var start time.Time
 	switch caller.(type) {
 	case motan.Provider:
 		role = serverAgentRole
-		ip = request.GetAttachment(motan.HostKey)
+		address = request.GetAttachment(motan.HostKey)
 		start = request.GetRPCContext(true).RequestReceiveTime
 	case motan.EndPoint:
 		role = clientAgentRole
-		ip = caller.GetURL().Host
+		address = caller.GetURL().Host + ":" + caller.GetURL().GetPortStr()
 		start = time.Now()
 	}
 	response := t.GetNext().Filter(caller, request)
-	address := ip + ":" + caller.GetURL().GetPortStr()
 	if _, ok := caller.(motan.Provider); ok {
 		reqCtx := request.GetRPCContext(true)
 		resCtx := response.GetRPCContext(true)

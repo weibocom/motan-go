@@ -330,10 +330,21 @@ func (c *CommandRegistryWrapper) getResultWithCommand(needNotify bool) []*motan.
 	}
 	if needNotify {
 		c.notifyListener.Notify(c.registry.GetURL(), result)
-		c.notifyRecorder.AddRecord(result)
+		c.notifyRecorder.AddRecord(toRecordInfo(result))
 	}
 	vlog.Infof("%s get result with command. tcCommand: %t, degradeCommand:%t,  result size %d, will notify:%t", c.cluster.GetURL().GetIdentity(), currentCommand != nil, c.degradeCommand != nil, len(result), needNotify)
 	return result
+}
+
+func toRecordInfo(urls []*motan.URL) []string {
+	if len(urls) == 0 {
+		return []string{}
+	}
+	infoList := make([]string, len(urls))
+	for i, url := range urls {
+		infoList[i] = url.GetIdentityWithRegistry()
+	}
+	return infoList
 }
 
 func processRoute(urls []*motan.URL, routers []string) []*motan.URL {

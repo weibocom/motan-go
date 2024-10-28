@@ -244,6 +244,7 @@ const (
 
 	// -----------basic keys-------------
 
+	RuntimeStartTimeKey  = "startTime"
 	RuntimeCpuPercentKey = "cpuPercent"
 	RuntimeRssMemoryKey  = "rssMemory"
 )
