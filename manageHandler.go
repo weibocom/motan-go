@@ -799,12 +799,38 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var (
+	defaultKeys = []string{
+		motan.RuntimeClustersKey,
+		motan.RuntimeHttpClustersKey,
+		motan.RuntimeExportersKey,
+		motan.RuntimeServersKey,
+		motan.RuntimeExtensionFactoryKey,
+		motan.RuntimeBasicKey,
+	}
+)
+
 type RuntimeHandler struct {
-	agent *Agent
+	agent     *Agent
+	functions map[string]func() map[string]interface{}
 }
 
 func (h *RuntimeHandler) SetAgent(agent *Agent) {
 	h.agent = agent
+	h.functions = map[string]func() map[string]interface{}{
+		// cluster info
+		motan.RuntimeClustersKey: h.getClusterInfo,
+		// http cluster info
+		motan.RuntimeHttpClustersKey: h.getHttpClusterInfo,
+		// exporter info
+		motan.RuntimeExportersKey: h.getExporterInfo,
+		// servers info
+		motan.RuntimeServersKey: h.getServersInfo,
+		// extensionFactory info
+		motan.RuntimeExtensionFactoryKey: GetDefaultExtFactory().GetRuntimeInfo,
+		// basic info
+		motan.RuntimeBasicKey: h.agent.GetRuntimeInfo,
+	}
 }
 
 func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -814,24 +840,19 @@ func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"result":                     "ok",
 			motan.RuntimeInstanceTypeKey: "motan-agent",
 		}
-		// cluster info
-		result[motan.RuntimeClustersKey] = h.getClusterInfo()
-
-		// http cluster info
-		result[motan.RuntimeHttpClustersKey] = h.getHttpClusterInfo()
-
-		// exporter info
-		result[motan.RuntimeExportersKey] = h.getExporterInfo()
-
-		// extensionFactory info
-		result[motan.RuntimeExtensionFactoryKey] = GetDefaultExtFactory().GetRuntimeInfo()
-
-		// servers info
-		result[motan.RuntimeServersKey] = h.getServersInfo()
-
-		// basic info
-		result[motan.RuntimeBasicKey] = h.getBasicInfo()
-
+		keyString := r.FormValue("keys")
+		var keys []string
+		if keyString == "" {
+			keys = defaultKeys
+		} else {
+			keys = strings.Split(keyString, ",")
+		}
+		for _, key := range keys {
+			runtimeFunc, ok := h.functions[key]
+			if ok {
+				h.addInfos(runtimeFunc(), key, result)
+			}
+		}
 		res, _ := json.Marshal(result)
 		w.Write(res)
 	}
@@ -888,16 +909,11 @@ func (h *RuntimeHandler) getServersInfo() map[string]interface{} {
 	return info
 }
 
-func (h *RuntimeHandler) getBasicInfo() map[string]interface{} {
-	info := map[string]interface{}{}
-	info[motan.RuntimeCpuPercentKey] = GetCpuPercent()
-	info[motan.RuntimeRssMemoryKey] = GetRssMemory()
-	return info
-}
-
 func (h *RuntimeHandler) addInfos(info map[string]interface{}, key string, result map[string]interface{}) {
-	if info != nil && len(info) > 0 {
+	if info != nil {
 		result[key] = info
+	} else {
+		result[key] = map[string]interface{}{}
 	}
 }
 

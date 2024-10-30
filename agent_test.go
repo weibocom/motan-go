@@ -1064,15 +1064,28 @@ func TestRuntimeHandler(t *testing.T) {
 	err = json.Unmarshal(bodyBytes, &runtimeInfo)
 	assert.Nil(t, err)
 
-	for _, s := range []string{
-		core.RuntimeInstanceTypeKey,
+	for _, s := range defaultKeys {
+		info, ok := runtimeInfo[s]
+		assert.True(t, ok)
+		assert.NotNil(t, info)
+		t.Logf("key: %s", s)
+	}
+
+	// test param keys
+	keys := []string{
 		core.RuntimeExportersKey,
-		core.RuntimeClustersKey,
-		core.RuntimeHttpClustersKey,
-		core.RuntimeExtensionFactoryKey,
 		core.RuntimeServersKey,
-		core.RuntimeBasicKey,
-	} {
+		core.RuntimeHttpClustersKey,
+	}
+	resp, err = http.Get("http://127.0.0.1:8002/runtime/info" + "?keys=" + strings.Join(keys, ","))
+	assert.Nil(t, err)
+	bodyBytes, err = ioutil.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	err = resp.Body.Close()
+	assert.Nil(t, err)
+	err = json.Unmarshal(bodyBytes, &runtimeInfo)
+	assert.Nil(t, err)
+	for _, s := range keys {
 		info, ok := runtimeInfo[s]
 		assert.True(t, ok)
 		assert.NotNil(t, info)

@@ -44,6 +44,7 @@ const (
 )
 
 var (
+	startTime                 = time.Now()
 	initParamLock             sync.Mutex
 	setAgentLock              sync.Mutex
 	notFoundProviderCount     int64 = 0
@@ -132,6 +133,14 @@ func (a *Agent) initProxyServiceURL(url *motan.URL) {
 
 func (a *Agent) OnAfterStart(f func(a *Agent)) {
 	a.onAfterStart = append(a.onAfterStart, f)
+}
+
+func (a *Agent) GetRuntimeInfo() map[string]interface{} {
+	info := map[string]interface{}{}
+	info[motan.RuntimeStartTimeKey] = startTime
+	info[motan.RuntimeCpuPercentKey] = GetCpuPercent()
+	info[motan.RuntimeRssMemoryKey] = GetRssMemory()
+	return info
 }
 
 func (a *Agent) RegisterCommandHandler(f CommandHandler) {
