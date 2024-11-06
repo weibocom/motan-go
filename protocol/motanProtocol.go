@@ -15,7 +15,7 @@ import (
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
+	vlog "github.com/weibocom/motan-go/log"
 )
 
 const (
@@ -689,7 +689,6 @@ func ConvertToReqMessage(request motan.Request, serialize motan.Serialization) (
 	if rc.Proxy {
 		req.Header.SetProxy(true)
 	}
-	req.Header.SetSerialize(serialize.GetSerialNum())
 	req.Metadata.Store(MPath, request.GetServiceName())
 	req.Metadata.Store(MMethod, request.GetMethod())
 	if request.GetAttachment(MProxyProtocol) == "" {
