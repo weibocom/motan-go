@@ -201,7 +201,7 @@ func TestWeightRingSelector(t *testing.T) {
 	// max node size of WR
 	checkKWR(t, lb, 256, 15, round, 1, 1, 0, url)
 
-	// same nodes are unavailable
+	// some nodes are unavailable
 	maxRatio := 0.4
 	avgRatio := 0.1
 	checkKWR(t, lb, 46, 75, round, float64(round)*maxRatio, float64(round)*avgRatio, 5, url)
@@ -322,6 +322,9 @@ func buildTestEps(size int, sameStaticWeight bool, maxWeight int64, adjust bool,
 		weight := maxWeight
 		if !sameStaticWeight {
 			weight = int64(rand.Float64() * float64(maxWeight))
+			if weight == 1 { //When the weight is 1, the difference ratio will be larger
+				weight += int64(rand.Float64() * float64(maxWeight-1))
+			}
 		}
 		if adjust {
 			weight = doAdjust(weight)
