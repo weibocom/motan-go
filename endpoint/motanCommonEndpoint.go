@@ -576,6 +576,7 @@ func (c *Channel) newStream(req motan.Request, rc *motan.RPCContext, deadline ti
 		return nil, ErrChannelShutdown
 	}
 	s := acquireStream()
+	// ensure uniqueness and avoid duplicate ids from different clients
 	s.streamId = GenerateRequestID()
 	s.channel = c
 	s.isHeartbeat = false
@@ -695,6 +696,7 @@ func (c *Channel) recvLoop() error {
 
 func (c *Channel) handleMsg(msg interface{}, t time.Time) {
 	var isHeartbeat bool
+	// rid is stream id, not request id,
 	var rid uint64
 	if v1msg, ok := msg.(*mpro.MotanV1Message); ok {
 		res, err := mpro.DecodeMotanV1Response(v1msg)
