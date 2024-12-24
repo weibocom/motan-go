@@ -194,21 +194,23 @@ func TrimSplit(s string, sep string) []string {
 	if sep == "" {
 		return strings.Split(s, sep)
 	}
-	n := strings.Count(s, sep) + 1
-	a := make([]string, n)
-	i := 0
+	var a []string
 	for {
 		m := strings.Index(s, sep)
 		if m < 0 {
 			s = strings.TrimSpace(s)
 			break
 		}
-		a[i] = strings.TrimSpace(s[:m])
-		i++
+		temp := strings.TrimSpace(s[:m])
+		if temp != "" {
+			a = append(a, temp)
+		}
 		s = s[m+len(sep):]
 	}
-	a[i] = s
-	return a[:i+1]
+	if s != "" {
+		a = append(a, s)
+	}
+	return a
 }
 
 // TrimSplitSet slices string and convert to map set
