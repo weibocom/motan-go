@@ -20,6 +20,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -914,6 +915,53 @@ func (h *RuntimeHandler) addInfos(info map[string]interface{}, key string, resul
 		result[key] = info
 	} else {
 		result[key] = map[string]interface{}{}
+	}
+}
+
+type RefersFilterHandler struct {
+	lock   sync.Mutex
+	agent  *Agent
+	config cluster.RefersFilterConfigList
+}
+
+func (h *RefersFilterHandler) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *RefersFilterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/refers/filter/get":
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		JSON(w, "", "ok", h.config)
+	case "/refers/filter/set":
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		configContent := r.FormValue("config")
+		if configContent == "" {
+			JSONError(w, "empty config")
+			return
+		}
+		err := json.Unmarshal([]byte(configContent), &h.config)
+		if err != nil {
+			JSONError(w, "parse config failed")
+			return
+		}
+		err = h.config.Verify()
+		if err != nil {
+			JSONError(w, err.Error())
+		}
+		h.agent.clusterMap.Range(func(k, v interface{}) bool {
+			cls, ok := v.(*cluster.MotanCluster)
+			if !ok {
+				return true
+			}
+			url := cls.GetURL()
+			refersFilters := h.config.ParseRefersFilters(url)
+			cls.SetRefersFilter(refersFilters)
+			return true
+		})
+		JSONSuccess(w, "ok")
 	}
 }
 

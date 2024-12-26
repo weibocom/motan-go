@@ -1,6 +1,7 @@
 package motan
 
 import (
+	"github.com/weibocom/motan-go/cluster"
 	"net/http"
 	"sync"
 
@@ -93,6 +94,12 @@ func GetDefaultManageHandlers() map[string]http.Handler {
 
 		runtimeHandler := &RuntimeHandler{}
 		defaultManageHandlers["/runtime/info"] = runtimeHandler
+
+		refersFilterHandler := &RefersFilterHandler{
+			config: cluster.RefersFilterConfigList{},
+		}
+		defaultManageHandlers["/refers/filter/get"] = refersFilterHandler
+		defaultManageHandlers["/refers/filter/set"] = refersFilterHandler
 	})
 	return defaultManageHandlers
 }

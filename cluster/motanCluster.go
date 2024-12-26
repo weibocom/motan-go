@@ -6,12 +6,13 @@ import (
 	"math/rand"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	motan "github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/log"
+	vlog "github.com/weibocom/motan-go/log"
 )
 
 type MotanCluster struct {
@@ -32,6 +33,9 @@ type MotanCluster struct {
 
 	// cached identity
 	identity motan.AtomicString
+
+	// exclude or include some Refers before refresh LoadBalance
+	refersFilter RefersFilter
 }
 
 func (m *MotanCluster) IsAvailable() bool {
@@ -121,10 +125,29 @@ func (m *MotanCluster) refresh() {
 			newRefers = append(newRefers, e)
 		}
 	}
+	newRefers = m.filterRefers(newRefers)
 	// shuffle endpoints list avoid to call to determine server nodes when the list is not change.
 	newRefers = m.ShuffleEndpoints(newRefers)
 	m.Refers = newRefers
 	m.LoadBalance.OnRefresh(newRefers)
+}
+
+func (m *MotanCluster) filterRefers(newRefers []motan.EndPoint) (refers []motan.EndPoint) {
+	defer motan.HandlePanic(func() {
+		vlog.Errorf("cluster %s filterRefers panic. %s", m.GetIdentity(), string(debug.Stack()))
+	})
+	if m.refersFilter == nil {
+		return newRefers
+	}
+	refers = newRefers
+	refersAfterFilter := m.refersFilter.Filter(newRefers)
+	if len(refersAfterFilter) > 0 {
+		refers = refersAfterFilter
+		vlog.Infof("cluster %s filterRefers. before: %d, after: %d", m.GetIdentity(), len(newRefers), len(refersAfterFilter))
+	} else {
+		vlog.Warningf("empty refers after filter, use original refers. cluster: %s", m.url.GetIdentityWithRegistry())
+	}
+	return refers
 }
 
 func (m *MotanCluster) ShuffleEndpoints(endpoints []motan.EndPoint) []motan.EndPoint {
@@ -403,6 +426,17 @@ func (m *MotanCluster) GetRuntimeInfo() map[string]interface{} {
 		info[motan.RuntimeClusterFiltersKey] = clusterFilters
 	}
 	return info
+}
+
+func (m *MotanCluster) SetRefersFilter(filter RefersFilter) {
+	m.notifyLock.Lock()
+	defer m.notifyLock.Unlock()
+	// has not changed
+	if filter == nil && m.refersFilter == nil {
+		return
+	}
+	m.refersFilter = filter
+	m.refresh()
 }
 
 const (
