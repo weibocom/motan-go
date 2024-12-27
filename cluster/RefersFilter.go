@@ -4,6 +4,7 @@ import (
 	"fmt"
 	motan "github.com/weibocom/motan-go/core"
 	vlog "github.com/weibocom/motan-go/log"
+	"net"
 	"strings"
 )
 
@@ -58,13 +59,30 @@ type RefersFilter interface {
 type filterRule struct {
 	mode     string
 	prefixes []string
+	subnets  []*net.IPNet
 }
 
 func (fr filterRule) IsMatch(refer motan.EndPoint) bool {
 	for _, prefix := range fr.prefixes {
 		if strings.HasPrefix(refer.GetURL().Host, prefix) {
 			if fr.mode == FilterModeExclude {
-				vlog.Infof("filter refer: %s, rule: %s, mode: %s", refer.GetURL().GetIdentity(), prefix, fr.mode)
+				vlog.Infof("filter refer: %s, prefix rule: %s, mode: %s", refer.GetURL().GetIdentity(), prefix, fr.mode)
+			}
+			return true
+		}
+	}
+	if len(fr.subnets) == 0 {
+		return false
+	}
+	ip := net.ParseIP(refer.GetURL().Host)
+	if ip == nil {
+		vlog.Errorf("invalid refer ip: %s", refer.GetURL().Host)
+		return false
+	}
+	for _, ipNet := range fr.subnets {
+		if ipNet.Contains(ip) {
+			if fr.mode == FilterModeExclude {
+				vlog.Infof("filter refer: %s, subnet rule: %s, mode: %s", refer.GetURL().GetIdentity(), ipNet.String(), fr.mode)
 			}
 			return true
 		}
@@ -81,14 +99,28 @@ func NewDefaultRefersFilter(filterConfig []RefersFilterConfig) *DefaultRefersFil
 	var includeRules []filterRule
 	var excludeRules []filterRule
 	for _, config := range filterConfig {
-		rule := filterRule{
+		rules := motan.TrimSplit(config.Rule, ",")
+		fr := filterRule{
 			mode:     config.Mode,
-			prefixes: motan.TrimSplit(config.Rule, ","),
+			prefixes: []string{},
+			subnets:  []*net.IPNet{},
+		}
+		for _, item := range rules {
+			if strings.Contains(item, "/") {
+				_, subnet, err := net.ParseCIDR(item)
+				if err != nil {
+					vlog.Errorf("invalid subnet rule: %s", item)
+					continue
+				}
+				fr.subnets = append(fr.subnets, subnet)
+			} else {
+				fr.prefixes = append(fr.prefixes, item)
+			}
 		}
 		if config.Mode == FilterModeExclude {
-			excludeRules = append(excludeRules, rule)
+			excludeRules = append(excludeRules, fr)
 		} else {
-			includeRules = append(includeRules, rule)
+			includeRules = append(includeRules, fr)
 		}
 	}
 	return &DefaultRefersFilter{includeRules: includeRules, excludeRules: excludeRules}

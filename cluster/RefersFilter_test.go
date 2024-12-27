@@ -133,7 +133,7 @@ func TestDefaultRefersFilter_Filter(t *testing.T) {
 		assertFunc func(t *testing.T, filter DefaultRefersFilter)
 	}{
 		{
-			desc: "include filter",
+			desc: "include prefix filter",
 			filter: NewDefaultRefersFilter([]RefersFilterConfig{
 				{
 					Mode: FilterModeInclude,
@@ -143,34 +143,86 @@ func TestDefaultRefersFilter_Filter(t *testing.T) {
 			assertFunc: func(t *testing.T, filter DefaultRefersFilter) {
 				refers := []motan.EndPoint{
 					&motan.TestEndPoint{URL: &motan.URL{Host: "123.1.2.0"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "124.1.2.0"}},
 				}
 				newRefers := filter.Filter(refers)
 				assert.Equal(t, len(refers), len(newRefers))
 
 				refers = []motan.EndPoint{
 					&motan.TestEndPoint{URL: &motan.URL{Host: "110.1.2.0"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "111.1.2.0"}},
 				}
 				newRefers = filter.Filter(refers)
 				assert.Equal(t, 0, len(newRefers))
 			},
 		},
 		{
-			desc: "exclude filter",
+			desc: "include subnet filter",
+			filter: NewDefaultRefersFilter([]RefersFilterConfig{
+				{
+					Mode: FilterModeInclude,
+					Rule: "10.93.0.0/16",
+				},
+			}),
+			assertFunc: func(t *testing.T, filter DefaultRefersFilter) {
+				refers := []motan.EndPoint{
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.93.1.1"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.93.2.10"}},
+				}
+				newRefers := filter.Filter(refers)
+				assert.Equal(t, len(refers), len(newRefers))
+
+				refers = []motan.EndPoint{
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.94.1.1"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.95.1.1"}},
+				}
+				newRefers = filter.Filter(refers)
+				assert.Equal(t, 0, len(newRefers))
+			},
+		},
+		{
+			desc: "exclude prefix filter",
 			filter: NewDefaultRefersFilter([]RefersFilterConfig{
 				{
 					Mode: FilterModeExclude,
-					Rule: "123,356",
+					Rule: "123,177",
 				},
 			}),
 			assertFunc: func(t *testing.T, filter DefaultRefersFilter) {
 				refers := []motan.EndPoint{
 					&motan.TestEndPoint{URL: &motan.URL{Host: "123.1.2.0"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "177.1.2.0"}},
 				}
 				newRefers := filter.Filter(refers)
 				assert.Equal(t, 0, len(newRefers))
 
 				refers = []motan.EndPoint{
 					&motan.TestEndPoint{URL: &motan.URL{Host: "121.1.2.0"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "122.1.2.0"}},
+				}
+				newRefers = filter.Filter(refers)
+				assert.Equal(t, len(refers), len(newRefers))
+			},
+		},
+		{
+			desc: "exclude subnet filter",
+			filter: NewDefaultRefersFilter([]RefersFilterConfig{
+				{
+					Mode: FilterModeExclude,
+					Rule: "10.93.0.0/16",
+				},
+			}),
+			assertFunc: func(t *testing.T, filter DefaultRefersFilter) {
+				refers := []motan.EndPoint{
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.93.1.1"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.93.2.10"}},
+				}
+				newRefers := filter.Filter(refers)
+				assert.Equal(t, 0, len(newRefers))
+
+				refers = []motan.EndPoint{
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.94.1.1"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.95.1.1"}},
 				}
 				newRefers = filter.Filter(refers)
 				assert.Equal(t, len(refers), len(newRefers))
@@ -181,11 +233,11 @@ func TestDefaultRefersFilter_Filter(t *testing.T) {
 			filter: NewDefaultRefersFilter([]RefersFilterConfig{
 				{
 					Mode: FilterModeInclude,
-					Rule: "123,190",
+					Rule: "123,190,10.93.0.0/16",
 				},
 				{
 					Mode: FilterModeExclude,
-					Rule: "123,145",
+					Rule: "123,145,10.96.0.0/16",
 				},
 			}),
 			assertFunc: func(t *testing.T, filter DefaultRefersFilter) {
@@ -194,9 +246,12 @@ func TestDefaultRefersFilter_Filter(t *testing.T) {
 					&motan.TestEndPoint{URL: &motan.URL{Host: "145.1.2.0"}},
 					&motan.TestEndPoint{URL: &motan.URL{Host: "190.1.2.0"}},
 					&motan.TestEndPoint{URL: &motan.URL{Host: "110.1.2.0"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.93.1.2"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "10.96.1.2"}},
+					&motan.TestEndPoint{URL: &motan.URL{Host: "190.96"}}, // retained invalid host
 				}
 				newRefers := filter.Filter(refers)
-				assert.Equal(t, 1, len(newRefers))
+				assert.Equal(t, 3, len(newRefers))
 			},
 		},
 	}
@@ -206,4 +261,24 @@ func TestDefaultRefersFilter_Filter(t *testing.T) {
 		f.assertFunc(t, *f.filter)
 		t.Logf("test case: %s finish", f.desc)
 	}
+}
+
+func TestNewDefaultRefersFilter(test *testing.T) {
+	fr := NewDefaultRefersFilter([]RefersFilterConfig{
+		{
+			Mode: FilterModeInclude,
+			Rule: "123.1,10.2,10.93.0.0/18,10.93.0.0/34", // discard invalid subnet rule
+		},
+		{
+			Mode: FilterModeExclude,
+			Rule: "124.1,10.1,10.14.0.0/18,10.14.0.0/34", // discard invalid subnet rule
+		},
+	})
+	assert.NotNil(test, fr)
+	assert.Equal(test, 1, len(fr.includeRules))
+	assert.Equal(test, 1, len(fr.excludeRules))
+	assert.Equal(test, 2, len(fr.includeRules[0].prefixes))
+	assert.Equal(test, 1, len(fr.includeRules[0].subnets))
+	assert.Equal(test, 2, len(fr.excludeRules[0].prefixes))
+	assert.Equal(test, 1, len(fr.excludeRules[0].subnets))
 }
