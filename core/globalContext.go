@@ -8,6 +8,7 @@ import (
 	"github.com/weibocom/motan-go/log"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -361,6 +362,9 @@ func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[strin
 				mv := v.(map[interface{}]interface{})
 				ph[sk] = mv[c.pool]
 				if ph[sk] == nil {
+					ph[sk] = c.getDynamicParametersByRegexp(mv)
+				}
+				if ph[sk] == nil {
 					ph[sk] = mv["default"]
 				}
 			default:
@@ -369,6 +373,23 @@ func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[strin
 		}
 	}
 	return ph
+}
+
+func (c *Context) getDynamicParametersByRegexp(mv map[interface{}]interface{}) interface{} {
+	for k, v := range mv {
+		ks, ok := k.(string)
+		if !ok {
+			continue
+		}
+		re, err := regexp.Compile(ks)
+		if err != nil {
+			continue
+		}
+		if re.MatchString(c.pool) {
+			return v
+		}
+	}
+	return nil
 }
 
 // parse host url including agenturl, clienturl, serverurl

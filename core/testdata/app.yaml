@@ -14,6 +14,12 @@ dynamic-param:
     app-idc2: ccc2
     app-idc3: ccc3
     default: ccc_default
+  regexp:
+    reg-idc1: reg-idx1-param
+    reg.*2$: reg-idx2-param
+    ^x.*\d+$: xeg-idx3-param
+    default: regexp_default-param
+
 
 test_placeholder:
   aaa: "${aaa}"
@@ -24,3 +30,4 @@ test_placeholder:
     - "xxx"
     - "ddd"
     - "xx"
+  regexp: "${regexp}"
