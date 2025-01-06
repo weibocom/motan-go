@@ -44,7 +44,7 @@ func (list RefersFilterConfigList) ParseRefersFilters(clusterURL *motan.URL) Ref
 			continue
 		}
 		rules = append(rules, filter)
-		vlog.Infof("add refer filter for group: %s, service: %s, rule: %s, mode: %s", clusterURL.Group, clusterURL.Path, filter.Rule, filter.Mode)
+		vlog.Infof("add refer filter for group: %s, service: %s, rule: %s, mode: %s, filter group: %s, filter service: %s", clusterURL.Group, clusterURL.Path, filter.Rule, filter.Mode, filter.Group, filter.Service)
 	}
 	if len(rules) == 0 {
 		return nil

@@ -944,13 +944,16 @@ func (h *RefersFilterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		err := json.Unmarshal([]byte(configContent), &h.config)
 		if err != nil {
+			vlog.Errorf("update refers filter fail, config: %s", configContent)
 			JSONError(w, "parse config failed")
 			return
 		}
 		err = h.config.Verify()
 		if err != nil {
+			vlog.Errorf("update refers filter fail, config: %s", configContent)
 			JSONError(w, err.Error())
 		}
+		vlog.Infof("update refers filter success, config: %s", configContent)
 		h.agent.clusterMap.Range(func(k, v interface{}) bool {
 			cls, ok := v.(*cluster.MotanCluster)
 			if !ok {
