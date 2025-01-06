@@ -1096,17 +1096,15 @@ func TestRuntimeHandler(t *testing.T) {
 }
 
 func TestClusterRefersFilterHandler(t *testing.T) {
-	completeConfig := cluster.RefersFilterConfigList{
-		{
-			Group:   "g1",
-			Service: "s1",
-			Mode:    cluster.FilterModeExclude,
-			Rule:    "127.0",
-		},
-	}
+	completeConfigBody := `[{"service":"com.weibo.api.test1","mode":"exclude","rule":"127.93.0.0/16"},{"service":"com.weibo.api.test2","mode":"exclude","rule":"127.93.0.0/16"}]`
+	var completeConfig cluster.RefersFilterConfigList
+	_ = json.Unmarshal([]byte(completeConfigBody), &completeConfig)
 	completeConfigExpect, _ := json.Marshal(completeConfig)
-	emptyConfig := cluster.RefersFilterConfigList{}
-	emptyConfigExpect, _ := json.Marshal(emptyConfig)
+	rewriteConfigBody := `[{"mode":"exclude","rule":"127.93.0.0/16"},{"service":"com.weibo.api.test2","mode":"exclude","rule":"127.93.0.0/16"}]`
+	var rewriteConfig cluster.RefersFilterConfigList
+	_ = json.Unmarshal([]byte(rewriteConfigBody), &rewriteConfig)
+	rewriteConfigExpect, _ := json.Marshal(rewriteConfig)
+	emptyConfigExpect := `[]`
 	cases := []struct {
 		desc       string
 		request    *http.Request
@@ -1164,7 +1162,7 @@ func TestClusterRefersFilterHandler(t *testing.T) {
 			request: func() *http.Request {
 				payload := &bytes.Buffer{}
 				writer := multipart.NewWriter(payload)
-				_ = writer.WriteField("config", string(completeConfigExpect))
+				_ = writer.WriteField("config", completeConfigBody)
 				_ = writer.Close()
 				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/set", payload)
 				req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -1190,6 +1188,39 @@ func TestClusterRefersFilterHandler(t *testing.T) {
 				bodyBytes, err := ioutil.ReadAll(resp.Body)
 				assert.Nil(t, err)
 				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, completeConfigExpect), string(bodyBytes))
+			},
+		},
+		{
+			desc: "rewrite config",
+			request: func() *http.Request {
+				payload := &bytes.Buffer{}
+				writer := multipart.NewWriter(payload)
+				_ = writer.WriteField("config", string(rewriteConfigBody))
+				_ = writer.Close()
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/set", payload)
+				req.Header.Set("Content-Type", writer.FormDataContentType())
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, `{"result":"ok","data":"ok"}`, string(bodyBytes))
+			},
+		},
+		{
+			desc: "get rewrite config",
+			request: func() *http.Request {
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/get", nil)
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, rewriteConfigExpect), string(bodyBytes))
 			},
 		},
 	}
