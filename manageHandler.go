@@ -942,12 +942,14 @@ func (h *RefersFilterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			JSONError(w, "empty config")
 			return
 		}
-		err := json.Unmarshal([]byte(configContent), &h.config)
+		var newConfig cluster.RefersFilterConfigList
+		err := json.Unmarshal([]byte(configContent), &newConfig)
 		if err != nil {
 			vlog.Errorf("update refers filter fail, config: %s", configContent)
 			JSONError(w, "parse config failed")
 			return
 		}
+		h.config = newConfig
 		err = h.config.Verify()
 		if err != nil {
 			vlog.Errorf("update refers filter fail, config: %s", configContent)
