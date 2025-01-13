@@ -45,6 +45,9 @@ const (
 	httpLocationPath  = "http/location/"
 	httpPoolPath      = "http/pools/"
 	poolNameSeparator = "-"
+
+	// dynamic regexp params prefix
+	regexpPrefix = "regexp:"
 )
 
 // Context for agent, client, server. context is created depends on  config file
@@ -378,10 +381,10 @@ func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[strin
 func (c *Context) getDynamicParametersByRegexp(mv map[interface{}]interface{}) interface{} {
 	for k, v := range mv {
 		ks, ok := k.(string)
-		if !ok || ks == "default" {
+		if !ok || !strings.HasPrefix(ks, regexpPrefix) {
 			continue
 		}
-		re, err := regexp.Compile(ks)
+		re, err := regexp.Compile(ks[len(regexpPrefix):])
 		if err != nil {
 			continue
 		}
