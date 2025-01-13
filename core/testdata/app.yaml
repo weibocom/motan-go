@@ -18,6 +18,7 @@ dynamic-param:
     reg-idc1: reg-idx1-param
     reg.*2$: reg-idx2-param
     ^x.*\d+$: xeg-idx3-param
+    reg.*t$: reg-contain-default
     default: regexp_default-param
 
 
