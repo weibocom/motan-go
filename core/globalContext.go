@@ -378,7 +378,7 @@ func (c *Context) getDynamicParameters(dp map[interface{}]interface{}) map[strin
 func (c *Context) getDynamicParametersByRegexp(mv map[interface{}]interface{}) interface{} {
 	for k, v := range mv {
 		ks, ok := k.(string)
-		if !ok {
+		if !ok || ks == "default" {
 			continue
 		}
 		re, err := regexp.Compile(ks)

@@ -443,6 +443,7 @@ func TestContext_getDynamicParametersByRegexp(t *testing.T) {
 		{"regexp", "regexp_default-param"},
 		{"reg-idc1", "reg-idx1-param"},
 		{"reg-idx2", "reg-idx2-param"},
+		{"reg-default", "reg-contain-default"}, // exclude default
 		{"xeg-idx3", "xeg-idx3-param"},
 	}
 	for _, c := range cases {
