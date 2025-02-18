@@ -137,6 +137,70 @@ func TestNotify(t *testing.T) {
 	assert.NotNil(t, registries)
 }
 
+func TestRefersFilters(t *testing.T) {
+	cluster := initCluster()
+	urls := make([]*motan.URL, 0, 2)
+	urls = append(urls, &motan.URL{Host: "127.0.0.1", Port: 8001, Protocol: "test"})
+	urls = append(urls, &motan.URL{Host: "110.0.0.1", Port: 8002, Protocol: "test"})
+	urls = append(urls, &motan.URL{Host: "139.0.0.1", Port: 8003, Protocol: "test"})
+	cluster.Notify(RegistryURL, urls)
+	if len(cluster.Refers) != 3 {
+		t.Fatalf("cluster notify-refers size not correct. expect :2, refers size:%d", len(cluster.Refers))
+	}
+	cases := []struct {
+		desc          string
+		filter        RefersFilter
+		expectEpCount int
+	}{
+		{
+			desc: "include ip prefix",
+			filter: func() RefersFilter {
+				return NewDefaultRefersFilter([]RefersFilterConfig{
+					{
+						Mode: FilterModeInclude,
+						Rule: "127,110",
+					},
+				})
+			}(),
+			expectEpCount: 2,
+		},
+		{
+			desc:          "reset filter empty",
+			filter:        nil,
+			expectEpCount: 3,
+		},
+		{
+			desc: "exclude ip prefix",
+			filter: func() RefersFilter {
+				return NewDefaultRefersFilter([]RefersFilterConfig{
+					{
+						Mode: FilterModeExclude,
+						Rule: "127,110",
+					},
+				})
+			}(),
+			expectEpCount: 1,
+		},
+		{
+			desc:          "reset empty",
+			filter:        nil,
+			expectEpCount: 3,
+		},
+	}
+	newRefers := make([]motan.EndPoint, 0, 32)
+	for _, v := range cluster.registryRefers {
+		for _, e := range v {
+			newRefers = append(newRefers, e)
+		}
+	}
+	for _, c := range cases {
+		t.Logf("test case:%s start", c.desc)
+		cluster.SetRefersFilter(c.filter)
+		assert.Equal(t, c.expectEpCount, len(cluster.filterRefers(newRefers)))
+		t.Logf("test case:%s finsh", c.desc)
+	}
+}
+
 func TestCall(t *testing.T) {
 	cluster := initCluster()
 	response := cluster.Call(&motan.MotanRequest{})

@@ -2,16 +2,18 @@ package meta
 
 import (
 	"errors"
-	"github.com/patrickmn/go-cache"
-	"github.com/weibocom/motan-go/core"
-	"github.com/weibocom/motan-go/endpoint"
-	vlog "github.com/weibocom/motan-go/log"
-	mpro "github.com/weibocom/motan-go/protocol"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/patrickmn/go-cache"
+	"github.com/weibocom/motan-go/core"
+	"github.com/weibocom/motan-go/endpoint"
+	vlog "github.com/weibocom/motan-go/log"
+	mpro "github.com/weibocom/motan-go/protocol"
+	"github.com/weibocom/motan-go/serialize"
 )
 
 const (
@@ -33,7 +35,7 @@ var (
 		"grpc-pb-json": true,
 	}
 	supportProtocols = map[string]bool{
-		"motan":  true,
+		"motan":  false,
 		"motan2": true,
 	}
 	once = sync.Once{}
@@ -147,12 +149,17 @@ func getRemoteDynamicMeta(cacheKey string, endpoint core.EndPoint) (map[string]s
 		}
 		return nil, errors.New(resp.GetException().ErrMsg)
 	}
-	reply := make(map[string]string)
-	err := resp.ProcessDeserializable(&reply)
-	if err != nil {
-		return nil, err
+	if d, ok := resp.GetValue().(*core.DeserializableValue); ok {
+		reply := make(map[string]string)
+		// only support breeze serializer and motan2 protocol
+		breezeSerialize := &serialize.BreezeSerialization{}
+		_, err := breezeSerialize.DeSerialize(d.Body, &reply)
+		if err != nil {
+			return nil, err
+		}
+		return reply, nil
 	}
-	// multiple serialization might encode empty map into interface{}, not map[string]string
+	// multiple serialization might encode an empty map into interface{}, not map[string]string
 	// in this case, return a public empty string map
 	if res, ok := resp.GetValue().(map[string]string); ok && res != nil {
 		return res, nil
@@ -167,6 +174,10 @@ func getMetaServiceRequest() core.Request {
 		Method:      MetaMethodName,
 		Attachment:  core.NewStringMap(core.DefaultAttachmentSize),
 		Arguments:   []interface{}{},
+		RPCContext: &core.RPCContext{
+			Serialized:   true,
+			SerializeNum: serialize.BreezeNumber,
+		},
 	}
 	req.SetAttachment(mpro.MFrameworkService, "y")
 	return req

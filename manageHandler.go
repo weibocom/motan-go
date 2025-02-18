@@ -20,6 +20,7 @@ import (
 	"runtime/trace"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -799,12 +800,38 @@ func (h *HotReload) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var (
+	defaultKeys = []string{
+		motan.RuntimeClustersKey,
+		motan.RuntimeHttpClustersKey,
+		motan.RuntimeExportersKey,
+		motan.RuntimeServersKey,
+		motan.RuntimeExtensionFactoryKey,
+		motan.RuntimeBasicKey,
+	}
+)
+
 type RuntimeHandler struct {
-	agent *Agent
+	agent     *Agent
+	functions map[string]func() map[string]interface{}
 }
 
 func (h *RuntimeHandler) SetAgent(agent *Agent) {
 	h.agent = agent
+	h.functions = map[string]func() map[string]interface{}{
+		// cluster info
+		motan.RuntimeClustersKey: h.getClusterInfo,
+		// http cluster info
+		motan.RuntimeHttpClustersKey: h.getHttpClusterInfo,
+		// exporter info
+		motan.RuntimeExportersKey: h.getExporterInfo,
+		// servers info
+		motan.RuntimeServersKey: h.getServersInfo,
+		// extensionFactory info
+		motan.RuntimeExtensionFactoryKey: GetDefaultExtFactory().GetRuntimeInfo,
+		// basic info
+		motan.RuntimeBasicKey: h.agent.GetRuntimeInfo,
+	}
 }
 
 func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -814,24 +841,19 @@ func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"result":                     "ok",
 			motan.RuntimeInstanceTypeKey: "motan-agent",
 		}
-		// cluster info
-		result[motan.RuntimeClustersKey] = h.getClusterInfo()
-
-		// http cluster info
-		result[motan.RuntimeHttpClustersKey] = h.getHttpClusterInfo()
-
-		// exporter info
-		result[motan.RuntimeExportersKey] = h.getExporterInfo()
-
-		// extensionFactory info
-		result[motan.RuntimeExtensionFactoryKey] = GetDefaultExtFactory().GetRuntimeInfo()
-
-		// servers info
-		result[motan.RuntimeServersKey] = h.getServersInfo()
-
-		// basic info
-		result[motan.RuntimeBasicKey] = h.getBasicInfo()
-
+		keyString := r.FormValue("keys")
+		var keys []string
+		if keyString == "" {
+			keys = defaultKeys
+		} else {
+			keys = strings.Split(keyString, ",")
+		}
+		for _, key := range keys {
+			runtimeFunc, ok := h.functions[key]
+			if ok {
+				h.addInfos(runtimeFunc(), key, result)
+			}
+		}
 		res, _ := json.Marshal(result)
 		w.Write(res)
 	}
@@ -888,16 +910,63 @@ func (h *RuntimeHandler) getServersInfo() map[string]interface{} {
 	return info
 }
 
-func (h *RuntimeHandler) getBasicInfo() map[string]interface{} {
-	info := map[string]interface{}{}
-	info[motan.RuntimeCpuPercentKey] = GetCpuPercent()
-	info[motan.RuntimeRssMemoryKey] = GetRssMemory()
-	return info
+func (h *RuntimeHandler) addInfos(info map[string]interface{}, key string, result map[string]interface{}) {
+	if info != nil {
+		result[key] = info
+	} else {
+		result[key] = map[string]interface{}{}
+	}
 }
 
-func (h *RuntimeHandler) addInfos(info map[string]interface{}, key string, result map[string]interface{}) {
-	if info != nil && len(info) > 0 {
-		result[key] = info
+type RefersFilterHandler struct {
+	lock   sync.Mutex
+	agent  *Agent
+	config cluster.RefersFilterConfigList
+}
+
+func (h *RefersFilterHandler) SetAgent(agent *Agent) {
+	h.agent = agent
+}
+
+func (h *RefersFilterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/refers/filter/get":
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		JSON(w, "", "ok", h.config)
+	case "/refers/filter/set":
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		configContent := r.FormValue("config")
+		if configContent == "" {
+			JSONError(w, "empty config")
+			return
+		}
+		var newConfig cluster.RefersFilterConfigList
+		err := json.Unmarshal([]byte(configContent), &newConfig)
+		if err != nil {
+			vlog.Errorf("update refers filter fail, config: %s", configContent)
+			JSONError(w, "parse config failed")
+			return
+		}
+		h.config = newConfig
+		err = h.config.Verify()
+		if err != nil {
+			vlog.Errorf("update refers filter fail, config: %s", configContent)
+			JSONError(w, err.Error())
+		}
+		vlog.Infof("update refers filter success, config: %s", configContent)
+		h.agent.clusterMap.Range(func(k, v interface{}) bool {
+			cls, ok := v.(*cluster.MotanCluster)
+			if !ok {
+				return true
+			}
+			url := cls.GetURL()
+			refersFilters := h.config.ParseRefersFilters(url)
+			cls.SetRefersFilter(refersFilters)
+			return true
+		})
+		JSONSuccess(w, "ok")
 	}
 }
 

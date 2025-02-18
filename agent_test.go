@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	_ "fmt"
+	"github.com/weibocom/motan-go/cluster"
 	"github.com/weibocom/motan-go/config"
 	"github.com/weibocom/motan-go/endpoint"
 	vlog "github.com/weibocom/motan-go/log"
@@ -16,6 +17,7 @@ import (
 	_ "golang.org/x/net/context"
 	"io/ioutil"
 	"math/rand"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -1064,18 +1066,169 @@ func TestRuntimeHandler(t *testing.T) {
 	err = json.Unmarshal(bodyBytes, &runtimeInfo)
 	assert.Nil(t, err)
 
-	for _, s := range []string{
-		core.RuntimeInstanceTypeKey,
-		core.RuntimeExportersKey,
-		core.RuntimeClustersKey,
-		core.RuntimeHttpClustersKey,
-		core.RuntimeExtensionFactoryKey,
-		core.RuntimeServersKey,
-		core.RuntimeBasicKey,
-	} {
+	for _, s := range defaultKeys {
 		info, ok := runtimeInfo[s]
 		assert.True(t, ok)
 		assert.NotNil(t, info)
 		t.Logf("key: %s", s)
+	}
+
+	// test param keys
+	keys := []string{
+		core.RuntimeExportersKey,
+		core.RuntimeServersKey,
+		core.RuntimeHttpClustersKey,
+	}
+	resp, err = http.Get("http://127.0.0.1:8002/runtime/info" + "?keys=" + strings.Join(keys, ","))
+	assert.Nil(t, err)
+	bodyBytes, err = ioutil.ReadAll(resp.Body)
+	assert.Nil(t, err)
+	err = resp.Body.Close()
+	assert.Nil(t, err)
+	err = json.Unmarshal(bodyBytes, &runtimeInfo)
+	assert.Nil(t, err)
+	for _, s := range keys {
+		info, ok := runtimeInfo[s]
+		assert.True(t, ok)
+		assert.NotNil(t, info)
+		t.Logf("key: %s", s)
+	}
+}
+
+func TestClusterRefersFilterHandler(t *testing.T) {
+	completeConfigBody := `[{"service":"com.weibo.api.test1","mode":"exclude","rule":"127.93.0.0/16"},{"service":"com.weibo.api.test2","mode":"exclude","rule":"127.93.0.0/16"}]`
+	var completeConfig cluster.RefersFilterConfigList
+	_ = json.Unmarshal([]byte(completeConfigBody), &completeConfig)
+	completeConfigExpect, _ := json.Marshal(completeConfig)
+	rewriteConfigBody := `[{"mode":"exclude","rule":"127.93.0.0/16"},{"service":"com.weibo.api.test2","mode":"exclude","rule":"127.93.0.0/16"}]`
+	var rewriteConfig cluster.RefersFilterConfigList
+	_ = json.Unmarshal([]byte(rewriteConfigBody), &rewriteConfig)
+	rewriteConfigExpect, _ := json.Marshal(rewriteConfig)
+	emptyConfigExpect := `[]`
+	cases := []struct {
+		desc       string
+		request    *http.Request
+		assertFunc func(t *testing.T, resp *http.Response, respErr error)
+	}{
+		{
+			desc: "verify initial value",
+			request: func() *http.Request {
+				req, _ := http.NewRequest("GET", "http://127.0.0.1:8002/refers/filter/get", nil)
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, emptyConfigExpect), string(bodyBytes))
+			},
+		},
+		{
+			desc: "set empty config",
+			request: func() *http.Request {
+				payload := &bytes.Buffer{}
+				writer := multipart.NewWriter(payload)
+				_ = writer.WriteField("config", "[]")
+				_ = writer.Close()
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/set", payload)
+				req.Header.Set("Content-Type", writer.FormDataContentType())
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, `{"result":"ok","data":"ok"}`, string(bodyBytes))
+			},
+		},
+		{
+			desc: "get empty config",
+			request: func() *http.Request {
+				req, _ := http.NewRequest("GET", "http://127.0.0.1:8002/refers/filter/get", nil)
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, emptyConfigExpect), string(bodyBytes))
+			},
+		},
+		{
+			desc: "set complete config",
+			request: func() *http.Request {
+				payload := &bytes.Buffer{}
+				writer := multipart.NewWriter(payload)
+				_ = writer.WriteField("config", completeConfigBody)
+				_ = writer.Close()
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/set", payload)
+				req.Header.Set("Content-Type", writer.FormDataContentType())
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, `{"result":"ok","data":"ok"}`, string(bodyBytes))
+			},
+		},
+		{
+			desc: "get complete config",
+			request: func() *http.Request {
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/get", nil)
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, completeConfigExpect), string(bodyBytes))
+			},
+		},
+		{
+			desc: "rewrite config",
+			request: func() *http.Request {
+				payload := &bytes.Buffer{}
+				writer := multipart.NewWriter(payload)
+				_ = writer.WriteField("config", string(rewriteConfigBody))
+				_ = writer.Close()
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/set", payload)
+				req.Header.Set("Content-Type", writer.FormDataContentType())
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, `{"result":"ok","data":"ok"}`, string(bodyBytes))
+			},
+		},
+		{
+			desc: "get rewrite config",
+			request: func() *http.Request {
+				req, _ := http.NewRequest("POST", "http://127.0.0.1:8002/refers/filter/get", nil)
+				return req
+			}(),
+			assertFunc: func(t *testing.T, resp *http.Response, respErr error) {
+				assert.Nil(t, respErr)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+				bodyBytes, err := ioutil.ReadAll(resp.Body)
+				assert.Nil(t, err)
+				assert.Equal(t, fmt.Sprintf(`{"result":"ok","data":%s}`, rewriteConfigExpect), string(bodyBytes))
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Logf("case %s start", c.desc)
+		resp, err := http.DefaultClient.Do(c.request)
+		c.assertFunc(t, resp, err)
+		t.Logf("case %s finish", c.desc)
 	}
 }

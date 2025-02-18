@@ -28,13 +28,12 @@ func initSwitcher(c *Context) {
 	var sc switcherConfig
 	err := c.Config.GetStruct("switchers", &sc)
 	if err != nil {
-		vlog.Warningf("init switcher config fail: %v", err)
 		return
 	}
 	for k, v := range sc {
 		GetSwitcherManager().Register(k, v)
+		vlog.Infof("[switcher] init switcher %s, value:%v", k, v)
 	}
-
 }
 
 func (s *SwitcherManager) Register(name string, value bool, listeners ...SwitcherListener) {

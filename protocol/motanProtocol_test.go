@@ -499,6 +499,52 @@ func TestConvertToRequest(t *testing.T) {
 	}
 }
 
+func TestConvertToReqMessage(t *testing.T) {
+	// create mock request
+	request := core.AcquireMotanRequest()
+	request.RequestID = 12345
+	request.ServiceName = "testService"
+	request.Method = "testMethod"
+	request.MethodDesc = "testMethodDesc"
+	request.Attachment = core.NewStringMap(0)
+	request.Attachment.Store(MGroup, "testGroup")
+	request.Attachment.Store(MProxyProtocol, "")
+
+	// set RpcContext
+	rc := request.GetRPCContext(true)
+	rc.Serialized = false
+	rc.Oneway = true
+	rc.Proxy = true
+	rc.GzipSize = 1024
+
+	// use SimpleSerialization as the serialization param
+	serialization := &serialize.SimpleSerialization{}
+	// call ConvertToReqMessage
+	msg, err := ConvertToReqMessage(request, serialization)
+
+	// assert msg
+	assert.Nil(t, err)
+	assert.NotNil(t, msg)
+	assert.Equal(t, request.RequestID, msg.Header.RequestID)
+	assert.True(t, msg.Header.IsOneWay())
+	assert.True(t, msg.Header.IsProxy())
+	assert.Equal(t, serialization.GetSerialNum(), msg.Header.GetSerialize())
+	assert.Equal(t, "testService", msg.Metadata.LoadOrEmpty(MPath))
+	assert.Equal(t, "testMethod", msg.Metadata.LoadOrEmpty(MMethod))
+	assert.Equal(t, "motan2", msg.Metadata.LoadOrEmpty(MProxyProtocol))
+	assert.Equal(t, "testMethodDesc", msg.Metadata.LoadOrEmpty(MMethodDesc))
+	assert.Equal(t, "testGroup", msg.Metadata.LoadOrEmpty(MGroup))
+
+	//  use rc serialize
+	rc.Serialized = true
+	rc.SerializeNum = serialize.BreezeNumber
+	msg, err = ConvertToReqMessage(request, serialization)
+
+	assert.Nil(t, err)
+	assert.NotNil(t, msg)
+	assert.Equal(t, serialize.BreezeNumber, msg.Header.GetSerialize())
+}
+
 func BenchmarkEncodeGzip(b *testing.B) {
 	DefaultGzipLevel = gzip.BestSpeed
 	bs := buildBytes(10 * 1024)

@@ -433,3 +433,22 @@ func TestContext_mergeFilterSet(t *testing.T) {
 		assert.Contains(t, "a,b,c", v)
 	}
 }
+
+func TestContext_getDynamicParametersByRegexp(t *testing.T) {
+	configFile := filepath.Join("testdata", "app.yaml")
+	cases := []struct {
+		pool     string
+		expected string
+	}{
+		{"regexp", "regexp_default-param"},
+		{"reg-idc1", "reg-idx1-param"},
+		{"reg-idx2", "reg-idx2-param"},
+		{"xeg-idx3", "xeg-idx3-param"},
+	}
+	for _, c := range cases {
+		poolContext := NewContext(configFile, "app", c.pool)
+		testPlaceholder, err := poolContext.Config.GetSection("test_placeholder")
+		assert.Nil(t, err)
+		assert.Equal(t, c.expected, testPlaceholder["regexp"])
+	}
+}
