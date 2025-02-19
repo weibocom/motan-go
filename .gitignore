@@ -42,3 +42,4 @@ log/log.test*
 go.sum
 agent_runtime
 test/
+coverage.txt
