@@ -1,3 +1,4 @@
+name: Test and coverage
 on:
   push:
     branches:
@@ -9,11 +10,7 @@ on:
       - master
       - dev
 
-name: build
 
-env:
-  GOPATH: /home/runner/go
-  GO111MODULE: on
 
 jobs:
   testing:
@@ -24,50 +21,30 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v4
       - name: Install Go
         if: success()
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-
+      - name: Gather dependencies
+        run: go mod tidy
       - name: Run tests
-        run: |
-          echo "GOPATH >>> $GOPATH"
-          echo "pwd >>> $PWD"
-          mkdir -p $GOPATH/src/github.com/weibocom/
-          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
-          cd $GOPATH/src/github.com/weibocom/motan-go
-          go mod tidy
-          go test -v -race $(go list ./... | grep -v main)
+        run: go test -v -race $(go list ./... | grep -v main)
   codecov:
     name: codecov
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Go 1.16
-        uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - name: Set up Go version to stable
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.16.x
-        id: go
-
-      - name: Checkout code
-        uses: actions/checkout@v3
-
+          go-version: 'stable'
+      - name: Gather dependencies
+        run: go mod tidy
       - name: Generate coverage report
-        run: |
-          echo "GOPATH >>> $GOPATH"
-          echo "pwd >>> $PWD"
-          mkdir -p $GOPATH/src/github.com/weibocom/
-          cp -R ../motan-go $GOPATH/src/github.com/weibocom/
-          cd $GOPATH/src/github.com/weibocom/motan-go
-          go mod tidy
-          go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
-
+        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v main)
       - name: Upload coverage report
-        uses: codecov/codecov-action@v1.0.2
+        uses: codecov/codecov-action@v5
         with:
-          token: "282c293b-ab38-4ea6-8518-b44f78df02eb"
-          file: ./coverage.txt
-          flags: unittests
-          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
