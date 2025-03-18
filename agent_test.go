@@ -430,7 +430,7 @@ func TestAgent_InitCall(t *testing.T) {
 	urlTest := &core.URL{Parameters: make(map[string]string)}
 	urlTest.Group = "test1"
 	urlTest.Parameters[core.AsyncInitConnection] = "false"
-	targetAgent.initCluster(urlTest)
+	targetAgent.initClusterGroup(urlTest)
 	agentHandler := &agentMessageHandler{agent: targetAgent}
 
 	for _, v := range []*core.URL{
@@ -445,12 +445,12 @@ func TestAgent_InitCall(t *testing.T) {
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test", Group: "g1", Protocol: "http"},
 		{Parameters: map[string]string{core.VersionKey: "1.3"}, Path: "test0", Group: "g0", Protocol: "http"},
 	} {
-		targetAgent.initCluster(v)
+		targetAgent.initClusterGroup(v)
 	}
 
-	//test init cluster with one path and one groups in clusterMap
-	temp := targetAgent.clusterMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
-	assert.NotNil(t, temp, "init cluster with one path and two groups in clusterMap fail")
+	//test init clusterGroup with one path and one groups in clusterGroupMap
+	temp := targetAgent.clusterGroupMap.LoadOrNil(getClusterKey("test1", "1.0", "", ""))
+	assert.NotNil(t, temp, "init clusterGroup with one path and two groups in clusterGroupMap fail")
 
 	//test agentHandler call with group
 	request := &core.MotanRequest{Attachment: core.NewStringMap(10)}
@@ -475,18 +475,18 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		// only input service，and there is only one cluster，findCluster would return successfully
-		{"test0", "", "", "", "No refers for request"},
-		{"test0", "g0", "", "", "No refers for request"},
-		{"test0", "g0", "http", "", "No refers for request"},
-		{"test0", "g0", "", "1.3", "No refers for request"},
-		{"test-1", "111", "222", "333", "cluster not found"},
-		{"test", "g2", "", "", "No refers for request"},
-		{"test", "g1", "motan2", "", "No refers for request"},
-		{"test", "g1", "http", "1.3", "No refers for request"},
-		{"test", "b", "c", "d", "no cluster matches the request"},
+		// only input service，and there is only one clusterGroup，findClusterGroup would return successfully
+		{"test0", "", "", "", core.NoRefersForRequestPrefix},
+		{"test0", "g0", "", "", core.NoRefersForRequestPrefix},
+		{"test0", "g0", "http", "", core.NoRefersForRequestPrefix},
+		{"test0", "g0", "", "1.3", core.NoRefersForRequestPrefix},
+		{"test-1", "111", "222", "333", "clusterGroup not found"},
+		{"test", "g2", "", "", core.NoRefersForRequestPrefix},
+		{"test", "g1", "motan2", "", core.NoRefersForRequestPrefix},
+		{"test", "g1", "http", "1.3", core.NoRefersForRequestPrefix},
+		{"test", "b", "c", "d", "no clusterGroup matches the request"},
 		// one service matches multiple clusters, without passing group
-		{"test", "", "c", "d", "multiple clusters are matched with service"},
+		{"test", "", "c", "d", "multiple clusterGroups are matched with service"},
 	} {
 		request.ServiceName = v.service
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -510,7 +510,7 @@ func TestAgent_InitCall(t *testing.T) {
 	time.Sleep(time.Second * 1)
 
 	targetAgent.reloadClusters(ctx)
-	assert.Equal(t, targetAgent.serviceMap.Len(), 1, "hot-load serviceMap helloService2 length error")
+	assert.Equal(t, targetAgent.clusterGroupMap.Len(), 1, "hot-load clusterGroupMap helloService2 length error")
 
 	request = newRequest("helloService2", "hello", "Ray")
 	motanResponse := agentHandler.Call(request)
@@ -528,14 +528,14 @@ func TestAgent_InitCall(t *testing.T) {
 	dynamicURLs := map[string]*core.URL{
 		"test6": {Parameters: map[string]string{core.VersionKey: ""}, Path: "test6", Group: "g1", Protocol: ""},
 	}
-	targetAgent.serviceMap.Store("test6", []serviceMapItem{
-		{url: dynamicURLs["test6"], cluster: nil},
+	targetAgent.clusterGroupMap.Store("test6", []clusterGroupServiceMapItem{
+		{url: dynamicURLs["test6"], clusterGroup: nil},
 	})
 	targetAgent.configurer = NewDynamicConfigurer(targetAgent)
 	targetAgent.configurer.subscribeNodes = dynamicURLs
 	ctx.RefersURLs = reloadUrls
 	targetAgent.reloadClusters(ctx)
-	assert.Equal(t, targetAgent.serviceMap.Len(), 3, "hot-load serviceMap except length error")
+	assert.Equal(t, targetAgent.clusterGroupServiceMap.Len(), 3, "hot-load clusterGroupMap except length error")
 
 	for _, v := range []struct {
 		service  string
@@ -544,9 +544,9 @@ func TestAgent_InitCall(t *testing.T) {
 		version  string
 		except   string
 	}{
-		{"test3", "111", "222", "333", "cluster not found. service: test3"},
-		{"test5", "", "", "", "No refers for request"},
-		{"helloService2", "", "", "", "cluster not found. service: helloService2"},
+		{"test3", "111", "222", "333", "clusterGroup not found. service: test3"},
+		{"test5", "", "", "", core.NoRefersForRequestPrefix},
+		{"helloService2", "", "", "", "clusterGroup not found. service: helloService2"},
 	} {
 		request = newRequest(v.service, "")
 		request.SetAttachment(mpro.MGroup, v.group)
@@ -1070,7 +1070,6 @@ func TestRuntimeHandler(t *testing.T) {
 		info, ok := runtimeInfo[s]
 		assert.True(t, ok)
 		assert.NotNil(t, info)
-		t.Logf("key: %s", s)
 	}
 
 	// test param keys

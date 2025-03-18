@@ -35,7 +35,7 @@ type MotanCluster struct {
 	identity motan.AtomicString
 
 	// exclude or include some Refers before refresh LoadBalance
-	refersFilter RefersFilter
+	refersFilter motan.RefersFilter
 }
 
 func (m *MotanCluster) IsAvailable() bool {
@@ -211,8 +211,9 @@ func (m *MotanCluster) Notify(registryURL *motan.URL, urls []*motan.URL) {
 			endpoints = append(endpoints, ep)
 		}
 	}
+
 	if len(endpoints) == 0 {
-		if len(m.registryRefers) > 1 {
+		if m.url.GetBoolValue(motan.ClusterEmptyNodeNotifyKey, false) || len(m.registryRefers) > 1 {
 			delete(m.registryRefers, registryURL.GetIdentity())
 		} else {
 			// ignored if endpoints size is 0 in single registry mode
@@ -428,7 +429,7 @@ func (m *MotanCluster) GetRuntimeInfo() map[string]interface{} {
 	return info
 }
 
-func (m *MotanCluster) SetRefersFilter(filter RefersFilter) {
+func (m *MotanCluster) SetRefersFilter(filter motan.RefersFilter) {
 	m.notifyLock.Lock()
 	defer m.notifyLock.Unlock()
 	// has not changed

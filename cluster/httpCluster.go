@@ -14,29 +14,29 @@ const (
 )
 
 type clusterHolder struct {
-	initialized bool
-	url         *core.URL
-	lock        sync.Mutex
-	cluster     *MotanCluster
-	proxy       bool
-	extFactory  core.ExtensionFactory
-	context     *core.Context
+	initialized  bool
+	url          *core.URL
+	lock         sync.Mutex
+	clusterGroup core.ClusterGroup
+	proxy        bool
+	extFactory   core.ExtensionFactory
+	context      *core.Context
 }
 
-func (c *clusterHolder) getCluster() *MotanCluster {
+func (c *clusterHolder) getClusterGroup() core.ClusterGroup {
 	if c.initialized {
-		return c.cluster
+		return c.clusterGroup
 	}
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if c.initialized {
-		return c.cluster
+		return c.clusterGroup
 	}
 
-	motanCluster := NewCluster(c.context, c.extFactory, c.url, c.proxy)
-	c.cluster = motanCluster
+	clusterGroup := NewClusterGroup(c.context, c.extFactory, c.url, c.proxy)
+	c.clusterGroup = clusterGroup
 	c.initialized = true
-	return c.cluster
+	return c.clusterGroup
 }
 
 func (c *clusterHolder) destroy() {
@@ -45,7 +45,7 @@ func (c *clusterHolder) destroy() {
 	if !c.initialized {
 		return
 	}
-	c.cluster.Destroy()
+	c.clusterGroup.Destroy()
 	c.initialized = false
 }
 
@@ -162,11 +162,11 @@ func (c *HTTPCluster) IsAvailable() bool {
 	return true
 }
 
-func (c *HTTPCluster) getMotanCluster(service string) *MotanCluster {
+func (c *HTTPCluster) getMotanCluster(service string) core.ClusterGroup {
 	c.lock.RLock()
 	if holder, ok := c.upstreamClusters[service]; ok {
 		c.lock.RUnlock()
-		return holder.getCluster()
+		return holder.getClusterGroup()
 	}
 	c.lock.RUnlock()
 	holder := func() *clusterHolder {
@@ -181,7 +181,7 @@ func (c *HTTPCluster) getMotanCluster(service string) *MotanCluster {
 		c.upstreamClusters[service] = holder
 		return holder
 	}()
-	return holder.getCluster()
+	return holder.getClusterGroup()
 }
 
 func (c *HTTPCluster) removeMotanCluster(service string) {

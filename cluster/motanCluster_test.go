@@ -104,6 +104,11 @@ func TestNotify(t *testing.T) {
 		t.Fatalf("cluster endpoint should not be available")
 	}
 
+	// allow notifying empty node
+	cluster.url.PutParam(motan.ClusterEmptyNodeNotifyKey, "true")
+	cluster.Notify(RegistryURL, nil)
+	assert.Equal(t, 0, len(cluster.Refers), "cluster notify-refers size not correct. expect :0, refers size:%d", len(cluster.Refers))
+
 	// check runtime info
 	info := cluster.GetRuntimeInfo()
 	assert.NotNil(t, info)
@@ -149,12 +154,12 @@ func TestRefersFilters(t *testing.T) {
 	}
 	cases := []struct {
 		desc          string
-		filter        RefersFilter
+		filter        motan.RefersFilter
 		expectEpCount int
 	}{
 		{
 			desc: "include ip prefix",
-			filter: func() RefersFilter {
+			filter: func() motan.RefersFilter {
 				return NewDefaultRefersFilter([]RefersFilterConfig{
 					{
 						Mode: FilterModeInclude,
@@ -171,7 +176,7 @@ func TestRefersFilters(t *testing.T) {
 		},
 		{
 			desc: "exclude ip prefix",
-			filter: func() RefersFilter {
+			filter: func() motan.RefersFilter {
 				return NewDefaultRefersFilter([]RefersFilterConfig{
 					{
 						Mode: FilterModeExclude,
@@ -255,6 +260,7 @@ func getCustomExt() motan.ExtensionFactory {
 	ext.Initialize()
 	ha.RegistDefaultHa(ext)
 	lb.RegistDefaultLb(ext)
+	RegistClusterSelector(ext)
 	ext.RegistExtFilter("test1", func() motan.Filter {
 		return &motan.TestFilter{Index: 1}
 	})
@@ -283,7 +289,9 @@ func getCustomExt() motan.ExtensionFactory {
 	ext.RegistExtEndpoint("test", func(url *motan.URL) motan.EndPoint {
 		return &motan.TestEndPoint{URL: url}
 	})
-
 	registry.RegistDefaultRegistry(ext)
+	ext.RegistryExtClusterSelector(mockClusterKey, func() motan.ClusterSelector {
+		return &mockClusterSelector{}
+	})
 	return ext
 }

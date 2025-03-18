@@ -22,11 +22,13 @@ motan-refer:
     protocol: motan2
     group: test-group
     path: LocalTestService
+    sandboxGroups: sandboxGroup
+    backupGroups: backupGroup
 
 motan-service:
   test.domain:
     registry: direct-registry
-    group: test.domain
+    group: test.domain,sandboxGroup,backupGroup
     domain: test.domain
     path: test
     export: "motan2:9982"

@@ -34,9 +34,11 @@ func (f *FailOverHA) Call(request motan.Request, loadBalance motan.LoadBalance) 
 	for i := 0; i <= int(retries); i++ {
 		ep := loadBalance.Select(request)
 		if ep == nil {
+			vlog.Errorf("%s, RequestID: %d, Request info: %+v", motan.NoRefersForRequestPrefix,
+				request.GetRequestID(), request.GetAttachments().RawMap())
 			return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints,
-				fmt.Sprintf("No refers for request, RequestID: %d, Request info: %+v",
-					request.GetRequestID(), request.GetAttachments().RawMap()))
+				fmt.Sprintf("%s, RequestID: %d", motan.NoRefersForRequestPrefix,
+					request.GetRequestID()))
 		}
 		response = ep.Call(request)
 		if response != nil {

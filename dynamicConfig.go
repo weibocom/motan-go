@@ -89,7 +89,7 @@ func (c *DynamicConfigurer) Register(url *core.URL) error {
 }
 
 func (c *DynamicConfigurer) doRegister(url *core.URL) error {
-	regGroupSuffix := os.Getenv(core.RegGroupSuffix)
+	regGroupSuffix := os.Getenv(core.RegGroupSuffixEnvironmentName)
 	if regGroupSuffix != "" && !strings.HasSuffix(url.Group, regGroupSuffix) {
 		url.Group += regGroupSuffix
 	}
@@ -132,7 +132,7 @@ func (c *DynamicConfigurer) Subscribe(url *core.URL) error {
 	if err != nil {
 		return err
 	}
-	subGroupSuffix := os.Getenv(core.SubGroupSuffix)
+	subGroupSuffix := os.Getenv(core.SubGroupSuffixEnvironmentName)
 	if subGroupSuffix != "" && !strings.HasSuffix(url.Group, subGroupSuffix) {
 		newUrl := url.Copy()
 		newUrl.Group = url.Group + subGroupSuffix

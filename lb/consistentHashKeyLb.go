@@ -49,7 +49,7 @@ func (h hasher) Sum64(data []byte) uint64 {
 }
 
 func (c *ConsistentHashLB) OnRefresh(endpoints []motan.EndPoint) {
-	if len(endpoints) == 1 {
+	if len(endpoints) <= 1 {
 		c.endpoints = endpoints
 		c.cHash = nil
 		return
@@ -63,6 +63,9 @@ func (c *ConsistentHashLB) OnRefresh(endpoints []motan.EndPoint) {
 }
 
 func (c *ConsistentHashLB) Select(request motan.Request) motan.EndPoint {
+	if len(c.endpoints) == 0 {
+		return nil
+	}
 	if len(c.endpoints) == 1 {
 		return c.endpoints[0]
 	}

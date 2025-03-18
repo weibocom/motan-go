@@ -235,8 +235,8 @@ func (i *InfoHandler) getAllServices() []byte {
 
 func (i *InfoHandler) getReferService() []byte {
 	mbody := body{Service: []rpcService{}}
-	i.a.clusterMap.Range(func(k, v interface{}) bool {
-		cls := v.(*cluster.MotanCluster)
+	i.a.clusterGroupMap.Range(func(k, v interface{}) bool {
+		cls := v.(cluster.ClusterGroup)
 		available := cls.IsAvailable()
 		mbody.Service = append(mbody.Service, rpcService{Name: k.(string), Status: available})
 		return true
@@ -819,9 +819,9 @@ type RuntimeHandler struct {
 func (h *RuntimeHandler) SetAgent(agent *Agent) {
 	h.agent = agent
 	h.functions = map[string]func() map[string]interface{}{
-		// cluster info
+		// clusterGroup info
 		motan.RuntimeClustersKey: h.getClusterInfo,
-		// http cluster info
+		// http clusterGroup info
 		motan.RuntimeHttpClustersKey: h.getHttpClusterInfo,
 		// exporter info
 		motan.RuntimeExportersKey: h.getExporterInfo,
@@ -860,9 +860,9 @@ func (h *RuntimeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *RuntimeHandler) getClusterInfo() map[string]interface{} {
-	info := make(map[string]interface{}, h.agent.clusterMap.Len())
-	h.agent.clusterMap.Range(func(k, v interface{}) bool {
-		cls, ok := v.(*cluster.MotanCluster)
+	info := make(map[string]interface{}, h.agent.clusterGroupMap.Len())
+	h.agent.clusterGroupMap.Range(func(k, v interface{}) bool {
+		cls, ok := v.(motan.ClusterGroup)
 		if !ok {
 			return true
 		}
@@ -956,8 +956,8 @@ func (h *RefersFilterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			JSONError(w, err.Error())
 		}
 		vlog.Infof("update refers filter success, config: %s", configContent)
-		h.agent.clusterMap.Range(func(k, v interface{}) bool {
-			cls, ok := v.(*cluster.MotanCluster)
+		h.agent.clusterGroupMap.Range(func(k, v interface{}) bool {
+			cls, ok := v.(motan.ClusterGroup)
 			if !ok {
 				return true
 			}

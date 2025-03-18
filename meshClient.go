@@ -26,7 +26,7 @@ type MeshClient struct {
 	application    string
 	address        string
 	serialization  string
-	cluster        *cluster.MotanCluster
+	clusterGroup   core.ClusterGroup
 	httpClient     *fasthttp.Client
 }
 
@@ -76,11 +76,11 @@ func (c *MeshClient) Initialize() {
 	context := &core.Context{}
 	context.RegistryURLs = make(map[string]*core.URL)
 	context.RegistryURLs[meshDirectRegistryKey] = meshRegistryURL
-	c.cluster = cluster.NewCluster(context, GetDefaultExtFactory(), clusterURL, false)
+	c.clusterGroup = cluster.NewClusterGroup(context, GetDefaultExtFactory(), clusterURL, false)
 }
 
 func (c *MeshClient) Destroy() {
-	c.cluster.Destroy()
+	c.clusterGroup.Destroy()
 }
 
 func (c *MeshClient) BuildRequestWithGroup(service string, method string, args []interface{}, group string) core.Request {
@@ -108,7 +108,7 @@ func (c *MeshClient) Call(service string, method string, args []interface{}, rep
 func (c *MeshClient) BaseCall(request core.Request, reply interface{}) core.Response {
 	rc := request.GetRPCContext(true)
 	rc.Reply = reply
-	response := c.cluster.Call(request)
+	response := c.clusterGroup.Call(request)
 	// none http call direct response
 	if strings.Index(request.GetMethod(), "/") == -1 {
 		return response
