@@ -22,52 +22,56 @@ const (
 
 // common url parameter key
 const (
-	NodeTypeKey             = "nodeType"
-	Hakey                   = "haStrategy"
-	Lbkey                   = "loadbalance"
-	TimeOutKey              = "requestTimeout"
-	MinTimeOutKey           = "minRequestTimeout"
-	MaxTimeOutKey           = "maxRequestTimeout"
-	SessionTimeOutKey       = "registrySessionTimeout"
-	RetriesKey              = "retries"
-	ApplicationKey          = "application"
-	VersionKey              = "version"
-	FilterKey               = "filter"
-	GlobalFilter            = "globalFilter"
-	DisableGlobalFilter     = "disableGlobalFilter"
-	DefaultFilter           = "defaultFilter"
-	DisableDefaultFilter    = "disableDefaultFilter"
-	MotanEpAsyncInit        = "motanEpAsyncInit"
-	RegistryKey             = "registry"
-	WeightKey               = "weight"
-	SerializationKey        = "serialization"
-	RefKey                  = "ref"
-	ExportKey               = "export"
-	ModuleKey               = "module"
-	GroupKey                = "group"
-	ProviderKey             = "provider"
-	ProxyKey                = "proxy"
-	AddressKey              = "address"
-	GzipSizeKey             = "mingzSize"
-	HostKey                 = "host"
-	RemoteIPKey             = "remoteIP"
-	ProxyRegistryKey        = "proxyRegistry"
-	ProxyRegistryUrlString  = "proxyRegistryUrlString"
-	InitClusterTimeoutKey   = "initClusterTimeout"
-	ConnectTimeoutKey       = "connectTimeout"
-	ConnectRetryIntervalKey = "connectRetryInterval"
-	ClientConnectionKey     = "clientConnection"
-	LazyInit                = "lazyInit"
-	AsyncInitConnection     = "asyncInitConnection"
-	ErrorCountThresholdKey  = "errorCountThreshold"
-	KeepaliveIntervalKey    = "keepaliveInterval"
-	UnixSockKey             = "unixSock"
-	ManagementUnixSockKey   = "managementUnixSock"
-	ManagementPortRangeKey  = "managementPortRange"
-	HTTPProxyUnixSockKey    = "httpProxyUnixSock"
-	MixGroups               = "mixGroups"
-	MaxContentLength        = "maxContentLength"
-	UnixSockProtocolFlag    = "unix://"
+	NodeTypeKey               = "nodeType"
+	Hakey                     = "haStrategy"
+	Lbkey                     = "loadbalance"
+	TimeOutKey                = "requestTimeout"
+	MinTimeOutKey             = "minRequestTimeout"
+	MaxTimeOutKey             = "maxRequestTimeout"
+	SessionTimeOutKey         = "registrySessionTimeout"
+	RetriesKey                = "retries"
+	ApplicationKey            = "application"
+	VersionKey                = "version"
+	FilterKey                 = "filter"
+	GlobalFilter              = "globalFilter"
+	DisableGlobalFilter       = "disableGlobalFilter"
+	DefaultFilter             = "defaultFilter"
+	DisableDefaultFilter      = "disableDefaultFilter"
+	MotanEpAsyncInit          = "motanEpAsyncInit"
+	RegistryKey               = "registry"
+	WeightKey                 = "weight"
+	SerializationKey          = "serialization"
+	RefKey                    = "ref"
+	ExportKey                 = "export"
+	ModuleKey                 = "module"
+	GroupKey                  = "group"
+	ProviderKey               = "provider"
+	ProxyKey                  = "proxy"
+	AddressKey                = "address"
+	GzipSizeKey               = "mingzSize"
+	HostKey                   = "host"
+	RemoteIPKey               = "remoteIP"
+	ProxyRegistryKey          = "proxyRegistry"
+	ProxyRegistryUrlString    = "proxyRegistryUrlString"
+	InitClusterTimeoutKey     = "initClusterTimeout"
+	ConnectTimeoutKey         = "connectTimeout"
+	ConnectRetryIntervalKey   = "connectRetryInterval"
+	ClientConnectionKey       = "clientConnection"
+	LazyInit                  = "lazyInit"
+	AsyncInitConnection       = "asyncInitConnection"
+	ErrorCountThresholdKey    = "errorCountThreshold"
+	KeepaliveIntervalKey      = "keepaliveInterval"
+	UnixSockKey               = "unixSock"
+	ManagementUnixSockKey     = "managementUnixSock"
+	ManagementPortRangeKey    = "managementPortRange"
+	HTTPProxyUnixSockKey      = "httpProxyUnixSock"
+	MixGroups                 = "mixGroups"
+	MaxContentLength          = "maxContentLength"
+	UnixSockProtocolFlag      = "unix://"
+	BackupGroupsKey           = "backupGroups"
+	SandboxGroupsKey          = "sandboxGroups"
+	ClusterSelectorKey        = "clusterSelector"
+	ClusterEmptyNodeNotifyKey = "clusterEmptyNodeNotify"
 )
 
 // metrics request application
@@ -114,16 +118,24 @@ const (
 	DefaultWriteTimeout     = 5 * time.Second
 	DefaultMaxContentLength = 10 * 1024 * 1024
 	GroupNameSeparator      = ","
+	GroupSuffixString       = "suffix:"
 )
 
 // env variables
 const (
-	GroupEnvironmentName     = "MESH_SERVICE_ADDITIONAL_GROUP"
-	DirectRPCEnvironmentName = "MESH_DIRECT_RPC"
-	FilterEnvironmentName    = "MESH_FILTERS"
-	HandlerEnvironmentName   = "MESH_ADMIN_EXT_HANDLERS"
-	RegGroupSuffix           = "RPC_REG_GROUP_SUFFIX"
-	SubGroupSuffix           = "MESH_MULTI_SUB_GROUP_SUFFIX"
+	GroupEnvironmentName           = "MESH_SERVICE_ADDITIONAL_GROUP"
+	DirectRPCEnvironmentName       = "MESH_DIRECT_RPC"
+	FilterEnvironmentName          = "MESH_FILTERS"
+	HandlerEnvironmentName         = "MESH_ADMIN_EXT_HANDLERS"
+	RegGroupSuffixEnvironmentName  = "RPC_REG_GROUP_SUFFIX"
+	SubGroupSuffixEnvironmentName  = "MESH_MULTI_SUB_GROUP_SUFFIX"
+	ChangeRegGroupsEnvironmentName = "MESH_CHANGE_REG_GROUPS"
+	ServerModeEnvironmentName      = "MESH_SERVER_MODE"
+)
+
+// server mode
+const (
+	SandboxServerMode = "sandbox"
 )
 
 // meta keys
@@ -140,9 +152,12 @@ const (
 	EProviderNotExist = 404
 )
 
-// ProviderNotExistPrefix errorMessage
+// errorMessage
 const (
+	// ProviderNotExistPrefix provider not exist errorMessage
 	ProviderNotExistPrefix = "provider not exist serviceKey="
+	// NoRefersForRequestPrefix  no refers errorMessage
+	NoRefersForRequestPrefix = "No refers for request"
 )
 
 const (
@@ -211,7 +226,6 @@ const (
 	RuntimeDefaultDomainKey   = "defaultDomain"
 
 	// -----------cluster keys-------------
-
 	RuntimeReferersKey    = "referers"
 	RuntimeRefererSizeKey = "refererSize"
 	RuntimeUnavailableKey = "unavailable"

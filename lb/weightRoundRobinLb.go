@@ -143,6 +143,9 @@ func (r *roundRobinSelector) DoSelect(request motan.Request) motan.EndPoint {
 		return nil
 	}
 	tempHolders := temp.([]*WeightedEpHolder)
+	if len(tempHolders) == 0 {
+		return nil
+	}
 	ep := tempHolders[int(motan.GetNonNegative(atomic.AddInt64(&r.idx, 1)))%len(tempHolders)].ep
 	if ep.IsAvailable() {
 		return ep
@@ -252,6 +255,9 @@ func newSlidingWindowWeightedRoundRobinSelector(holders []*WeightedEpHolder, wei
 }
 
 func (r *slidingWindowWeightedRoundRobinSelector) DoSelect(request motan.Request) motan.EndPoint {
+	if len(r.items) == 0 {
+		return nil
+	}
 	windowStartIndex := motan.GetNonNegative(atomic.AddInt64(&r.idx, int64(r.windowSize)))
 	totalWeight := 0
 	var sMaxWeight int64 = 0

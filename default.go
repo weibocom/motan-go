@@ -125,4 +125,5 @@ func AddDefaultExt(d motan.ExtensionFactory) {
 	server.RegistDefaultServers(d)
 	server.RegistDefaultMessageHandlers(d)
 	serialize.RegistDefaultSerializations(d)
+	cluster.RegistClusterSelector(d)
 }

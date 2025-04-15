@@ -28,16 +28,16 @@ type MCContext struct {
 }
 
 type Client struct {
-	url        *motan.URL
-	cluster    *cluster.MotanCluster
-	extFactory motan.ExtensionFactory
+	url          *motan.URL
+	clusterGroup motan.ClusterGroup
+	extFactory   motan.ExtensionFactory
 }
 
-func NewClient(url *motan.URL, cluster *cluster.MotanCluster, extFactory motan.ExtensionFactory) *Client {
+func NewClient(url *motan.URL, clusterGroup motan.ClusterGroup, extFactory motan.ExtensionFactory) *Client {
 	return &Client{
-		url:        url,
-		cluster:    cluster,
-		extFactory: extFactory,
+		url:          url,
+		clusterGroup: clusterGroup,
+		extFactory:   extFactory,
 	}
 }
 
@@ -50,7 +50,7 @@ func (c *Client) BaseCall(req motan.Request, reply interface{}) error {
 	rc := req.GetRPCContext(true)
 	rc.ExtFactory = c.extFactory
 	rc.Reply = reply
-	res := c.cluster.Call(req)
+	res := c.clusterGroup.Call(req)
 	if res.GetException() != nil {
 		return errors.New(res.GetException().ErrMsg)
 	}
@@ -73,7 +73,7 @@ func (c *Client) BaseGo(req motan.Request, reply interface{}, done chan *motan.A
 	rc.Result = result
 	rc.Reply = reply
 	go func() {
-		res := c.cluster.Call(req)
+		res := c.clusterGroup.Call(req)
 		if res.GetException() != nil {
 			result.Error = errors.New(res.GetException().ErrMsg)
 		}
@@ -90,7 +90,7 @@ func (c *Client) BuildRequest(method string, args []interface{}) motan.Request {
 	req.SetAttachment(mpro.MModule, module)
 	application := c.url.GetParam(motan.ApplicationKey, "")
 	if application == "" {
-		application = c.cluster.Context.ClientURL.GetParam(motan.ApplicationKey, "")
+		application = c.clusterGroup.GetContext().ClientURL.GetParam(motan.ApplicationKey, "")
 	}
 	req.SetAttachment(mpro.MSource, application)
 	req.SetAttachment(mpro.MGroup, c.url.Group)
@@ -160,7 +160,7 @@ func (m *MCContext) Start(extfactory motan.ExtensionFactory) {
 	}
 
 	for key, url := range m.context.RefersURLs {
-		c := cluster.NewCluster(m.context, m.extFactory, url, false)
+		c := cluster.NewClusterGroup(m.context, m.extFactory, url, false)
 		m.clients[key] = NewClient(url, c, m.extFactory)
 	}
 }

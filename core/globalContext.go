@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -69,6 +71,7 @@ type Context struct {
 }
 
 var (
+	varRWLock = sync.RWMutex{}
 	// default config file and path
 	defaultConfigFile = "./motan.yaml"
 	defaultConfigPath = "./"
@@ -76,7 +79,19 @@ var (
 
 	urlFields  = map[string]bool{"protocol": true, "host": true, "port": true, "path": true, "group": true}
 	extFilters = make(map[string]bool)
+
+	defaultSandboxGroups = ""
 )
+
+// SetDefaultSandboxGroups Called once before Context initialization
+func SetDefaultSandboxGroups(groups string) {
+	defaultSandboxGroups = groups
+}
+
+// GetDefaultSandboxGroups returns default sandbox groups
+func GetDefaultSandboxGroups() string {
+	return defaultSandboxGroups
+}
 
 // all env flag in motan-go
 var (
@@ -543,8 +558,10 @@ func (c *Context) GetEnvGlobalFilterSet() map[string]bool {
 	return res
 }
 
-// parseMultipleServiceGroup  add motan-service group support of multiple comma split group name
+// parseMultipleServiceGroup add motan-service group support of multiple comma split group name
 func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
+	changeGroupsConfig := c.getChangeRegGroupsEnvConfig()
+	serverMode := os.Getenv(ServerModeEnvironmentName)
 	addMotanServiceMap := map[string]*URL{}
 	for k, serviceURL := range motanServiceMap {
 		//add additional service group from environment
@@ -554,6 +571,32 @@ func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
 			} else {
 				serviceURL.Group += "," + v
 			}
+		}
+		// change registry group
+		if serverMode == SandboxServerMode {
+			// first check env config
+			var groups string
+			if len(changeGroupsConfig) > 0 {
+				for pathRegex, changeGroup := range changeGroupsConfig {
+					if pathRegex.MatchString(serviceURL.Path) {
+						groups = changeGroup
+						break
+					}
+				}
+			}
+			// second check file config and framework set value
+			if groups == "" {
+				groups = serviceURL.GetParam(SandboxGroupsKey, "")
+			}
+			if groups == "" {
+				errMessage := fmt.Sprintf("server run in %s mode，service %s replace group not found, please check your config and env", serverMode, serviceURL.Path)
+				vlog.Errorf(errMessage)
+				panic(errMessage)
+			}
+			// replace groupSuffix
+			groups = strings.ReplaceAll(groups, GroupSuffixString, serviceURL.Group)
+			vlog.Infof("service %s replace group %s to %s", serviceURL.Path, serviceURL.Group, groups)
+			serviceURL.Group = groups
 		}
 		if !strings.Contains(serviceURL.Group, GroupNameSeparator) {
 			continue
@@ -572,8 +615,40 @@ func (c *Context) parseMultipleServiceGroup(motanServiceMap map[string]*URL) {
 	}
 }
 
+type ChangeRegGroupsConfig struct {
+	Service string `json:"service"`
+	Group   string `json:"group"`
+}
+
+func (c *Context) getChangeRegGroupsEnvConfig() map[*regexp.Regexp]string {
+	envMap := make(map[*regexp.Regexp]string)
+	envConfig := os.Getenv(ChangeRegGroupsEnvironmentName)
+	if envConfig == "" {
+		return envMap
+	}
+	vlog.Infof("init env %s, value: %s", ChangeRegGroupsEnvironmentName, envConfig)
+	var changeRegGroupsConfigs []ChangeRegGroupsConfig
+	err := json.Unmarshal([]byte(envConfig), &changeRegGroupsConfigs)
+	if err != nil {
+		vlog.Errorf("parse env %s fail, value: %s", ChangeRegGroupsEnvironmentName, envConfig)
+		return envMap
+	}
+	for _, changeRegGroupsConfig := range changeRegGroupsConfigs {
+		if strings.TrimSpace(changeRegGroupsConfig.Service) != "" && strings.TrimSpace(changeRegGroupsConfig.Group) != "" {
+			re, e := regexp.Compile(changeRegGroupsConfig.Service)
+			if e != nil {
+				vlog.Errorf("regexp.Compile fail, service: %s, group: %s", changeRegGroupsConfig.Service, changeRegGroupsConfig.Group)
+				continue
+			}
+			envMap[re] = changeRegGroupsConfig.Group
+			vlog.Infof("add change reg groups config, service: %s, group: %s", changeRegGroupsConfig.Service, changeRegGroupsConfig.Group)
+		}
+	}
+	return envMap
+}
+
 func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
-	regGroupSuffix := os.Getenv(RegGroupSuffix)
+	regGroupSuffix := os.Getenv(RegGroupSuffixEnvironmentName)
 	if regGroupSuffix == "" {
 		return
 	}
@@ -586,7 +661,7 @@ func (c *Context) parseRegGroupSuffix(urlMap map[string]*URL) {
 }
 
 func (c *Context) parseSubGroupSuffix(urlMap map[string]*URL) {
-	subGroupSuffix := os.Getenv(SubGroupSuffix)
+	subGroupSuffix := os.Getenv(SubGroupSuffixEnvironmentName)
 	if subGroupSuffix == "" || c.AgentURL == nil {
 		return
 	}

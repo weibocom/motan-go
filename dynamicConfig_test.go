@@ -2,7 +2,6 @@ package motan
 
 import (
 	"bytes"
-	"github.com/weibocom/motan-go/cluster"
 	motan "github.com/weibocom/motan-go/core"
 	mserver "github.com/weibocom/motan-go/server"
 	"net/http/httptest"
@@ -110,7 +109,7 @@ func TestDynamicConfigurerMultiRegistry(t *testing.T) {
 	}
 	assert.Equal(t, len(configurer.registerNodes), 4)
 
-	// test RegGroupSuffix env
+	// test RegGroupSuffixEnvironmentName env
 	regGroupSuffix := "-test"
 	configurer2 := &DynamicConfigurer{
 		agent:          a,
@@ -129,7 +128,7 @@ func TestDynamicConfigurerMultiRegistry(t *testing.T) {
 	}
 	urlCopy := url.Copy()
 
-	os.Setenv(motan.RegGroupSuffix, regGroupSuffix)
+	os.Setenv(motan.RegGroupSuffixEnvironmentName, regGroupSuffix)
 	err := configurer2.doRegister(url)
 	assert.Nil(t, err)
 	assert.Equal(t, len(configurer2.registerNodes), 1)
@@ -144,7 +143,7 @@ func TestDynamicConfigurerMultiRegistry(t *testing.T) {
 	defaultExporter, ok := exporter.(*mserver.DefaultExporter)
 	assert.True(t, ok)
 	assert.Equal(t, defaultExporter.GetURL().GetIdentityWithRegistry(), urlCopy.GetIdentityWithRegistry())
-	os.Unsetenv(motan.RegGroupSuffix)
+	os.Unsetenv(motan.RegGroupSuffixEnvironmentName)
 }
 
 func TestDynamicConfigurer_Subscribe(t *testing.T) {
@@ -174,26 +173,26 @@ func TestDynamicConfigurer_Subscribe(t *testing.T) {
 	}
 
 	subGroupSuffix := "-test"
-	os.Setenv(motan.SubGroupSuffix, subGroupSuffix)
+	os.Setenv(motan.SubGroupSuffixEnvironmentName, subGroupSuffix)
 	for _, url := range urls {
 		err := configure.Subscribe(url)
 		assert.Nil(t, err)
 		key := getClusterKey(url.Group, url.GetStringParamsWithDefault(motan.VersionKey, motan.DefaultReferVersion), url.Protocol, url.Path)
-		c, ok := a.clusterMap.Load(key)
+		c, ok := a.clusterGroupMap.Load(key)
 		assert.True(t, ok)
-		motanCluster, ok := c.(*cluster.MotanCluster)
+		clusterGroup, ok := c.(motan.ClusterGroup)
 		assert.True(t, ok)
-		assert.Equal(t, motanCluster.GetURL().GetIdentityWithRegistry(), url.GetIdentityWithRegistry())
+		assert.Equal(t, clusterGroup.GetURL().GetIdentityWithRegistry(), url.GetIdentityWithRegistry())
 
-		// test SubGroupSuffix env
+		// test SubGroupSuffixEnvironmentName env
 		copyUrl := url.Copy()
 		copyUrl.Group += subGroupSuffix
 		key2 := getClusterKey(copyUrl.Group, copyUrl.GetStringParamsWithDefault(motan.VersionKey, motan.DefaultReferVersion), copyUrl.Protocol, copyUrl.Path)
-		c2, ok := a.clusterMap.Load(key2)
+		c2, ok := a.clusterGroupMap.Load(key2)
 		assert.True(t, ok)
-		motanCluster2, ok := c2.(*cluster.MotanCluster)
+		clusterGroup2, ok := c2.(motan.ClusterGroup)
 		assert.True(t, ok)
-		assert.Equal(t, motanCluster2.GetURL().GetIdentityWithRegistry(), copyUrl.GetIdentityWithRegistry())
+		assert.Equal(t, clusterGroup2.GetURL().GetIdentityWithRegistry(), copyUrl.GetIdentityWithRegistry())
 	}
-	os.Unsetenv(motan.SubGroupSuffix)
+	os.Unsetenv(motan.SubGroupSuffixEnvironmentName)
 }

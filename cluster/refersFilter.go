@@ -34,7 +34,7 @@ func (list RefersFilterConfigList) Verify() error {
 	return nil
 }
 
-func (list RefersFilterConfigList) ParseRefersFilters(clusterURL *motan.URL) RefersFilter {
+func (list RefersFilterConfigList) ParseRefersFilters(clusterURL *motan.URL) motan.RefersFilter {
 	var rules []RefersFilterConfig
 	for _, filter := range list {
 		if filter.Group != "" && filter.Group != clusterURL.Group {
@@ -50,10 +50,6 @@ func (list RefersFilterConfigList) ParseRefersFilters(clusterURL *motan.URL) Ref
 		return nil
 	}
 	return NewDefaultRefersFilter(rules)
-}
-
-type RefersFilter interface {
-	Filter([]motan.EndPoint) []motan.EndPoint
 }
 
 type filterRule struct {

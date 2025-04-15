@@ -322,6 +322,38 @@ type Serialization interface {
 	DeSerializeMulti(b []byte, v []interface{}) ([]interface{}, error)
 }
 
+// Cluster : cluster
+type Cluster interface {
+	Identity
+	Name
+	NotifyListener
+	Caller
+	GetRefers() []EndPoint
+	SetRefersFilter(rf RefersFilter)
+}
+
+// RefersFilter : filter
+type RefersFilter interface {
+	Filter([]EndPoint) []EndPoint
+}
+
+// ClusterGroup : a group of cluster, including master cluster and sandbox clusters.
+type ClusterGroup interface {
+	Caller
+	GetContext
+	GetMasterCluster() Cluster
+	GetSandboxClusters() []Cluster
+	GetBackupClusters() []Cluster
+	SetRefersFilter(rf RefersFilter)
+}
+
+// ClusterSelector : select cluster
+type ClusterSelector interface {
+	Destroyable
+	Select(request Request) Cluster
+	Init(clusterGroup ClusterGroup)
+}
+
 // ExtensionFactory : can regiser and get all kinds of extension implements.
 type ExtensionFactory interface {
 	RuntimeInfo
@@ -334,6 +366,7 @@ type ExtensionFactory interface {
 	GetServer(url *URL) Server
 	GetMessageHandler(name string) MessageHandler
 	GetSerialization(name string, id int) Serialization
+	GetClusterSelector(name string) ClusterSelector
 	RegistExtFilter(name string, newFilter DefaultFilterFunc)
 	RegistExtHa(name string, newHa NewHaFunc)
 	RegistExtLb(name string, newLb NewLbFunc)
@@ -343,6 +376,7 @@ type ExtensionFactory interface {
 	RegistExtServer(name string, newServer NewServerFunc)
 	RegistryExtMessageHandler(name string, newMessage NewMessageHandlerFunc)
 	RegistryExtSerialization(name string, id int, newSerialization NewSerializationFunc)
+	RegistryExtClusterSelector(name string, newClusterSelector NewClusterSelectorFunc)
 }
 
 // Initializable :Initializable
@@ -353,6 +387,11 @@ type Initializable interface {
 // SetContext :SetContext
 type SetContext interface {
 	SetContext(context *Context)
+}
+
+// GetContext :GetContext
+type GetContext interface {
+	GetContext() *Context
 }
 
 // Initialize : Initialize if implement Initializable
@@ -741,6 +780,7 @@ type NewRegistryFunc func(url *URL) Registry
 type NewServerFunc func(url *URL) Server
 type NewMessageHandlerFunc func() MessageHandler
 type NewSerializationFunc func() Serialization
+type NewClusterSelectorFunc func() ClusterSelector
 
 type DefaultExtensionFactory struct {
 	// factories
@@ -753,6 +793,7 @@ type DefaultExtensionFactory struct {
 	servers           map[string]NewServerFunc
 	messageHandlers   map[string]NewMessageHandlerFunc
 	serializations    map[string]NewSerializationFunc
+	clusterSelectors  map[string]NewClusterSelectorFunc
 
 	// singleton instance
 	registries      map[string]Registry
@@ -879,6 +920,13 @@ func (d *DefaultExtensionFactory) GetSerialization(name string, id int) Serializ
 	return nil
 }
 
+func (d *DefaultExtensionFactory) GetClusterSelector(name string) ClusterSelector {
+	if newClusterSelector, ok := d.clusterSelectors[name]; ok {
+		return newClusterSelector()
+	}
+	return nil
+}
+
 func (d *DefaultExtensionFactory) RegistExtFilter(name string, newFilter DefaultFilterFunc) {
 	// 覆盖方式
 	d.filterFactories[name] = newFilter
@@ -917,6 +965,10 @@ func (d *DefaultExtensionFactory) RegistryExtSerialization(name string, id int, 
 	d.serializations[strconv.Itoa(id)] = newSerialization
 }
 
+func (d *DefaultExtensionFactory) RegistryExtClusterSelector(name string, newClusterSelector NewClusterSelectorFunc) {
+	d.clusterSelectors[name] = newClusterSelector
+}
+
 func (d *DefaultExtensionFactory) Initialize() {
 	d.filterFactories = make(map[string]DefaultFilterFunc)
 	d.haFactories = make(map[string]NewHaFunc)
@@ -928,6 +980,7 @@ func (d *DefaultExtensionFactory) Initialize() {
 	d.registries = make(map[string]Registry)
 	d.messageHandlers = make(map[string]NewMessageHandlerFunc)
 	d.serializations = make(map[string]NewSerializationFunc)
+	d.clusterSelectors = make(map[string]NewClusterSelectorFunc)
 }
 
 var (

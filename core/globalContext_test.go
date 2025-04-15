@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -209,6 +210,123 @@ func TestContext_parseMultipleServiceGroup(t *testing.T) {
 	ctx.parseMultipleServiceGroup(data4)
 	assert.Len(t, data4, 1)
 	assert.Equal(t, data3["service1"].Group, "hello")
+
+	// test serverMode and changeGroups
+	caseList := []struct {
+		desc         string
+		urlList      map[string]*URL
+		assertBefore func()
+		assertAfter  func()
+		assertFunc   func(t *testing.T, urlMap map[string]*URL)
+	}{
+		{
+			desc: "sandbox server mode and change group by url",
+			urlList: map[string]*URL{
+				"service-1": {
+					Path:  "service1",
+					Group: "group1",
+					Parameters: map[string]string{
+						SandboxGroupsKey: "sandboxGroup",
+					},
+				},
+			},
+			assertBefore: func() {
+				os.Setenv(ServerModeEnvironmentName, SandboxServerMode)
+			},
+			assertAfter: func() {
+				os.Unsetenv(ServerModeEnvironmentName)
+			},
+			assertFunc: func(t *testing.T, urlMap map[string]*URL) {
+				for _, i := range urlMap {
+					assert.Equal(t, i.Group, "sandboxGroup")
+				}
+			},
+		},
+		{
+			desc: "sandbox server mode and change group by env",
+			urlList: map[string]*URL{
+				"service-1": {
+					Path:       "service1",
+					Group:      "group1",
+					Parameters: map[string]string{},
+				},
+			},
+			assertBefore: func() {
+				os.Setenv(ServerModeEnvironmentName, SandboxServerMode)
+				os.Setenv(ChangeRegGroupsEnvironmentName, `[{"service":"service*", "group":"sandboxGroup"}]`)
+			},
+			assertAfter: func() {
+				os.Unsetenv(ServerModeEnvironmentName)
+				os.Unsetenv(ChangeRegGroupsEnvironmentName)
+			},
+			assertFunc: func(t *testing.T, urlMap map[string]*URL) {
+				for _, i := range urlMap {
+					assert.Equal(t, i.Group, "sandboxGroup")
+				}
+			},
+		},
+	}
+
+	for _, c := range caseList {
+		c.assertBefore()
+		ctx.parseMultipleServiceGroup(c.urlList)
+		c.assertFunc(t, c.urlList)
+		c.assertAfter()
+	}
+}
+
+func TestContext_getChangeRegGroupsEnvConfig(t *testing.T) {
+	ctx := Context{}
+	caseList := []struct {
+		desc         string
+		assertBefore func()
+		assertAfter  func()
+		assertFunc   func(t *testing.T, config map[*regexp.Regexp]string)
+	}{
+		{
+			desc: "test invalid config",
+			assertBefore: func() {
+				os.Setenv(ChangeRegGroupsEnvironmentName, `invalid config`)
+			},
+			assertAfter: func() {
+				os.Unsetenv(ChangeRegGroupsEnvironmentName)
+			},
+			assertFunc: func(t *testing.T, mapRegGroups map[*regexp.Regexp]string) {
+				assert.Equal(t, 0, len(mapRegGroups))
+			},
+		},
+		{
+			desc: "test invalid regexp",
+			assertBefore: func() {
+				os.Setenv(ChangeRegGroupsEnvironmentName, `[abc`)
+			},
+			assertAfter: func() {
+				os.Unsetenv(ChangeRegGroupsEnvironmentName)
+			},
+			assertFunc: func(t *testing.T, mapRegGroups map[*regexp.Regexp]string) {
+				assert.Equal(t, 0, len(mapRegGroups))
+			},
+		},
+		{
+			desc: "test normal config",
+			assertBefore: func() {
+				os.Setenv(ChangeRegGroupsEnvironmentName, `[{"service":"com.weibo.motan.demo.*", "group":"group1-sandbox, group2-sandbox"},{"service":"com.weibo.motan.xxx.*", "group":"group1-xxx-sandbox, group2-xxx-sandbox"}]`)
+			},
+			assertAfter: func() {
+				os.Unsetenv(ChangeRegGroupsEnvironmentName)
+			},
+			assertFunc: func(t *testing.T, mapRegGroups map[*regexp.Regexp]string) {
+				assert.Equal(t, 2, len(mapRegGroups))
+			},
+		},
+	}
+
+	for _, c := range caseList {
+		c.assertBefore()
+		conf := ctx.getChangeRegGroupsEnvConfig()
+		c.assertFunc(t, conf)
+		c.assertAfter()
+	}
 }
 
 func TestContext_parseRegGroupSuffix(t *testing.T) {
@@ -278,14 +396,14 @@ func TestContext_parseRegGroupSuffix(t *testing.T) {
 			},
 		},
 	}
-	os.Setenv(RegGroupSuffix, regGroupSuffix)
+	os.Setenv(RegGroupSuffixEnvironmentName, regGroupSuffix)
 	ctx := &Context{}
 	// replace all groups with regGroupSuffix
 	for _, s := range cases {
 		ctx.parseRegGroupSuffix(s.UrlMap)
 		s.AssertFunc(t, s.UrlMap)
 	}
-	os.Unsetenv(RegGroupSuffix)
+	os.Unsetenv(RegGroupSuffixEnvironmentName)
 }
 
 func TestContext_parseSubGroupSuffix(t *testing.T) {
@@ -368,12 +486,12 @@ func TestContext_parseSubGroupSuffix(t *testing.T) {
 			},
 		},
 	}
-	os.Setenv(SubGroupSuffix, subGroupSuffix)
+	os.Setenv(SubGroupSuffixEnvironmentName, subGroupSuffix)
 	for _, s := range cases {
 		s.Ctx.parseSubGroupSuffix(s.UrlMap)
 		s.AssertFunc(t, s.UrlMap)
 	}
-	os.Unsetenv(SubGroupSuffix)
+	os.Unsetenv(SubGroupSuffixEnvironmentName)
 }
 
 func TestContext_mergeDefaultFilter(t *testing.T) {

@@ -47,7 +47,11 @@ func (br *BackupRequestHA) SetURL(url *motan.URL) {
 func (br *BackupRequestHA) Call(request motan.Request, loadBalance motan.LoadBalance) motan.Response {
 	ep := loadBalance.Select(request)
 	if ep == nil {
-		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints, fmt.Sprintf("call backup request fail: %s", "no endpoints"))
+		vlog.Errorf("%s, RequestID: %d, Request info: %+v", motan.NoRefersForRequestPrefix,
+			request.GetRequestID(), request.GetAttachments().RawMap())
+		return getErrorResponseWithCode(request.GetRequestID(), motan.ENoEndpoints,
+			fmt.Sprintf("%s, RequestID: %d", motan.NoRefersForRequestPrefix,
+				request.GetRequestID()))
 	}
 
 	retries := br.url.GetMethodIntValue(request.GetMethod(), request.GetMethodDesc(), motan.RetriesKey, 0)
