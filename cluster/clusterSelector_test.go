@@ -27,6 +27,7 @@ func (m *mockClusterSelector) Init(clusterGroup motan.ClusterGroup) {
 }
 
 func TestDefaultClusterSelector_Select(t *testing.T) {
+	masterGroup := "masterGroup"
 	ext := getCustomExt()
 	ctx := &motan.Context{}
 	url := &motan.URL{
@@ -34,7 +35,7 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 		Host:       "",
 		Port:       0,
 		Path:       "",
-		Group:      "masterGroup",
+		Group:      masterGroup,
 		Parameters: nil,
 	}
 	clusterSelector := &DefaultClusterSelector{}
@@ -46,7 +47,7 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 		sandboxClusters: sandboxClusters,
 		backupIndex:     0,
 		context:         nil,
-		url:             nil,
+		url:             url,
 		masterCluster:   NewCluster(ctx, ext, url, true),
 		backupSwitcher:  nil,
 	}
@@ -66,19 +67,19 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 	}
 	cluster := clusterSelector.Select(request)
 	assert.NotNil(t, cluster)
-	assert.Equal(t, "masterGroup", cluster.GetURL().Group)
+	assert.Equal(t, masterGroup, cluster.GetURL().Group)
 
 	// master group when the sandbox group refers is empty
-	attachment.Store(MRouteGroup, "sandbox")
+	attachment.Store(MRouteGroup, DefaultSandboxRouteGroup)
 	cluster = clusterSelector.Select(request)
 	assert.NotNil(t, cluster)
-	assert.Equal(t, "masterGroup", cluster.GetURL().Group)
+	assert.Equal(t, masterGroup, cluster.GetURL().Group)
 
 	for _, g := range sandboxGroups {
 		attachment.Store(MRouteGroup, g)
 		cluster = clusterSelector.Select(request)
 		assert.NotNil(t, cluster)
-		assert.Equal(t, "masterGroup", cluster.GetURL().Group)
+		assert.Equal(t, masterGroup, cluster.GetURL().Group)
 	}
 
 	// sandbox group when the sandbox group refers is not empty
@@ -89,10 +90,26 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 	for _, c := range sandboxClusters {
 		c.Notify(RegistryURL, urlList)
 	}
-	for _, g := range sandboxGroups {
-		attachment.Store(MRouteGroup, g)
+	attachment.Store(MRouteGroup, DefaultSandboxRouteGroup)
+	for _ = range sandboxGroups {
 		cluster = clusterSelector.Select(request)
 		assert.NotNil(t, cluster)
-		assert.Equal(t, g, cluster.GetURL().Group)
+		assert.Equal(t, clusterSelector.defaultSandboxCluster.GetURL().Group, cluster.GetURL().Group)
+	}
+
+	// master group when the motan-route-group not equal to the master cluster group
+	for _ = range sandboxGroups {
+		attachment.Store(MRouteGroup, "not-exist-group")
+		cluster = clusterSelector.Select(request)
+		assert.NotNil(t, cluster)
+		assert.Equal(t, masterGroup, cluster.GetURL().Group)
+	}
+
+	// sandbox group when motan-route-group equal to the master cluster group
+	attachment.Store(MRouteGroup, url.Group)
+	for _ = range sandboxGroups {
+		cluster = clusterSelector.Select(request)
+		assert.NotNil(t, cluster)
+		assert.Equal(t, clusterSelector.defaultSandboxCluster.GetURL().Group, cluster.GetURL().Group)
 	}
 }

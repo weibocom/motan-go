@@ -98,7 +98,7 @@ func TestClusterGroup_Call(t *testing.T) {
 		Host:     "",
 		Port:     0,
 		Path:     "",
-		Group:    "",
+		Group:    "mock_group",
 		Parameters: map[string]string{
 			motan.ClusterEmptyNodeNotifyKey: "true",
 		},
@@ -111,7 +111,7 @@ func TestClusterGroup_Call(t *testing.T) {
 		backupClusters: backupClusters,
 		backupIndex:    0,
 		context:        nil,
-		url:            nil,
+		url:            url,
 		masterCluster:  NewCluster(ctx, ext, url, true),
 		backupSwitcher: nil,
 	}
