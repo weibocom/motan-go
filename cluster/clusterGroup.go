@@ -3,6 +3,7 @@ package cluster
 import (
 	motan "github.com/weibocom/motan-go/core"
 	vlog "github.com/weibocom/motan-go/log"
+	"strconv"
 	"strings"
 	"sync/atomic"
 )
@@ -14,6 +15,7 @@ const (
 type ClusterGroup struct {
 	sandboxClusters []motan.Cluster
 	backupClusters  []motan.Cluster
+	greyClusters    []motan.Cluster
 	backupIndex     uint32
 
 	clusterSelector motan.ClusterSelector
@@ -44,6 +46,13 @@ func NewClusterGroup(context *motan.Context, extFactory motan.ExtensionFactory, 
 		vlog.Infof("init backup clusters success. master cluster url: %s, backup groups: %s", url.ToExtInfo(), backupGroup)
 	}
 
+	// gray clusters
+	greyGroups := url.GetParam(motan.GreyGroupsKey, motan.GetDefaultGreyGroups())
+	if greyGroups != "" {
+		clusterGroup.greyClusters = createMultiClusters(context, extFactory, url, proxy, greyGroups, false, true)
+		vlog.Infof("init grey clusters success. master cluster url: %s, grey groups: %s", url.ToExtInfo(), greyGroups)
+	}
+
 	// cluster selector
 	clusterSelectorKey := url.GetParam(motan.ClusterSelectorKey, DefaultClusterSelectorName)
 	clusterSelector := extFactory.GetClusterSelector(clusterSelectorKey)
@@ -71,6 +80,9 @@ func (c *ClusterGroup) GetRuntimeInfo() map[string]interface{} {
 	}
 	for _, cluster := range c.backupClusters {
 		info["backup-"+cluster.GetIdentity()] = cluster.GetRuntimeInfo()
+	}
+	for _, cluster := range c.greyClusters {
+		info["grey-"+cluster.GetIdentity()] = cluster.GetRuntimeInfo()
 	}
 	return info
 }
@@ -114,6 +126,9 @@ func (c *ClusterGroup) Destroy() {
 	for _, cluster := range c.backupClusters {
 		cluster.Destroy()
 	}
+	for _, cluster := range c.greyClusters {
+		cluster.Destroy()
+	}
 	c.clusterSelector.Destroy()
 }
 
@@ -127,6 +142,10 @@ func (c *ClusterGroup) GetSandboxClusters() []motan.Cluster {
 
 func (c *ClusterGroup) GetBackupClusters() []motan.Cluster {
 	return c.backupClusters
+}
+
+func (c *ClusterGroup) GetGreyClusters() []motan.Cluster {
+	return c.greyClusters
 }
 
 func (c *ClusterGroup) SetRefersFilter(rf motan.RefersFilter) {
@@ -144,23 +163,20 @@ func createMultiClusters(context *motan.Context, extFactory motan.ExtensionFacto
 	groups := motan.TrimSplitSet(groupsStr, motan.GroupNameSeparator)
 	for group := range groups {
 		if strings.HasPrefix(group, motan.GroupSuffixString) {
-			group = url.Group + group[len(motan.GroupSuffixString):]
+			group = group[len(motan.GroupSuffixString):]
+			// if the url.Group end with the group, skip it
+			if strings.HasSuffix(url.Group, group) {
+				continue
+			}
+			group = url.Group + group
 		}
 		// if the group same as url.Group, skip it
 		if group == url.Group {
 			continue
 		}
 		newUrl := url.Copy()
-		if lazyInit {
-			newUrl.PutParam(motan.LazyInit, "true")
-		} else {
-			newUrl.PutParam(motan.LazyInit, "false")
-		}
-		if emptyNodeNotify {
-			newUrl.PutParam(motan.ClusterEmptyNodeNotifyKey, "true")
-		} else {
-			newUrl.PutParam(motan.ClusterEmptyNodeNotifyKey, "false")
-		}
+		newUrl.PutParam(motan.LazyInit, strconv.FormatBool(proxy))
+		newUrl.PutParam(motan.ClusterEmptyNodeNotifyKey, strconv.FormatBool(emptyNodeNotify))
 		newUrl.Group = group
 		cluster := NewCluster(context, extFactory, newUrl, proxy)
 		clusters = append(clusters, cluster)

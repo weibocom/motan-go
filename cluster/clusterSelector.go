@@ -8,6 +8,7 @@ import (
 type DefaultClusterSelector struct {
 	clusterGroup          motan.ClusterGroup
 	defaultSandboxCluster motan.Cluster
+	defaultGreyCluster    motan.Cluster
 }
 
 func (d *DefaultClusterSelector) Init(clusterGroup motan.ClusterGroup) {
@@ -15,18 +16,32 @@ func (d *DefaultClusterSelector) Init(clusterGroup motan.ClusterGroup) {
 	if len(clusterGroup.GetSandboxClusters()) > 0 {
 		d.defaultSandboxCluster = clusterGroup.GetSandboxClusters()[0]
 	}
+	if len(clusterGroup.GetGreyClusters()) > 0 {
+		d.defaultGreyCluster = clusterGroup.GetGreyClusters()[0]
+	}
 }
 
 func (d *DefaultClusterSelector) Select(request motan.Request) motan.Cluster {
-	if d.defaultSandboxCluster != nil && len(d.defaultSandboxCluster.GetRefers()) > 0 {
-		routeGroup := strings.TrimSpace(request.GetAttachment(MRouteGroup))
-		if routeGroup == DefaultSandboxRouteGroup {
+	routeGroup := request.GetAttachment(MRouteGroup)
+	if routeGroup != "" {
+		var sandboxGroup string
+		var greyGroup string
+		if d.defaultSandboxCluster != nil && len(d.defaultSandboxCluster.GetRefers()) > 0 {
+			sandboxGroup = d.defaultSandboxCluster.GetURL().Group
+		}
+		if d.defaultGreyCluster != nil && len(d.defaultGreyCluster.GetRefers()) > 0 {
+			greyGroup = d.defaultGreyCluster.GetURL().Group
+		}
+		if sandboxGroup != "" && strings.TrimSpace(routeGroup) == DefaultSandboxRouteGroup {
 			return d.defaultSandboxCluster
 		}
 		routeGroupList := motan.TrimSplit(routeGroup, ",")
 		for _, group := range routeGroupList {
-			if group == d.clusterGroup.GetURL().Group {
+			if sandboxGroup == group {
 				return d.defaultSandboxCluster
+			}
+			if greyGroup == group {
+				return d.defaultGreyCluster
 			}
 		}
 	}

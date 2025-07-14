@@ -70,6 +70,7 @@ const (
 	UnixSockProtocolFlag      = "unix://"
 	BackupGroupsKey           = "backupGroups"
 	SandboxGroupsKey          = "sandboxGroups"
+	GreyGroupsKey             = "greyGroups"
 	ClusterSelectorKey        = "clusterSelector"
 	ClusterEmptyNodeNotifyKey = "clusterEmptyNodeNotify"
 )
