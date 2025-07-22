@@ -81,6 +81,7 @@ var (
 	extFilters = make(map[string]bool)
 
 	defaultSandboxGroups = ""
+	defaultGreyGroups    = ""
 )
 
 // SetDefaultSandboxGroups Called once before Context initialization
@@ -91,6 +92,16 @@ func SetDefaultSandboxGroups(groups string) {
 // GetDefaultSandboxGroups returns default sandbox groups
 func GetDefaultSandboxGroups() string {
 	return defaultSandboxGroups
+}
+
+// SetDefaultGreyGroups Called once before Context initialization
+func SetDefaultGreyGroups(groups string) {
+	defaultGreyGroups = groups
+}
+
+// GetDefaultGreyGroups returns default grey groups
+func GetDefaultGreyGroups() string {
+	return defaultGreyGroups
 }
 
 // all env flag in motan-go

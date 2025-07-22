@@ -42,9 +42,12 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 
 	sandboxGroups := []string{"sandbox1", "sandbox2"}
 	sandboxClusters := createMultiClusters(ctx, ext, url, true, strings.Join(sandboxGroups, ","), true, true)
+	greyGroups := []string{"grey1", "grey2", "grey3"}
+	greyClusters := createMultiClusters(ctx, ext, url, true, strings.Join(greyGroups, ","), false, true)
 
 	clusterGroup := &ClusterGroup{
 		sandboxClusters: sandboxClusters,
+		greyClusters:    greyClusters,
 		backupIndex:     0,
 		context:         nil,
 		url:             url,
@@ -90,6 +93,9 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 	for _, c := range sandboxClusters {
 		c.Notify(RegistryURL, urlList)
 	}
+	for _, c := range greyClusters {
+		c.Notify(RegistryURL, urlList)
+	}
 	attachment.Store(MRouteGroup, DefaultSandboxRouteGroup)
 	for _ = range sandboxGroups {
 		cluster = clusterSelector.Select(request)
@@ -105,11 +111,15 @@ func TestDefaultClusterSelector_Select(t *testing.T) {
 		assert.Equal(t, masterGroup, cluster.GetURL().Group)
 	}
 
-	// sandbox group when motan-route-group equal to the master cluster group
-	attachment.Store(MRouteGroup, url.Group)
-	for _ = range sandboxGroups {
-		cluster = clusterSelector.Select(request)
-		assert.NotNil(t, cluster)
-		assert.Equal(t, clusterSelector.defaultSandboxCluster.GetURL().Group, cluster.GetURL().Group)
-	}
+	// sandbox group when the motan-route-group equal to the sandbox cluster group
+	attachment.Store(MRouteGroup, clusterSelector.defaultSandboxCluster.GetURL().Group)
+	cluster = clusterSelector.Select(request)
+	assert.NotNil(t, cluster)
+	assert.Equal(t, clusterSelector.defaultSandboxCluster.GetURL().Group, cluster.GetURL().Group)
+
+	// grey group when the motan-route-group equal to the grey cluster group
+	attachment.Store(MRouteGroup, clusterSelector.defaultGreyCluster.GetURL().Group)
+	cluster = clusterSelector.Select(request)
+	assert.NotNil(t, cluster)
+	assert.Equal(t, clusterSelector.defaultGreyCluster.GetURL().Group, cluster.GetURL().Group)
 }

@@ -45,7 +45,7 @@ func Test_NewClusterGroup(t *testing.T) {
 			},
 		},
 		{
-			"backup and sandbox cluster",
+			"backup、 sandbox and grey cluster",
 			&motan.URL{
 				Protocol: "",
 				Host:     "",
@@ -55,6 +55,7 @@ func Test_NewClusterGroup(t *testing.T) {
 				Parameters: map[string]string{
 					motan.BackupGroupsKey:    "backup1,backup2",
 					motan.SandboxGroupsKey:   "sandbox1",
+					motan.GreyGroupsKey:      "grey1",
 					motan.ClusterSelectorKey: DefaultClusterSelectorName,
 				},
 			},
@@ -62,6 +63,7 @@ func Test_NewClusterGroup(t *testing.T) {
 				assert.NotNil(t, clusterGroup.masterCluster)
 				assert.Equal(t, 1, len(clusterGroup.GetSandboxClusters()))
 				assert.Equal(t, 2, len(clusterGroup.GetBackupClusters()))
+				assert.Equal(t, 1, len(clusterGroup.GetGreyClusters()))
 				cs, ok := clusterGroup.clusterSelector.(*DefaultClusterSelector)
 				assert.True(t, ok)
 				assert.Equal(t, clusterGroup, cs.clusterGroup)
@@ -78,6 +80,11 @@ func Test_NewClusterGroup(t *testing.T) {
 				}
 				for _, cluster := range clusterGroup.GetBackupClusters() {
 					v, ok = runtimeInfo["backup-"+cluster.GetIdentity()]
+					assert.True(t, ok)
+					assert.NotNil(t, v)
+				}
+				for _, cluster := range clusterGroup.GetGreyClusters() {
+					v, ok = runtimeInfo["grey-"+cluster.GetIdentity()]
 					assert.True(t, ok)
 					assert.NotNil(t, v)
 				}

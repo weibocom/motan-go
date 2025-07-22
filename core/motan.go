@@ -344,6 +344,7 @@ type ClusterGroup interface {
 	GetMasterCluster() Cluster
 	GetSandboxClusters() []Cluster
 	GetBackupClusters() []Cluster
+	GetGreyClusters() []Cluster
 	SetRefersFilter(rf RefersFilter)
 }
 
